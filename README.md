@@ -49,7 +49,7 @@ Python3 is required, we used Python 3.10.13. A [virtual environment](https://doc
 pip install -r requirements.txt
 ```
 ### For algorithm synthesis
-First, navigate to the folder `pomdp_gen` and execute
+First, navigate to the folder `qalgorithm_synthesis` and execute
 ```sh
 cmake . && make
 ```
