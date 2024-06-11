@@ -22,7 +22,7 @@ pycparser==2.21
 pylatexenc==2.10
 pyparsing==3.0.9
 python-dateutil==2.8.2
-qiskit==0.43.0
+qiskit==0.45.2
 qiskit-aer==0.12.0
 qiskit-ibmq-provider==0.20.2
 qiskit-terra==0.24.0

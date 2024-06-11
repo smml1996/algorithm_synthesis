@@ -24,7 +24,7 @@ MAX_HORIZON = 7
 BOTTOM_HORIZON = 5
 MAX_PRECISION = 30
 
-DIR_PREFIX = None # fill me before running experiments
+DIR_PREFIX = "../qalgorithm_synthesis/" # fill me before running experiments
 assert DIR_PREFIX is not None
 
 backends_w_embs = [

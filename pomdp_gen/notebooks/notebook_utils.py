@@ -6,8 +6,7 @@ from utils import *
 from game import *
 import pandas as pd
 
-DIR_PREFIX = None # set proper string before running
-assert DIR_PREFIX is not None
+DIR_PREFIX = "../qalgorithm_synthesis/" # set proper string before running
 MAX_HORIZON = 7
 selected_backends = ["fake_sydney2", "fake_manhattan1", "fake_manhattan2", "fake_cambridge2"]
 TAKE_BEST=True
