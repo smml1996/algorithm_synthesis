@@ -19,6 +19,30 @@ def test_graph(name: str):
 
 # functions to test SAT
 
+def test_sat(name: str):
+    sat = SATFormula(f"sat/{name}.txt")
+    all_assignments = sat.find_all_true_assignments()
+
+    H = sat.get_hamiltonian()
+    energies = get_energies(H, sat.n_variables)
+
+    low_energy_bitstrings = get_lowest_energies_bitstrings(energies, sat.n_variables)
+    assert len(low_energy_bitstrings) == len(all_assignments)
+
+    for b in low_energy_bitstrings:
+        assignment = dict()
+        for (index, x) in enumerate(b):
+            if x == "1":
+                assignment[index+1] = True
+            else:
+                assert x == "0"
+                assignment[index+1] = False
+        assert sat.evaluate_solution(assignment)
+        assert assignment in all_assignments
+        
+        
+
+
 
 
 if __name__ == "__main__":

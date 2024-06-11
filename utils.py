@@ -34,6 +34,7 @@ def get_matrix(position: int, p: Pauli, system_size:int) -> np.array:
     Returns:
         np.array: I^{position}\otimes p \otimes I^{system_size-position-1}
     """    
+    assert position >= 0 
     result = np.array([1])
     assert  0 <= position < system_size
     for i in range(system_size):
@@ -229,6 +230,34 @@ class SATFormula:
                 all_assigments.append(current_assignment)
         return all_assigments
             
+    def get_hamiltonian(self):
+        # -s1 - s2 + s1*s2 --> or gate
+        num_qubits = self.n_variables
+        assert  0 < num_qubits  <= 5
+        result = 0
+        for clause in self.formula:
+
+            for (index, var1) in enumerate(clause):
+                s1_matrix = get_matrix(abs(var1)-1, Pauli.Z, num_qubits)
+                is_neg1 = False
+                if var1 < 0:
+                    result += s1_matrix
+                    is_neg1 = True
+                else:
+                    result += -s1_matrix
+                for var2 in enumerate(clause[index+1:]):
+                    s2_matrix = get_matrix(abs(var2)-1, Pauli.Z, num_qubits)
+                    is_neg2 = False
+                    if var1 < 0:
+                        result += s2_matrix
+                        is_neg2 = True
+                    else:
+                        result += -s2_matrix
+                    if is_neg1 or is_neg2:
+                        result += -s1_matrix*s2_matrix
+                    else:
+                        result += s1_matrix*s2_matrix
+        return result
             
 
 
