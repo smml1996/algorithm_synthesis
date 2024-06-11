@@ -1,0 +1,9 @@
+import os, sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils import *
+
+algorithms = [{'instruction': Instruction.H,'target': 1,'control': None,'params' : None,'next' : {'instruction': Instruction.H,'target': 1,'control': None,'params' : None,'next' : {'instruction': Instruction.H,'target': 1,'control': None,'params' : None,'next' : {'instruction': Instruction.H,'target': 1,'control': None,'params' : None,'next' : None,'case0' : None,'case1' : None}
+,'case0' : None,'case1' : None}
+,'case0' : None,'case1' : None}
+,'case0' : None,'case1' : None}
+]
