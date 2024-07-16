@@ -6,7 +6,7 @@ from utils import *
 from game import *
 import pandas as pd
 
-DIR_PREFIX = "../qalgorithm_synthesis/" # set proper string before running
+DIR_PREFIX = ""
 MAX_HORIZON = 7
 selected_backends = ["fake_sydney2", "fake_manhattan1", "fake_manhattan2", "fake_cambridge2"]
 TAKE_BEST=True
@@ -18,6 +18,51 @@ def get_color(alg_index, algs_order, current_palette):
             return current_palette[index]
     assert False
     
+def get_allbackend_lambdas(backend, embedding_index, exp_index=""):
+    ''' returns a dictionary that maps  horizon -> guaratee(lambda)
+    '''
+    result = dict()
+    f = open(DIR_PREFIX + f"lambdas{exp_index}/{backend}.txt")
+    lines = f.readlines()[1:]
+    for line in lines:
+        elements = line.split(",")
+        embedding_index_ = int(elements[0])
+        if embedding_index_ == embedding_index:
+            horizon = int(elements[1])
+            lambda_ =  float(elements[2])
+            assert horizon not in result.keys()
+            result[horizon] = lambda_
+    f.close()
+    assert len(result.keys()) == 4
+    return result
+
+def check_backends_vs_file(comments, exp_index=""):
+    Precision.PRECISION = 5
+    Precision.update_threshold()
+    backend_to_lambdas = dict()
+    for backend in backends_w_embs:
+        num_embeddings = get_num_embeddings(backend, DIR_PREFIX + "lambdas/")
+        for embedding_index in range(0, num_embeddings):
+            backend_to_lambdas[f"{backend}{embedding_index}"] =  get_allbackend_lambdas(backend, embedding_index, exp_index)
+    backends_to_algos = get_backends_to_alg_mappings(comments)
+
+    f = open(DIR_PREFIX + f"analysis_results{exp_index}/backends_vs.csv")
+    lines = f.readlines()[1:]
+    for line in lines:
+        elements = line.split(",")
+        horizon = int(elements[0])
+        curr_alg_index = int(elements[1])
+        real_hardware = elements[2]
+        exact_acc = float(elements[3])
+        if real_hardware in backends_to_algos[horizon][curr_alg_index]:
+            lambda_bellman = backend_to_lambdas[real_hardware][horizon]
+            if not isclose(lambda_bellman, exact_acc, rel_tol=Precision.rel_tol):
+                print(f"{real_hardware}:")
+                print(f"    {exact_acc}")
+                print(f"    {lambda_bellman}")
+                print(f"    {abs(lambda_bellman - exact_acc)}")
+                print("********\n")
+    f.close()
 
 def get_highest_advantage(lines):
     best_advantage = None
@@ -118,7 +163,7 @@ def generate_all_lambdas_file(instruction_set=""):
     })
     df.to_csv(f"{DIR_PREFIX}analysis_results{instruction_set}/all_lambdas.csv")
 
-def get_different_algorithms_data(instruction_set="", serialize_dump=False):
+def get_different_algorithms_data(instruction_set="", serialize_dump=False, custom_backends_w_embs=None):
     ''' Parses all the algorithms found for an instruction set, and compares control flow graph to determine different algorithms. If serialize_dump=True it dumps the algorithms into a file.
     '''
     all_algorithms = dict()
@@ -127,7 +172,10 @@ def get_different_algorithms_data(instruction_set="", serialize_dump=False):
         all_algorithms[i] = []
         comments[i] = []
 
-    for backend in backends_w_embs:
+    if custom_backends_w_embs is None:
+        custom_backends_w_embs = backends_w_embs
+    print(custom_backends_w_embs)
+    for backend in custom_backends_w_embs:
         num_embeddings = len(get_backend_embeddings(backend))
         for index in range(num_embeddings):
             for horizon in range(4, MAX_HORIZON+1):
@@ -153,7 +201,8 @@ def get_different_algorithms_data(instruction_set="", serialize_dump=False):
 
     if serialize_dump:
         for i in range(4, MAX_HORIZON+1):
-            serialize_algorithms(all_algorithms[i], DIR_PREFIX + f'analysis_results{instruction_set}/diff{i}.py')
+            serialize_algorithms(all_algorithms[i], DIR_PREFIX + f'analysis_results{instruction_set}/diff{i}.py', for_json=False)
+            serialize_algorithms(all_algorithms[i], DIR_PREFIX + f'analysis_results{instruction_set}/diff{i}.json', for_json=True)
             dump_algorithms(all_algorithms[i], DIR_PREFIX + f'analysis_results{instruction_set}/diff{i}_ibm.py', for_ibm=True, comments=comments[i]) 
     return comments
 
@@ -268,7 +317,9 @@ def remove_numbers(name):
             result += c
     return result
 
-def get_traditional_df(take_best=False, instruction_set=""):
+def get_traditional_df(take_best=False, instruction_set="", max_horizon=7, target_backends=None):
+    if target_backends is None:
+        target_backends = selected_backends
     backends = []
     horizons = []
     accuracies = []
@@ -281,8 +332,8 @@ def get_traditional_df(take_best=False, instruction_set=""):
         horizon = int(elements[0])
         alg_index = int(elements[1])
         backend_ = elements[2]
-        if horizon < 7:
-            if (alg_index == 0) and (backend_ in selected_backends):
+        if horizon < max_horizon:
+            if (alg_index == 0) and (backend_ in target_backends):
                 backend = backend_.replace("fake_", "").capitalize()
                 acc = float(elements[3])
                 
@@ -290,7 +341,7 @@ def get_traditional_df(take_best=False, instruction_set=""):
                     best_accs[backend] = -1
                 best_accs[backend] = max(best_accs[backend], acc)
 
-                if (instruction_set == "1" and horizon == 6) or (instruction_set == ""):
+                if (instruction_set == "1" and horizon == max_horizon) or (instruction_set == ""):
                     backends.append(backend)
                     hardwares.append(remove_numbers(backend))
                     horizons.append(horizon)
@@ -316,7 +367,21 @@ def get_backend_algorithm(backend_, horizon, emb_index, comments):
         elements = comment.split(',')
         if backend in elements:
             return index
-    assert False
+    return None
+
+def get_backends_to_alg_mappings(comments):
+    answer = dict()
+    for horizon in range(4, 8):
+        answer[horizon] = dict()
+        algorithms = comments[horizon]
+        for (index, comment) in enumerate(algorithms):
+            all_backends = comment.split(',')
+            answer[horizon][index] = []
+            for backend in all_backends:
+                part1, part2 = backend.split("-")
+                answer[horizon][index].append(f"{part1}{part2}")
+    return answer
+
 
 def get_lambda_from_file(backend, embedding, horizon, instruction_set=""):
     filename = DIR_PREFIX + f"lambdas{instruction_set}/{backend}.txt"
@@ -332,7 +397,7 @@ def get_lambda_from_file(backend, embedding, horizon, instruction_set=""):
                 return round(float(elements[2]),3)
             
     f.close()
-    assert False
+    return None
 
 def get_df_visualizing_lambdas(comments, algs_union, filter_out_non_advantage=False, only_own_alg=False, instruction_set="", take_best=True, get_only_trad=False):
     backends = []
@@ -346,13 +411,19 @@ def get_df_visualizing_lambdas(comments, algs_union, filter_out_non_advantage=Fa
     if instruction_set == "":
         min_horizon = 4
     else:
-        min_horizon = 6
+        min_horizon = 7
     for backend in backends_w_embs:
         num_embeddings = len(get_backend_embeddings(backend))
         for embedding in range(num_embeddings):
             for horizon in range(min_horizon, 8):
                 alg_index = get_backend_algorithm(backend, horizon, embedding, comments)
+                if alg_index is None:
+                    print(f"WARNING: could not find algorithm for {backend}_{embedding} at horizon {horizon}")
+                    continue
                 backend_acc = get_lambda_from_file(backend, embedding, horizon, instruction_set=instruction_set)
+                if backend_acc is None:
+                    print(f"WARNING: could not find lambda {backend}_{embedding} at horizon {horizon}")
+                    continue
                 if only_own_alg:
                     # here we load the lambda computed through bellman equation
                     algorithm_types.append("new")
@@ -364,7 +435,7 @@ def get_df_visualizing_lambdas(comments, algs_union, filter_out_non_advantage=Fa
                 else:
                     # here we consider the accuracy of the simulators
                     traditional_acc = get_algorithm_acc(horizon, 0, f"{backend}{embedding}", take_best=take_best)
-                    if (instruction_set=="1" or (algs_union[horizon][alg_index] != 0 ))and (backend_acc - traditional_acc > 0):
+                    if (instruction_set=="1" or (algs_union[horizon][alg_index] != 0 ))and (backend_acc - traditional_acc > 0.0001):
                         if (not get_only_trad):
                             backends.append(f"{backend}{embedding}")
                             hardwares.append(backend.replace("fake_", ""))
@@ -372,8 +443,13 @@ def get_df_visualizing_lambdas(comments, algs_union, filter_out_non_advantage=Fa
                             algorithm_types.append("trad")
                             accs.append(traditional_acc)
                             assert algs_union[horizon][0] == 0
-                            alg_classes.append(int(algs_union[horizon][0]))
-                            horizon_lines[horizon].append((f"{backend}{embedding}", min(backend_acc, traditional_acc), max(backend_acc, traditional_acc),algs_union[horizon][alg_index]))
+                            if instruction_set == "1":
+                                alg_classes.append(0)
+                                horizon_lines[horizon].append((f"{backend}{embedding}", min(backend_acc, traditional_acc), max(backend_acc, traditional_acc),algs_union[horizon][alg_index] +1))
+                            else:
+                                alg_classes.append(int(algs_union[horizon][0]))
+                            
+                                horizon_lines[horizon].append((f"{backend}{embedding}", min(backend_acc, traditional_acc), max(backend_acc, traditional_acc),algs_union[horizon][alg_index]))
 
                             algorithm_types.append("new")
                             backends.append(f"{backend}{embedding}")
@@ -381,7 +457,7 @@ def get_df_visualizing_lambdas(comments, algs_union, filter_out_non_advantage=Fa
                             horizons.append(horizon)
                             accs.append(backend_acc)
                             if instruction_set == "1":
-                                alg_classes.append(1)    
+                                alg_classes.append(int(algs_union[horizon][alg_index]) + 1)
                             else:
                                 alg_classes.append(int(algs_union[horizon][alg_index]))
                     elif not filter_out_non_advantage:
@@ -394,7 +470,10 @@ def get_df_visualizing_lambdas(comments, algs_union, filter_out_non_advantage=Fa
                         if get_only_trad:
                             alg_classes.append(-1)
                         else:
-                            alg_classes.append(algs_union[horizon][0])
+                            if instruction_set == "1":
+                                alg_classes.append(0)
+                            else:
+                                alg_classes.append(algs_union[horizon][0])
                 
 
     df = pd.DataFrame.from_dict({
@@ -407,7 +486,10 @@ def get_df_visualizing_lambdas(comments, algs_union, filter_out_non_advantage=Fa
     })
     return df, horizon_lines
 
-def get_df_plots(horizon_to_algorithm, take_best=False, instruction_set=""):
+def get_df_plots(horizon_to_algorithm, take_best=False, instruction_set="", target_backends=None):
+    if target_backends is None:
+        target_backends = selected_backends
+
     backends = []
     horizons = []
     accuracies = []
@@ -418,11 +500,11 @@ def get_df_plots(horizon_to_algorithm, take_best=False, instruction_set=""):
     for line in lines:
         elements = line.split(",")
         horizon = int(elements[0])
-        if (instruction_set == "" and horizon < 7) or (instruction_set == "1" and horizon == 6):
+        if (instruction_set == "" and horizon < 7) or (instruction_set == "1" and horizon == 7):
             alg_index = int(elements[1])
             backend_ = elements[2]
             algorithm = horizon_to_algorithm[horizon]
-            if (alg_index == algorithm) and (backend_ in selected_backends):
+            if (alg_index == algorithm) and (backend_ in target_backends):
                 backend = backend_.replace("fake_", "").capitalize()
                 hardwares.append(remove_numbers(backend))
                 acc = float(elements[3])
@@ -466,7 +548,7 @@ def get_stats(horizon, comments, algs_union, get_trad_best=False):
     programs_to_backends_to_accs = dict()
     for line in all_lines:
         elements = line.split(",")
-        assert len(elements) == 5
+        assert len(elements) == 4
         horizon_ = int(elements[0])
         alg_index = int(elements[1])
         hardware = elements[2]
@@ -563,7 +645,7 @@ def get_chosen_algorithm_df(horizon, alg_index, instruction_set="", take_best=Fa
 
 # ONLY used for instruction set I1
 
-def get_trad_new_algo_stats(take_best=True):
+def get_trad_new_algo_stats(comments, take_best=True):
     Precision.PRECISION = 7
     Precision.update_threshold()
     backends = []
@@ -574,7 +656,7 @@ def get_trad_new_algo_stats(take_best=True):
     diffs = []
     probs_accum = []
     couplers_success_probs = []
-    horizon = 6
+    horizon = 7
 
     for backend in backends_w_embs:
         num_embeddings = get_num_embeddings(backend, DIR_PREFIX + "lambdas/")
@@ -600,10 +682,15 @@ def get_trad_new_algo_stats(take_best=True):
 
             trad_acc = get_algorithm_acc(horizon, 0, f"{backend}{embedding_index}", take_best=take_best)
             new_algo_acc = get_lambda_from_file(backend, embedding_index, horizon, instruction_set="1")
+            
             if trad_acc >= new_algo_acc:
                 algorithms_index.append(0)
             else:
-                algorithms_index.append(1)
+                alg_index = get_backend_algorithm(backend, 7, embedding_index, comments)
+                if alg_index is not None:
+                    algorithms_index.append(alg_index+1)
+                else:
+                    print(f"No algorithm found for {backend}-{embedding_index}")
 
     df = pd.DataFrame.from_dict({
         'hardware_spec': backends,

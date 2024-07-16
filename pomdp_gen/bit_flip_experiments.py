@@ -18,18 +18,16 @@ from cmemory import ClassicalState
 from copy import deepcopy
 import time
 from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister, execute
-
+from notebooks.notebook_utils import DIR_PREFIX
 
 MAX_HORIZON = 7
 BOTTOM_HORIZON = 5
 MAX_PRECISION = 30
 
-DIR_PREFIX = "../qalgorithm_synthesis/" # fill me before running experiments
-assert DIR_PREFIX is not None
-
 backends_w_embs = [
     # 5-qubit backends
-    FAKE_ATHENS, FAKE_BELEM, FAKE_TENERIFE,
+    FAKE_ATHENS, 
+    FAKE_BELEM, FAKE_TENERIFE,
     FAKE_LIMA, FAKE_ROME, FAKE_MANILA, 
     FAKE_SANTIAGO, FAKE_BOGOTA, FAKE_OURENSE, FAKE_YORKTOWN,
     FAKE_ESSEX, FAKE_VIGO, FAKE_BURLINGTON, FAKE_QUITO, FAKE_LONDON,
@@ -65,27 +63,10 @@ backends_w_embs = [
 ]
 
 def is_control_entangled(quantum_state: QuantumState, address_space):
-    # compute density matrix of quantum state
-    density_matrix = []
-    for basis1 in range(8):
-        qubit0 = (basis1 >> address_space[2]) & 1
-        current_row = []
-        for basis2 in range(8):
-            qubit2 = (basis2 >> address_space[2]) & 1
-            if qubit0 == qubit2:
-                value1 = quantum_state.get_amplitude(basis1)
-                value2 = quantum_state.get_amplitude(basis2)
-                current_row.append(value1 * value2)
-            else:
-                current_row.append(0)
-        density_matrix.append(deepcopy(current_row))
-    rho = np.matrix(density_matrix)
-    rho = rho**2
-    trace = 0
-    for i in range(8):
-        trace += rho[i,i]
-    # compute trace
-    if isclose(trace**2, 1, rel_tol=Precision.rel_tol):
+    simulator = QSimulator()
+    simulator.qmemory = deepcopy(quantum_state)
+    simulator.apply_instruction(Instruction.MEAS, address_space[2])
+    if is_bell_state(simulator.qmemory, address_space):
         return False
     return True
 
@@ -139,6 +120,42 @@ def get_pivot_qubits(noise_model):
         assert (temp[0].abs_diff < temp[len(temp)-1].abs_diff)
     return result
 
+def  is_bell_state(qs, m):
+    if is_target_qs(qs, m):
+        return True
+    
+    rho = qs.get_density_matrix(m)
+    pt = partial_trace(rho,[4,2], [1])
+    is_bell_state = True
+    for i in range(4):
+        for j in range(4):
+            if i == j and (i==1 or i == 2):
+                if not isclose(pt[i][j], 0.5, abs_tol=Precision.isclose_abstol):
+                    is_bell_state = False
+            elif (i == 1 and j == 2) or (j == 2 and i == 1):
+                if not isclose(pt[i][j],0.5, abs_tol=Precision.isclose_abstol):
+                    is_bell_state = False
+            elif not isclose(pt[i][j], 0.0, abs_tol=Precision.isclose_abstol):
+                is_bell_state = False
+    
+    if is_bell_state:
+        return True
+    
+    is_bell_state = True
+    for i in range(4):
+        for j in range(4):
+            if i == j and (i==1 or i == 2):
+                if not isclose(pt[i][j], 0.5, abs_tol=Precision.isclose_abstol):
+                    is_bell_state = False
+            elif (i == 1 and j == 2) or (j == 2 and i == 1):
+                if not isclose(pt[i][j],-0.5, abs_tol=Precision.isclose_abstol):
+                    is_bell_state = False
+            elif not isclose(pt[i][j], 0.0, abs_tol=Precision.isclose_abstol):
+                is_bell_state = False
+    return is_bell_state
+    
+
+    
 def get_selected_couplers(noise_model, target):
     couplers = noise_model.get_qubit_couplers(target)
     first_pair = (couplers[0], couplers[1])
@@ -188,32 +205,44 @@ def is_target_qs(qs, address_space):
     -------
 
     """
-    prob00 = 0.0
-    prob11 = 0.0
-    for (basis, value) in qs.sparse_vector.items():
-        qubit0 = (basis >> address_space[0]) & 1
-        qubit1 = (basis >> address_space[1]) & 1
-        if qubit0 != qubit1:
-            probv = value * conjugate(value)
-            if isinstance(probv, complex):
-                probv = probv.real
-            if not isclose(probv, 0.0, abs_tol=Precision.isclose_abstol):
-                return False
-        else:
-            if qubit0 == 0:
-                prob00 += value * conjugate(value)
-            else:
-                prob11 += value * conjugate(value)
 
-    if isinstance(prob00, complex):
-        prob00 = prob00.real
+    assert isinstance(qs, QuantumState)
 
-    if isinstance(prob11, complex):
-        prob11 = prob11.real
-    if isclose(prob00, 0.0, abs_tol=Precision.isclose_abstol):
-        return False
-
-    return isclose(prob00, prob11, abs_tol=Precision.isclose_abstol)
+    rho = qs.get_density_matrix(address_space)
+    assert rho.shape[0] == rho.shape[1]
+    assert rho.shape[0] == 8
+    reduced_rho = partial_trace(rho,[4,2], [1])
+    assert reduced_rho.shape[0] == reduced_rho.shape[1]
+    assert reduced_rho.shape[0] == 4
+    is_bell_state = True
+    for i in range(4):
+        for j in range(4):
+            if i == j and (i==0 or i == 3):
+                if not isclose(reduced_rho[i][j], 0.5, abs_tol=Precision.isclose_abstol):
+                    is_bell_state = False
+            elif (i == 0 and j == 3) or (j == 0 and i == 3):
+                if not isclose(reduced_rho[i][j], 0.5, abs_tol=Precision.isclose_abstol):
+                    is_bell_state = False
+            elif not isclose(reduced_rho[i][j], 0.0, abs_tol=Precision.isclose_abstol):
+                is_bell_state = False
+    
+    if is_bell_state:
+        return True
+    
+    is_bell_state = True
+    for i in range(4):
+        for j in range(4):
+            if i == j and (i==0 or i == 3):
+                if not isclose(reduced_rho[i][j], 0.5, abs_tol=Precision.isclose_abstol):
+                    is_bell_state = False
+            elif (i == 0 and j == 3) or (j == 0 and i == 3):
+                if not isclose(reduced_rho[i][j],-0.5, abs_tol=Precision.isclose_abstol):
+                    is_bell_state = False
+            elif not isclose(reduced_rho[i][j], 0.0, abs_tol=Precision.isclose_abstol):
+                is_bell_state = False
+    
+    return is_bell_state
+                
 
 
 def get_bell_state(i, m) -> QuantumState:
@@ -523,7 +552,7 @@ def get_lambdas(backend, embedding_index, dir_prefix=""):
     f.close()
     return result
 
-def load_embedding(backend, embedding_index, dir_prefix, is_one=False):
+def load_embedding(backend, embedding_index, dir_prefix=DIR_PREFIX, is_one=False):
     if is_one:
         f = open(dir_prefix + f"inverse_mappings1/{backend}_{embedding_index}.txt")
     else:
@@ -547,8 +576,7 @@ def get_num_embeddings(backend, dir_prefix):
     f.close()
     return len(all_embeddings)
     
-def test_programs(shots=2000, for_ibm=False):
-    
+def test_programs(shots=2000, for_ibm=False, factor=2):
     output_file = open(DIR_PREFIX + "analysis_results/test_lambdas.csv", "w")
     output_file.write("backend,horizon,lambda,acc,diff\n")
     
@@ -564,7 +592,10 @@ def test_programs(shots=2000, for_ibm=False):
                 assert len(algorithms) == 1
                 for algorithm in algorithms[:3]:
                     if for_ibm:
-                        acc = ibm_execute_my_algo(shots, algorithm, backend, m)
+                        acc = 0
+                        for _ in range(factor):
+                            acc += ibm_execute_my_algo(shots, algorithm, backend, m)
+                        acc /= factor  
                     else:
                         acc, _ = execute_my_algo(shots, algorithm, noise_model,
                                                     is_target_qs, address_space=m)
@@ -574,7 +605,7 @@ def test_programs(shots=2000, for_ibm=False):
                     
     output_file.close()
 
-def test_programs1(shots=2000, for_ibm=False):
+def test_programs1(shots=2000, for_ibm=False, factor=2):
     output_file = open(DIR_PREFIX + "analysis_results1/test_lambdas.csv", "w")
     output_file.write("backend,horizon,lambda,acc,diff\n")
     
@@ -589,7 +620,10 @@ def test_programs1(shots=2000, for_ibm=False):
                 algorithms = load_algorithms_file(DIR_PREFIX + f'algorithms1/{backend}_{index}_{horizon}')
                 for algorithm in algorithms[:3]:
                     if for_ibm:
-                        acc = ibm_execute_my_algo(shots, algorithm, backend, m)
+                        acc = 0
+                        for _ in range(factor):
+                            acc += ibm_execute_my_algo(shots, algorithm, backend, m)
+                        acc /= factor  
                     else:
                         acc, _ = execute_my_algo(shots, algorithm, noise_model,
                                                     is_target_qs, address_space=m)
@@ -623,8 +657,11 @@ def simulator_experiments(shots=5000, for_ibm=False, is_one=False, factor=1):
     else:
         output_file = open(DIR_PREFIX + "analysis_results/backends_vs.csv", "w")
     output_file.write(f"horizon,diff_index,real_hardware,acc,ins\n")
-    
-    for horizon in range(4, 8):
+    if is_one:
+        bottom_h = 7
+    else:
+        bottom_h = 4
+    for horizon in range(bottom_h, 8):
         if is_one:
             algorithms = load_algorithms_file(DIR_PREFIX + f'analysis_results1/diff{horizon}.py')
         else:
@@ -694,40 +731,47 @@ def times_generate_pomdps():
 
             
 
-def generate_pomdps1():
+def generate_pomdps1(arg):
+    backend = backends_w_embs[arg]
+    times_file = open(f"{DIR_PREFIX}analysis_results1/pomdp_times_{backend}.csv", "w")
+    # times_file.write("backend,embedding,time\n")
     def is_target_qs2(hybrid_state):
         qs, cs = hybrid_state
         return is_target_qs(qs, embedding)
-    
-    for backend in backends_w_embs:
-        num_embeddings = get_num_embeddings(backend, DIR_PREFIX + "lambdas/")
-        for embedding_index in range(num_embeddings):
-            print(backend, embedding_index)
-            embedding_ = load_embedding(backend, embedding_index, DIR_PREFIX)
-            embedding = dict()
-            embedding[0] = embedding_[0]
-            embedding[1] = embedding_[2]
-            embedding[2] = embedding_[1]
-
-            f_new_embedding = open(DIR_PREFIX + f"inverse_mappings1/{backend}_{embedding_index}.txt", "w")
-            for  i in range(3):
-                f_new_embedding.write(f"{embedding[i]} {i}\n")
-            f_new_embedding.close()
-
-            initial_state = (QuantumState(0), ClassicalState())
-            noise_model = get_ibm_noise_model(backend)
-            channels = get_experiments_channels(noise_model, embedding, 1)
-            initial_distribution = []
-            for s in get_initial_states(embedding):
-                initial_distribution.append((s, 0.25))
-            guards = get_guards(1, noise_model, embedding)
-            pomdp = build_pomdp(channels, initial_state, embedding, initial_distribution, guards)
-            pomdp.serialize(is_target_qs2, DIR_PREFIX + f"pomdps1/{backend}_{embedding_index}.txt")
+    # for backend in backends_w_embs:
+    num_embeddings = get_num_embeddings(backend, DIR_PREFIX + "lambdas/")
+    for embedding_index in range(num_embeddings):
+        print(backend, embedding_index)
+        embedding_ = load_embedding(backend, embedding_index, DIR_PREFIX)
+        embedding = dict()
+        embedding[0] = embedding_[0]
+        embedding[1] = embedding_[2]
+        embedding[2] = embedding_[1]
+        start_time = time.time()
+        f_new_embedding = open(DIR_PREFIX + f"inverse_mappings1/{backend}_{embedding_index}.txt", "w")
+        for  i in range(3):
+            f_new_embedding.write(f"{embedding[i]} {i}\n")
+        f_new_embedding.close()
+        start_time = time.time()
+        initial_state = (QuantumState(0), ClassicalState())
+        noise_model = get_ibm_noise_model(backend)
+        channels = get_experiments_channels(noise_model, embedding, 1)
+        initial_distribution = []
+        for s in get_initial_states(embedding):
+            initial_distribution.append((s, 0.25))
+        guards = get_guards(1, noise_model, embedding)
+        pomdp = build_pomdp(channels, initial_state, embedding, initial_distribution, guards)
+        end_time = time.time()
+        times_file.write(f"{backend},{embedding_index},{end_time-start_time}\n")
+        times_file.flush()
+        pomdp.serialize(is_target_qs2, DIR_PREFIX + f"pomdps1/{backend}_{embedding_index}.txt")
+    times_file.close()
 
 def times_generate_pomdps1():
     times_file = open(f"{DIR_PREFIX}analysis_results1/pomdp_times.csv", "w")
     times_file.write("backend,embedding,time\n")
     for backend in backends_w_embs:
+        backend = backends_w_embs[arg]
         num_embeddings = get_num_embeddings(backend, DIR_PREFIX + "lambdas/")
         for embedding_index in range(num_embeddings):
             print(backend, embedding_index)
@@ -765,8 +809,7 @@ def generate_backends_to_num_embeddings():
     print(result)
 
 def generate_all_experiments_script():
-    # used to generate the script to run experiments in our server
-    f = open("{DIR_PREFIX}/run_all_experiments.sh", "w")
+    f = open("run_all_experiments.sh", "w")
     for backend in backends_w_embs:
         f.write(f"sbatch experiments_script.sh ./inputs/{backend}.input\n")
     f.close()
@@ -780,9 +823,10 @@ def generate_inputs_file():
 
 if __name__ == "__main__":
     arg_backend = sys.argv[1]
+    
     Precision.PRECISION = 7
     Precision.update_threshold()
-    assert arg_backend in [ "testprograms","ibmtestprograms", "simulatorexp", "ibmsimulatorexp", "genpomdp", "genpomdp1", "timesgenpomdp", "timesgenpomdp1", "ibmtestprograms1"]
+    assert arg_backend in [ "testprograms","ibmtestprograms", "ibmsimulatorexp1", "simulatorexp", "ibmsimulatorexp", "genpomdp", "genpomdp1", "timesgenpomdp", "timesgenpomdp1", "ibmtestprograms1"]
     
     if arg_backend == "genpomdp":
         Precision.PRECISION = 10
@@ -795,9 +839,10 @@ if __name__ == "__main__":
         times_generate_pomdps()
 
     if arg_backend == "genpomdp1":
+        arg2 = int(sys.argv[2])
         Precision.PRECISION = 10
         Precision.update_threshold()
-        generate_pomdps1()
+        generate_pomdps1(arg2)
 
     if arg_backend == "timesgenpomdp1":
         Precision.PRECISION = 10
@@ -821,8 +866,8 @@ if __name__ == "__main__":
         simulator_experiments("exp_out/simulators.csv",2000, for_ibm=False)
 
     if arg_backend == "ibmsimulatorexp":
-        simulator_experiments(5000, for_ibm=True, factor=2)
+        simulator_experiments(5000, for_ibm=True, factor=3)
 
     if arg_backend == "ibmsimulatorexp1":
-        simulator_experiments(5000, for_ibm=True, is_one=True)
+        simulator_experiments(5000, for_ibm=True, is_one=True, factor=2)
     

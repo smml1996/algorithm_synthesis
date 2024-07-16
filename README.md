@@ -56,7 +56,7 @@ cmake . && make
 
 ### Usage
 #### POMDPs generator
-The following code assumes that you are inside the folder `pomdp_gen`. To generate the POMDPs used in the experiments we run
+The following code assumes that you are inside the folder `pomdp_gen`. First set the variable `DIR_PREFIX` in `notebooks\notebook_utils.py` to a path pointing to a directory that will store all the generated files. To generate the POMDPs and the simulation results we run
 ```sh
 python bit_flip_experiments.py [arg]
 ```

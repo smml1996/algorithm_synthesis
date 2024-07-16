@@ -1,7 +1,8 @@
 from typing import Any, List, Optional
 from sympy import *
-from utils import Precision, int_to_bin, myfloor, myceil
+from utils import Precision, int_to_bin, myfloor, myceil, get_mapped_basis
 from math import isclose
+import numpy as np
 
 # TODO: add constraints
 class QuantumState:
@@ -66,6 +67,17 @@ class QuantumState:
                 return False
         return True
     
+    def get_density_matrix(self, address_space, num_qubits=3) -> List[List[int]]:
+        # TODO: generalize this
+        result = []
+        for i in range(2**num_qubits):
+            result.append([0 for _ in range(2**num_qubits)])
+
+        for i in range(2**num_qubits):
+            for j in range(2**num_qubits):
+                result[i][j] = self.get_amplitude(get_mapped_basis(i, address_space)) * conjugate(self.get_amplitude(get_mapped_basis(j, address_space)))
+        return np.array(result)
+        
     def is_qubit_0(self) -> bool:
         assert self.is_qubit()
         return isclose(simplify(self.get_amplitude(0)), 1)

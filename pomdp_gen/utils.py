@@ -495,6 +495,18 @@ def int_to_bin(n: int) -> str:
         n = floor(n / 2)
     return result
 
+def get_mapped_basis(n, address_space):
+    n_bin = int_to_bin(n)
+
+    result = 0
+
+    for (index, b) in enumerate(n_bin):
+        if b == "1":
+            result += 1 << address_space[index]
+
+    return result
+
+
 
 def int_to_bin2(n: int) -> str:
     bin_num = int_to_bin(n)
@@ -1138,28 +1150,46 @@ class AlgorithmNode:
             if self.case1 is not None:
                 self.case1.get_instructions_used(current_set)
     
-    def serialize(self):
-        next_ins = None
+    def serialize(self, for_json=False):
+        if for_json:
+            next_ins = -1
+        else:
+            next_ins = None
         if self.next_ins is not None:
-            next_ins = self.next_ins.serialize()
+            next_ins = self.next_ins.serialize(for_json)
         
-        case0 = None
-        case1 = None
+        if for_json:
+            case0 = -1
+            case1 = -1
+        else:
+            case0 = None
+            case1 = None
         if self.case0 is not None:
-            case0 = self.case0.serialize()
+            case0 = self.case0.serialize(for_json)
         if self.case1 is not None:
-            case1 = self.case1.serialize()
+            case1 = self.case1.serialize(for_json)
 
+        params = self.params
+        if (params is None) and for_json:
+            params = -1
+        
+        control = self.control
+        if (control is None) and for_json:
+            control = -1
+
+        instruction = self.instruction
+        if for_json:
+            instruction = instruction.name
         return {
-            'instruction': self.instruction,
-            'target': self.target,
-            'control': self.control,
-            'params': self.params,
-            'next': next_ins,
-            'case0': case0,
-            'case1': case1,
-            'count_meas': self.count_meas,
-            'depth': self.depth
+            "instruction": instruction,
+            "target": self.target,
+            "control": control,
+            "params": params,
+            "next": next_ins,
+            "case0": case0,
+            "case1": case1,
+            "count_meas": self.count_meas,
+            "depth": self.depth
         }
     
 # Parsing Kraus operators
@@ -1365,6 +1395,32 @@ class Guard:
     def __init__(self, guard, target_channels: List[QuantumChannel]) -> None:
         self.guard = guard
         self.target_channels = target_channels
+
+def partial_trace(rho, dims, keep):
+    """
+    Compute the partial trace of a density matrix over specified subsystems.
+    
+    Args:
+    - rho (np.ndarray): The density matrix of the composite system.
+    - dims (list): Dimensions of each subsystem.
+    - keep (list): List of indices of subsystems to keep.
+    
+    Returns:
+    - np.ndarray: The reduced density matrix after tracing out the specified subsystems.
+    """
+    # Total number of subsystems
+    num_subsystems = len(dims)
+    
+    # Permute the dimensions so that the subsystems to keep come first
+    perm = keep + [i for i in range(num_subsystems) if i not in keep]
+    perm_dims = [dims[i] for i in perm]
+    perm_rho = rho.reshape(perm_dims + perm_dims).transpose(perm + [num_subsystems + i for i in perm])
+    
+    # Trace out the subsystems to be traced out
+    for i in range(num_subsystems - len(keep)):
+        perm_rho = np.trace(perm_rho, axis1=-1, axis2=num_subsystems - len(keep))
+    
+    return perm_rho
 
 
 

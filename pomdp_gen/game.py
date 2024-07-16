@@ -172,21 +172,33 @@ def dump_algorithms(algorithms: List[AlgorithmNode], output_path, for_ibm=False,
         file.write(f"algorithms.append(algorithm{i})\n")
     file.close()
 
-def serialize_algorithms(algorithms: List[AlgorithmNode], output_path):
+def serialize_algorithms(algorithms: List[AlgorithmNode], output_path, for_json=False):
     assert isinstance(output_path, str)
     file = open(output_path, "w")
-    file.write("import os, sys\n")
-    file.write("sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))\n")
-    file.write("from utils import *\n\n")
-    file.write("algorithms = [")
+    if not for_json:
+        file.write("import os, sys\n")
+        file.write("sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))\n")
+        file.write("from utils import *\n\n")
+        file.write("algorithms = [")
+    else:
+        file.write("{" + f"\"count\": {len(algorithms)},  \"algorithms\":" + "{")
     for (index, algorithm) in enumerate(algorithms):
         assert isinstance(algorithm, AlgorithmNode)
-        file.write(f"{algorithm.serialize()} \n")
+        serialized = algorithm.serialize(for_json).__str__().replace('\'', "\"")
+        if for_json:
+            file.write(f"\"{index}\": {serialized} \n")
+        else:
+            file.write(f"{serialized} \n")
+
         if index + 1 != len(algorithms):
             file.write(",")
         elif index == 0:
             file.write("\n")
-    file.write("]")
+    if for_json:
+        file.write("}")
+        file.write("}")
+    else:
+        file.write("]")
     file.close()
 
 def get_bellman_graph(graph: Graph, is_target_qs, address_space=default_mapping(), outpath=None, horizon=6) -> str:
