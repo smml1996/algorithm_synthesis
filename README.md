@@ -49,7 +49,12 @@ Python3 is required, we used Python 3.10.13. A [virtual environment](https://doc
 pip install -r requirements.txt
 ```
 ### For algorithm synthesis
-First, navigate to the folder `qalgorithm_synthesis` and execute
+First set the following variables in the file `qalgorithm_synthesis\utils.cpp`:
+```CPP
+string DIR_PREFIX = ""; // Directory where all the results (i.e algorithms) will be stored
+string EXP_INDEX = "1"; // Set to 0 to run experiments with the IPMA instruction set, or to 1 to run experiments with the CX+H instruction set
+```
+Then navigate to the folder `qalgorithm_synthesis` and execute
 ```sh
 cmake . && make
 ```
