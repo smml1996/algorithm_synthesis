@@ -45,8 +45,10 @@ def check_backends_vs_file(comments, exp_index=""):
         for embedding_index in range(0, num_embeddings):
             backend_to_lambdas[f"{backend}{embedding_index}"] =  get_allbackend_lambdas(backend, embedding_index, exp_index)
     backends_to_algos = get_backends_to_alg_mappings(comments)
-
-    f = open(DIR_PREFIX + f"analysis_results{exp_index}/backends_vs.csv")
+    try: 
+        f = open(DIR_PREFIX + f"analysis_results{exp_index}/backends_vs.csv")
+    except:
+        raise Exception(f"Execute first bit_flip_experiments.py ibmsimulatorexp{exp_index}")
     lines = f.readlines()[1:]
     for line in lines:
         elements = line.split(",")
