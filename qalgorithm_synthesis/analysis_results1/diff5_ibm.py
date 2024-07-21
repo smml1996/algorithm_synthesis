@@ -22,22 +22,15 @@ def algorithm1(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
 
 
 def algorithm2(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
-	'''fake_bogota-0,fake_burlington-1'''
-	instruction_to_ibm(qc, basis_gates, Instruction.MEAS, 2, None)
-	with qc.if_test((cbits[2], 0)) as else0_:
-		instruction_to_ibm(qc, basis_gates, Instruction.CNOT, 1, 0)
-		instruction_to_ibm(qc, basis_gates, Instruction.CNOT, 1, 0)
-		instruction_to_ibm(qc, basis_gates, Instruction.CNOT, 1, 0)
-		instruction_to_ibm(qc, basis_gates, Instruction.CNOT, 1, 0)
-	with else0_:
-		instruction_to_ibm(qc, basis_gates, Instruction.CNOT, 1, 0)
-		instruction_to_ibm(qc, basis_gates, Instruction.CNOT, 1, 0)
-		instruction_to_ibm(qc, basis_gates, Instruction.CNOT, 1, 0)
-		instruction_to_ibm(qc, basis_gates, Instruction.CNOT, 1, 0)
+	'''fake_bogota-0,fake_burlington-1,fake_jakarta-3,fake_oslo-4,fake_tokyo-6,fake_poughkeepsie-0,fake_poughkeepsie-4,fake_almaden-2,fake_almaden-4,fake_almaden-5,fake_singapore-0,fake_singapore-1,fake_singapore-5,fake_kolkata-0,fake_toronto-4,fake_toronto-8,fake_sydney-3,fake_cairo-0,fake_hanoi-3,fake_hanoi-4,fake_hanoi-6,fake_geneva-2,fake_washington-6'''
+	instruction_to_ibm(qc, basis_gates, Instruction.CNOT, 1, 0)
+	instruction_to_ibm(qc, basis_gates, Instruction.CNOT, 1, 0)
+	instruction_to_ibm(qc, basis_gates, Instruction.CNOT, 1, 0)
+	instruction_to_ibm(qc, basis_gates, Instruction.CNOT, 1, 0)
 
 
 def algorithm3(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
-	'''fake_yorktown-2,fake_yorktown-3,fake_quito-0,fake_london-2,fake_boeblingen-2,fake_montreal-0,fake_washington-2'''
+	'''fake_yorktown-2,fake_yorktown-3,fake_quito-0,fake_quito-1,fake_london-2,fake_boeblingen-2,fake_montreal-0,fake_washington-2'''
 	instruction_to_ibm(qc, basis_gates, Instruction.H, 1, None)
 	instruction_to_ibm(qc, basis_gates, Instruction.H, 1, None)
 	instruction_to_ibm(qc, basis_gates, Instruction.H, 1, None)
@@ -45,21 +38,6 @@ def algorithm3(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
 
 
 def algorithm4(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
-	'''fake_quito-1'''
-	instruction_to_ibm(qc, basis_gates, Instruction.MEAS, 2, None)
-	with qc.if_test((cbits[2], 0)) as else0_:
-		instruction_to_ibm(qc, basis_gates, Instruction.H, 1, None)
-		instruction_to_ibm(qc, basis_gates, Instruction.H, 1, None)
-		instruction_to_ibm(qc, basis_gates, Instruction.H, 1, None)
-		instruction_to_ibm(qc, basis_gates, Instruction.H, 1, None)
-	with else0_:
-		instruction_to_ibm(qc, basis_gates, Instruction.H, 1, None)
-		instruction_to_ibm(qc, basis_gates, Instruction.H, 1, None)
-		instruction_to_ibm(qc, basis_gates, Instruction.H, 1, None)
-		instruction_to_ibm(qc, basis_gates, Instruction.H, 1, None)
-
-
-def algorithm5(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
 	'''fake_london-0,fake_london-1,fake_tokyo-4,fake_poughkeepsie-5'''
 	instruction_to_ibm(qc, basis_gates, Instruction.H, 2, None)
 	instruction_to_ibm(qc, basis_gates, Instruction.CNOT, 1, 2)
@@ -68,15 +46,7 @@ def algorithm5(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
 	instruction_to_ibm(qc, basis_gates, Instruction.CNOT, 1, 2)
 
 
-def algorithm6(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
-	'''fake_jakarta-3,fake_oslo-4,fake_tokyo-6,fake_poughkeepsie-0,fake_poughkeepsie-4,fake_almaden-2,fake_almaden-4,fake_almaden-5,fake_singapore-0,fake_singapore-1,fake_singapore-5,fake_kolkata-0,fake_toronto-4,fake_toronto-8,fake_sydney-3,fake_cairo-0,fake_hanoi-3,fake_hanoi-4,fake_hanoi-6,fake_geneva-2,fake_washington-6'''
-	instruction_to_ibm(qc, basis_gates, Instruction.CNOT, 1, 0)
-	instruction_to_ibm(qc, basis_gates, Instruction.CNOT, 1, 0)
-	instruction_to_ibm(qc, basis_gates, Instruction.CNOT, 1, 0)
-	instruction_to_ibm(qc, basis_gates, Instruction.CNOT, 1, 0)
-
-
-def algorithm7(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
+def algorithm5(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
 	'''fake_oslo-0,fake_perth-3,fake_perth-4,fake_tokyo-3,fake_poughkeepsie-1,fake_boeblingen-4,fake_kolkata-2,fake_cairo-9,fake_cambridge-1,fake_manhattan-2,fake_manhattan-6'''
 	instruction_to_ibm(qc, basis_gates, Instruction.H, 1, None)
 	instruction_to_ibm(qc, basis_gates, Instruction.CNOT, 1, 0)
@@ -85,7 +55,7 @@ def algorithm7(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
 	instruction_to_ibm(qc, basis_gates, Instruction.H, 1, None)
 
 
-def algorithm8(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
+def algorithm6(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
 	'''fake_oslo-1,fake_melbourne-3,fake_tokyo-0,fake_poughkeepsie-3,fake_johannesburg-1,fake_boeblingen-5,fake_mumbai-5,fake_paris-4,fake_cairo-8,fake_manhattan-1,fake_washington-4,fake_washington-5'''
 	instruction_to_ibm(qc, basis_gates, Instruction.CNOT, 1, 0)
 	instruction_to_ibm(qc, basis_gates, Instruction.CNOT, 1, 0)
@@ -94,7 +64,7 @@ def algorithm8(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
 	instruction_to_ibm(qc, basis_gates, Instruction.H, 1, None)
 
 
-def algorithm9(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
+def algorithm7(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
 	'''fake_poughkeepsie-2,fake_boeblingen-6,fake_mumbai-6,fake_cambridge-3,fake_cambridge-4'''
 	instruction_to_ibm(qc, basis_gates, Instruction.CNOT, 1, 2)
 	instruction_to_ibm(qc, basis_gates, Instruction.H, 1, None)
@@ -103,7 +73,7 @@ def algorithm9(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
 	instruction_to_ibm(qc, basis_gates, Instruction.H, 1, None)
 
 
-def algorithm10(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
+def algorithm8(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
 	'''fake_mumbai-4,fake_washington-3'''
 	instruction_to_ibm(qc, basis_gates, Instruction.H, 1, None)
 	instruction_to_ibm(qc, basis_gates, Instruction.H, 1, None)
@@ -122,5 +92,3 @@ algorithms.append(algorithm5)
 algorithms.append(algorithm6)
 algorithms.append(algorithm7)
 algorithms.append(algorithm8)
-algorithms.append(algorithm9)
-algorithms.append(algorithm10)

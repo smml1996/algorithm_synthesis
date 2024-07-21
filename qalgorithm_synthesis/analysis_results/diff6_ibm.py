@@ -161,7 +161,11 @@ def algorithm6(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
 	with qc.if_test((cbits[2], 0)) as else0_:
 		instruction_to_ibm(qc, basis_gates, Instruction.MEAS, 2, None)
 		with qc.if_test((cbits[2], 0)) as else1_:
-			instruction_to_ibm(qc, basis_gates, Instruction.X, 0, None)
+			instruction_to_ibm(qc, basis_gates, Instruction.MEAS, 2, None)
+			with qc.if_test((cbits[2], 0)) as else2_:
+				instruction_to_ibm(qc, basis_gates, Instruction.X, 0, None)
+			with else2_:
+				instruction_to_ibm(qc, basis_gates, Instruction.X, 0, None)
 		with else1_:
 			instruction_to_ibm(qc, basis_gates, Instruction.MEAS, 2, None)
 			with qc.if_test((cbits[2], 0)) as else2_:

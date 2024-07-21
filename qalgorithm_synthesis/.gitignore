@@ -1,0 +1,12 @@
+cmake-build-debug
+CMakeFiles
+qprogram_synthesis
+.idea/*
+*.log
+CMakeLists.txt
+Makefile
+CMakeCache.txt
+cmake_install.cmake
+.DS_Store
+algorithms/__pycache__/
+algorithms1/__pycache__/

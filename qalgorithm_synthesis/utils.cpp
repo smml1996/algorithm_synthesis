@@ -7,9 +7,13 @@
 #include <cassert>
 #include <map>
 #include "fp.cpp"
+#include "json.hpp"
+
+// for convenience
+using json = nlohmann::json;
 
 using namespace std;
-string DIR_PREFIX = "./";
+string DIR_PREFIX = "";
 string EXP_INDEX = "1";
 
 struct Instruction {
@@ -91,6 +95,32 @@ public:
         this->case1 = case1;
     }
 
+    Algorithm(json data){
+        auto instruction = Instruction();
+        instruction.instruction = data["instruction"];
+        instruction.control = data["control"];
+        instruction.target = data["target"];
+        this->instruction = instruction;
+
+        if (data["next"] == -1){
+            this->next_ins = nullptr;
+        }else{
+            this->next_ins = new Algorithm(data["next"]);
+        }
+
+        if (data["case0"] == -1) {
+            this->case0 = nullptr;
+        } else {
+            this->case0 = new Algorithm(data["case0"]);
+        }
+
+        if (data["case1"] == -1) {
+            this->case1 = nullptr;
+        } else{
+            this->case1 = new Algorithm(data["case1"]);
+        }
+    }
+
     string serialize(const unordered_map<int, int> &inverse_mapping) const {
         if (this == nullptr) {
             return "None";
@@ -159,7 +189,7 @@ unordered_map<int, int> get_inverse_mapping(const string &backend, const int &in
     string line0, line1, line2;
 
     getline(f, line0); getline(f, line1); getline(f, line2);
-
+    f.close();
     vector<string> v0, v1, v2;
 
     split_str(line0, ' ', v0); split_str(line1, ' ', v1);
@@ -171,6 +201,29 @@ unordered_map<int, int> get_inverse_mapping(const string &backend, const int &in
 
     unordered_map<int, int> result;
     result[stoi(v0[0])] = 0; result[stoi(v1[0])] = 1; result[stoi(v2[0])] = 2;
+
+    return result;
+}
+
+unordered_map<int, int> get_mapping(const string &backend, const int &index, const string &exp_index) {
+    string filename = "inverse_mappings"+exp_index+"/" + backend + "_" + to_string(index) + ".txt";
+
+    fstream f(filename);
+    string line0, line1, line2;
+
+    getline(f, line0); getline(f, line1); getline(f, line2);
+    f.close();
+    vector<string> v0, v1, v2;
+
+    split_str(line0, ' ', v0); split_str(line1, ' ', v1);
+    split_str(line2, ' ', v2);
+
+    assert(v0.size() == 2); assert(v1.size() == 2); assert(v2.size() == 2);
+
+    assert(stoi(v0[1]) == 0); assert(stoi(v1[1]) == 1); assert(stoi(v2[1]) == 2);
+
+    unordered_map<int, int> result;
+    result[0] = stoi(v0[0]); result[1] = stoi(v1[0]); result[2] = stoi(v2[0]);
 
     return result;
 }

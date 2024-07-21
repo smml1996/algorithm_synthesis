@@ -114,13 +114,13 @@ void fill_target_vertices(POMDP &pomdp, const string &line) {
 
 POMDP parse_pomdp_file (const string& fname) {
     POMDP pomdp;
+
     ifstream f(fname + ".txt");
-    cout << fname << endl;
     string line;
     if (getline (f, line)) {
         assert (line == "BEGINPOMDP");
     } else {
-        cout << "error reading file" << endl;
+        cout << "error POMDP reading file" << endl;
         assert(false);
     }
 
@@ -311,5 +311,73 @@ Belief get_initial_belief(POMDP &pomdp) {
         initial_belief.set_val(pomdp.initial_state, MyFloat("1"));
     }
     return initial_belief;
+}
+
+MyFloat get_algorithm_acc(POMDP &pomdp, Algorithm*& algorithm, Belief &current_belief, const unordered_map<int, int> &embedding) {
+    MyFloat curr_belief_val = current_belief.get_vertices_probs(pomdp.target_vertices);
+    if (algorithm == nullptr) {
+        return curr_belief_val;
+    }
+
+    string current_action;
+    if (algorithm->instruction.control  == -1){
+        current_action = algorithm->instruction.instruction + to_string(embedding.find(algorithm->instruction.target)->second);
+    } else {
+        current_action = algorithm->instruction.instruction + to_string(embedding.find(algorithm->instruction.target)->second) + "_" +
+                to_string(embedding.find(algorithm->instruction.control)->second);
+    }
+
+    if(pomdp.actions_to_instructions.find(current_action) == pomdp.actions_to_instructions.end()) {
+        cout << "could not find "<<current_action << " in pomdp actions. The available POMDP actions are: \n";
+        for(auto it = pomdp.actions_to_instructions.begin(); it != pomdp.actions_to_instructions.end(); it++){
+            cout << it->first << endl;
+        }
+        assert(false);
+    }
+
+    string action = current_action;
+
+    // build next_beliefs, separate them by different observables
+    map<int, Belief> obs_to_next_beliefs;
+
+    MyFloat zero;
+    for(auto & prob : current_belief.probs) {
+        int current_v = prob.first;
+        if(prob.second > zero) {
+            for (auto &it_next_v: pomdp.probabilities[current_v][action]) {
+                if (it_next_v.second > zero) {
+                    obs_to_next_beliefs[pomdp.gamma[it_next_v.first]].add_val(it_next_v.first,
+                                                                              prob.second * it_next_v.second);
+                }
+            }
+        }
+    }
+
+    assert(obs_to_next_beliefs.size() < 3);
+
+    if (!obs_to_next_beliefs.empty()) {
+        MyFloat bellman_val;
+        for(auto & obs_to_next_belief : obs_to_next_beliefs) {
+            MyFloat temp;
+            if (algorithm->next_ins != nullptr) {
+                assert(algorithm->case0 == nullptr);
+                assert(algorithm->case1 == nullptr);
+                temp = get_algorithm_acc(pomdp, algorithm->next_ins, obs_to_next_belief.second, embedding);
+            }else{
+                if(obs_to_next_belief.first == 0) {
+                    temp = get_algorithm_acc(pomdp, algorithm->case0, obs_to_next_belief.second, embedding);
+                } else {
+                    assert(obs_to_next_belief.first == 1);
+                    temp =  get_algorithm_acc(pomdp, algorithm->case1, obs_to_next_belief.second, embedding);
+                }
+            }
+
+            bellman_val = bellman_val + temp;
+        }
+
+        return bellman_val;
+    } else {
+        return curr_belief_val;
+    }
 }
 
