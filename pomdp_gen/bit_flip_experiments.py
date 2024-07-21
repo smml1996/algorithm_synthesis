@@ -577,6 +577,15 @@ def get_num_embeddings(backend, dir_prefix):
     return len(all_embeddings)
     
 def test_programs(shots=2000, for_ibm=False, factor=2):
+    if not os.path.exists(DIR_PREFIX + "analysis_results/"):
+        os.mkdir(DIR_PREFIX + "analysis_results/") 
+    
+    if not os.path.exists(DIR_PREFIX + "lambdas/"):
+        raise Exception(f"Guarantees not computed yet (directory lambdas/ does not exists)")
+    
+    if not os.path.exists(DIR_PREFIX + "algorithms/"):
+        raise Exception(f"Optimal algorithms not computed yet (directory algorithms/ does not exists)")
+    
     output_file = open(DIR_PREFIX + "analysis_results/test_lambdas.csv", "w")
     output_file.write("backend,horizon,lambda,acc,diff\n")
     
@@ -606,6 +615,15 @@ def test_programs(shots=2000, for_ibm=False, factor=2):
     output_file.close()
 
 def test_programs1(shots=2000, for_ibm=False, factor=2):
+    if not os.path.exists(DIR_PREFIX + "analysis_results1/"):
+        os.mkdir(DIR_PREFIX + "analysis_results1/") 
+    
+    if not os.path.exists(DIR_PREFIX + "lambdas1/"):
+        raise Exception(f"Guarantees not computed yet (directory lambdas1/ does not exists)")
+    
+    if not os.path.exists(DIR_PREFIX + "algorithms1/"):
+        raise Exception(f"Optimal algorithms not computed yet (directory algorithms1/ does not exists)")
+    
     output_file = open(DIR_PREFIX + "analysis_results1/test_lambdas.csv", "w")
     output_file.write("backend,horizon,lambda,acc,diff\n")
     
@@ -650,11 +668,15 @@ def bellman_hardware_experiments(backend: str, do_safety_check=False, experiment
                 
             run_experiment_bellman(noise_model, new_embedding, graphs_path=f"exp_out/bf_{backend}{Precision.is_lowerbound}_graphs{index}/", with_safety=do_safety_check, instruction_set=instruction_set, experiment_name=f"{backend}{Precision.is_lowerbound}_{experiment_name}{index}")
 
-def simulator_experiments(shots=5000, for_ibm=False, is_one=False, factor=1):
+def simulator_experiments(shots=5000, for_ibm=False, is_one=False, factor=1):  
     assert isinstance(for_ibm, bool)  
     if is_one: 
+        if not os.path.exists(DIR_PREFIX + "analysis_results1/"):
+            os.mkdir(DIR_PREFIX + "analysis_results1/")
         output_file = open(DIR_PREFIX + "analysis_results1/backends_vs.csv", "w")
     else:
+        if not os.path.exists(DIR_PREFIX + "analysis_results/"):
+            os.mkdir(DIR_PREFIX + "analysis_results/")
         output_file = open(DIR_PREFIX + "analysis_results/backends_vs.csv", "w")
     output_file.write(f"horizon,diff_index,real_hardware,acc,ins\n")
     if is_one:
@@ -663,8 +685,12 @@ def simulator_experiments(shots=5000, for_ibm=False, is_one=False, factor=1):
         bottom_h = 4
     for horizon in range(bottom_h, 8):
         if is_one:
+            if not os.path.exists(os.path.join(os.getcwd(), DIR_PREFIX + f'analysis_results1', f'diff{horizon}.py')):
+                raise Exception(f"Please run the notebook /Results Analysis QProgram Synthesis1.ipynb first (this will generate the file diff{horizon}.py (the different algorithms at horizon {horizon})")
             algorithms = load_algorithms_file(DIR_PREFIX + f'analysis_results1/diff{horizon}.py')
         else:
+            if not os.path.exists(os.path.join(os.getcwd(), DIR_PREFIX + f'analysis_results', f'diff{horizon}.py')):
+                raise Exception(f"Please run the notebook /Results Analysis QProgram Synthesis.ipynb first (this will generate the file diff{horizon}.py (the different algorithms at horizon {horizon}))")
             algorithms = load_algorithms_file(DIR_PREFIX + f'analysis_results/diff{horizon}.py')
         for real_hardware in backends_w_embs:
             num_embeddings = get_num_embeddings(real_hardware, DIR_PREFIX + "lambdas/")
@@ -687,6 +713,12 @@ def simulator_experiments(shots=5000, for_ibm=False, is_one=False, factor=1):
         
 
 def generate_pomdps():
+    if not os.path.isdir(f"{DIR_PREFIX}pomdps/"):
+        os.mkdir(f"{DIR_PREFIX}pomdps/")
+
+    if not os.path.isdir(f"{DIR_PREFIX}inverse_mappings/"):
+        os.mkdir(f"{DIR_PREFIX}inverse_mappings/")
+
     def is_target_qs2(hybrid_state):
         qs, cs = hybrid_state
         return is_target_qs(qs, m)
@@ -709,6 +741,8 @@ def generate_pomdps():
             f.close()
 
 def times_generate_pomdps():
+    if not os.path.isdir(f"{DIR_PREFIX}analysis_results/"):
+        os.mkdir(f"{DIR_PREFIX}analysis_results/")
     times_file = open(f"{DIR_PREFIX}analysis_results/pomdp_times.csv", "w")
     times_file.write("backend,embedding,time\n")
 
@@ -732,6 +766,12 @@ def times_generate_pomdps():
             
 
 def generate_pomdps1(arg):
+    if not os.path.isdir(f"{DIR_PREFIX}analysis_results1/"):
+        os.mkdir(f"{DIR_PREFIX}analysis_results1/")
+    if not os.path.isdir(f"{DIR_PREFIX}inverse_mappings1/"):
+        os.mkdir(f"{DIR_PREFIX}inverse_mappings1/")
+    if not os.path.isdir(f"{DIR_PREFIX}pomdps1/"):
+        os.mkdir(f"{DIR_PREFIX}pomdps1/")
     backend = backends_w_embs[arg]
     times_file = open(f"{DIR_PREFIX}analysis_results1/pomdp_times_{backend}.csv", "w")
     # times_file.write("backend,embedding,time\n")
@@ -739,7 +779,7 @@ def generate_pomdps1(arg):
         qs, cs = hybrid_state
         return is_target_qs(qs, embedding)
     # for backend in backends_w_embs:
-    num_embeddings = get_num_embeddings(backend, DIR_PREFIX + "lambdas/")
+    num_embeddings = len(get_backend_embeddings(backend))
     for embedding_index in range(num_embeddings):
         print(backend, embedding_index)
         embedding_ = load_embedding(backend, embedding_index, DIR_PREFIX)
@@ -768,11 +808,13 @@ def generate_pomdps1(arg):
     times_file.close()
 
 def times_generate_pomdps1():
+    if not os.path.isdir(f"{DIR_PREFIX}analysis_results1/"):
+        os.mkdir(f"{DIR_PREFIX}analysis_results1/")
     times_file = open(f"{DIR_PREFIX}analysis_results1/pomdp_times.csv", "w")
     times_file.write("backend,embedding,time\n")
     for backend in backends_w_embs:
-        backend = backends_w_embs[arg]
-        num_embeddings = get_num_embeddings(backend, DIR_PREFIX + "lambdas/")
+        # backend = backends_w_embs[arg]
+        num_embeddings = len(get_backend_embeddings(backend))
         for embedding_index in range(num_embeddings):
             print(backend, embedding_index)
             embedding_ = load_embedding(backend, embedding_index, DIR_PREFIX)
@@ -815,6 +857,8 @@ def generate_all_experiments_script():
     f.close()
 
 def generate_inputs_file():
+    if not os.path.isdir(f"{DIR_PREFIX}inputs/"):
+        os.mkdir(f"{DIR_PREFIX}inputs/")
     for backend in backends_w_embs:
         f = open(f"{DIR_PREFIX}inputs/{backend}.input", "w")
         temp_backend = backend.replace("fake_", "")
@@ -849,21 +893,11 @@ if __name__ == "__main__":
         Precision.update_threshold()
         times_generate_pomdps1()
 
-    if arg_backend == "testprograms":
-        Precision.PRECISION = 30
-        Precision.update_threshold()
-        test_programs("exp_out/allprogramstests.csv", shots=5000,for_ibm=False)
-
     if arg_backend == "ibmtestprograms":
         test_programs(shots=5000,for_ibm=True)
 
     if arg_backend == "ibmtestprograms1":
         test_programs1(shots=5000,for_ibm=True)
-
-    if arg_backend == "simulatorexp":
-        Precision.PRECISION = 30
-        Precision.update_threshold()
-        simulator_experiments("exp_out/simulators.csv",2000, for_ibm=False)
 
     if arg_backend == "ibmsimulatorexp":
         simulator_experiments(5000, for_ibm=True, factor=3)
