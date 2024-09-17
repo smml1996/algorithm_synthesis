@@ -251,6 +251,10 @@ class NoiseModel:
                 result.append([noise.qubits[0], noise.controls[0]])
         return result
     
+    def get_num_couplers(self) -> List[int]:
+        l  = self.get_available_couplers()
+        return len(l)
+
     def is_valid_embedding(self, embedding, needed_couplers) -> bool:
         mapping = {}
         for (hn1, hn2) in embedding:
