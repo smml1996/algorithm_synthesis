@@ -7,7 +7,7 @@ class Pauli(Enum):
     I = 0
     X = 1
     Y = 2
-    Z = 3
+    Z = 3 
 
 def get_pauli_matrix(p: Pauli) -> np.array:
     if p == Pauli.I:
@@ -72,7 +72,7 @@ def compute_hamiltonian_energy(H: np.array, state: np.array) -> float:
     return np.matmul(bra_state, np.matmul(H, state))[0][0]
 
 def get_lowest_energies_bitstrings(energies: Dict[int, float], num_qubits: int):
-    answer = set()
+    answer = set() # bitstrings set
     min_val = min(energies.values())
     for i in range(2**num_qubits):
         if energies[i] == min_val:
@@ -245,7 +245,7 @@ class SATFormula:
                     is_neg1 = True
                 else:
                     result += -s1_matrix
-                for var2 in enumerate(clause[index+1:]):
+                for (index2, var2) in enumerate(clause[index+1:]):
                     s2_matrix = get_matrix(abs(var2)-1, Pauli.Z, num_qubits)
                     is_neg2 = False
                     if var1 < 0:
@@ -259,8 +259,6 @@ class SATFormula:
                         result += s1_matrix*s2_matrix
         return result
             
-
-
 
 
 

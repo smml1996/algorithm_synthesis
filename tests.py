@@ -18,7 +18,6 @@ def test_graph(name: str):
         assert b in solution
 
 # functions to test SAT
-
 def test_sat(name: str):
     sat = SATFormula(f"sat/{name}.txt")
     all_assignments = sat.find_all_true_assignments()
@@ -39,11 +38,6 @@ def test_sat(name: str):
                 assignment[index+1] = False
         assert sat.evaluate_solution(assignment)
         assert assignment in all_assignments
-        
-        
-
-
-
 
 if __name__ == "__main__":
     test_graph("g0")

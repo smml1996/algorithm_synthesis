@@ -1,17 +1,17 @@
+from cmath import isclose
 from typing import Any, List, Optional
 from sympy import *
-from qpu_utils import Precision, get_complex, int_to_bin
-from math import isclose
+from qpu_utils import Precision, get_complex, int_to_bin, bin_to_int
 
 class QuantumState:
     sparse_vector : Dict # map basis states to sympy-Symbolic
     substitutions: List = []
 
-    def __init__(self, init_basis: Optional[int] = None, 
-                 init_amplitude = complex(1.0, 0.0)):
+    def __init__(self, init_basis: Optional[int] = 0, 
+                 init_amplitude = complex(1.0, 0.0), dimension=2):
         self.sparse_vector = dict()
-        if not (init_basis is None):
-            self.insert_amplitude(init_basis, init_amplitude)
+        self.insert_amplitude(init_basis, init_amplitude)
+        self.dimension = dimension
 
     def __str__(self) -> str:
         result = ""
@@ -101,9 +101,59 @@ class QuantumState:
                 return False
         return True
     
+    def get_density_matrix(self) -> List[List[int]]:
+        result = []
+        for row in self.dimension:
+            temp = []
+            for col in self.dimension:
+                temp.append(self.get_amplitude(row) * self.get_amplitude(col).conj())
+            result.append(temp)
+        return result
     
+    def single_partial_trace(self, rho=None, index=0):
+        if rho is None:
+            rho = self.get_density_matrix()
 
-def are_states_lists_equal(qsl1: List, qsl2: List) -> bool:    
+        initial_dim = len(rho)
+        assert (initial_dim % 2) == 0
+
+        # initialize the result as a matrix full of zeros
+        result = []
+        for _ in range(initial_dim/2):
+            temp = 0
+            for _ in range(initial_dim/2):
+                temp.append(0)                
+            result.append(temp)
+
+        for ket in range(initial_dim):
+            bin_ket = int_to_bin(ket, zero_padding=initial_dim)
+            bin_new_ket = bin_ket[:index] + bin_ket[index+1:]
+            index_new_ket = bin_to_int(bin_new_ket)
+            for bra in range(initial_dim):
+                bin_bra = int_to_bin(bra, zero_padding=initial_dim)
+                bin_new_bra = bin_bra[:index] + bin_bra[index+1:]
+                index_new_bra = bin_to_int(bin_new_bra)
+                assert result[index_new_ket][index_new_bra] == 0
+                if bin_ket[index] == bin_bra[index]:
+                    result[index_new_ket][index_new_bra] = rho[ket][bra]
+        assert len(result) == initial_dim/2
+        return result
+
+    def multi_partial_trace(self, rho=None, remove_indices: List[int]=[0]) -> List[List[float]]:
+        if rho is None:
+            rho = self.get_density_matrix()
+        for index in remove_indices:
+            result = self.single_partial_trace(rho, index)
+        return result
+    
+    def get_trace(self, rho: List[List[float]]):
+        result = 0
+        for i in range(len(rho)):
+            result += rho[i][i]
+        return result
+
+
+def are_states_lists_equal(qsl1: List[QuantumState], qsl2: List[QuantumState]) -> bool:    
     if len(qsl1) != len(qsl2):
         return False
     
@@ -112,7 +162,7 @@ def are_states_lists_equal(qsl1: List, qsl2: List) -> bool:
             return False
     return True
 
-def is_list_subset(subset: List, all_set: List) -> bool:
+def is_list_subset(subset: List[QuantumState], all_set: List[QuantumState]) -> bool:
     if len(all_set) < len(subset):
         return False
     
@@ -139,203 +189,10 @@ def does_observable_exists(obs_to_qs: Dict, quantum_states: List) -> Optional[in
             return obs
     return None
 
-def is_bell_state(qs: QuantumState, address_space) -> bool:
-    Precision.update_threshold()
-    basis00 = 0.0
-    basis11 = 0.0
-    for (basis, value) in qs.sparse_vector.items():
-        qubit0 = (basis >> address_space(0)) & 1
-        qubit1 = (basis >> address_space(1)) & 1
-        if qubit0 != qubit1:
-            probv = value * conjugate(value)
-            if isinstance(probv, complex):
-                probv = probv.real
-            if not isclose(probv, 0.0, abs_tol=Precision.isclose_abstol): 
-                return False
-        else:
-            if qubit0 == 0:
-                basis00 += value
-            else:
-                basis11 += value
+def get_fidelity(qstate1: QuantumState, qstate2: QuantumState) -> float:
+    inner_product = 0
+    for (key, val1) in qstate1.sparse_vector.items():
+        val2 = qstate2.get_amplitude(key)
+        inner_product += val1*val2
+    return inner_product
 
-    prob00 = basis00 * conjugate(basis00)
-
-    if isinstance(prob00, complex):
-        prob00 = prob00.real
-
-    if isclose(prob00, 0.0, abs_tol=Precision.isclose_abstol):
-        return False
-    
-    basis00 = complex(basis00)
-    basis11 = complex(basis11)
-    return isclose(basis00.real, basis11.real, rel_tol=Precision.rel_tol) and isclose(basis00.imag, basis11.imag, rel_tol=Precision.rel_tol)
-
-def is_bell_state_minus(qs: QuantumState, address_space) -> bool:
-    Precision.update_threshold()
-    basis00 = 0.0
-    basis11 = 0.0
-    for (basis, value) in qs.sparse_vector.items():
-        qubit0 = (basis >> address_space(0)) & 1
-        qubit1 = (basis >> address_space(1)) & 1
-        if qubit0 != qubit1:
-            probv = value * conjugate(value)
-            if isinstance(probv, complex):
-                probv = probv.real
-            if not isclose(probv, 0.0, abs_tol=Precision.isclose_abstol): 
-                return False
-        else:
-            if qubit0 == 0:
-                basis00 += value
-            else:
-                basis11 += value
-    
-    prob00 = basis00 * conjugate(basis00)
-
-    if isinstance(prob00, complex):
-        prob00 = prob00.real
-
-    if isclose(prob00, 0.0, abs_tol=Precision.isclose_abstol):
-        return False
-    
-    basis00 = complex(basis00)
-    basis11 = complex(basis11)
-    return isclose(basis00.real, -basis11.real, rel_tol=Precision.rel_tol) and isclose(basis00.imag, -basis11.imag, rel_tol=Precision.rel_tol)
-
-def is_flip_bell_state(qs: QuantumState, address_space) -> bool:
-    Precision.update_threshold()
-    basis01 = 0.0
-    basis10 = 0.0
-    for (basis, value) in qs.sparse_vector.items():
-        qubit0 = (basis >> address_space(0)) & 1
-        qubit1 = (basis >> address_space(1)) & 1
-        if qubit0 == qubit1:
-            probv = value * conjugate(value)
-            if isinstance(probv, complex):
-                probv = probv.real
-            if not isclose(probv, 0.0, abs_tol=Precision.isclose_abstol): 
-                return False
-        else:
-            if qubit0 == 0:
-                basis01 += value
-            else:
-                basis10 += value
-    
-    prob01 = basis01 * conjugate(basis01)
-
-    if isinstance(prob01, complex):
-        prob01 = prob01.real
-
-    if isclose(prob01, 0.0, abs_tol=Precision.isclose_abstol):
-        return False
-    
-    basis01 = complex(basis01)
-    basis10 = complex(basis10)
-    return isclose(basis01.real, basis10.real, rel_tol=Precision.rel_tol) and isclose(basis01.imag, basis10.imag, rel_tol=Precision.rel_tol)
-
-
-def is_flip_bell_state_minus(qs: QuantumState, address_space) -> bool:
-    Precision.update_threshold()
-    basis01 = 0.0
-    basis10 = 0.0
-    for (basis, value) in qs.sparse_vector.items():
-        qubit0 = (basis >> address_space(0)) & 1
-        qubit1 = (basis >> address_space(1)) & 1
-        if qubit0 == qubit1:
-            probv = value * conjugate(value)
-            if isinstance(probv, complex):
-                probv = probv.real
-            if not isclose(probv, 0.0, abs_tol=Precision.isclose_abstol): 
-                return False
-        else:
-            if qubit0 == 0:
-                basis01 += value
-            else:
-                basis10 += value
-    
-    prob01 = basis01 * conjugate(basis01)
-
-    if isinstance(prob01, complex):
-        prob01 = prob01.real
-
-    if isclose(prob01, 0.0, abs_tol=Precision.isclose_abstol):
-        return False
-    
-    basis01 = complex(basis01)
-    basis10 = complex(basis10)
-    return isclose(basis01.real, -basis10.real, rel_tol=Precision.rel_tol) and isclose(basis01.imag, -basis10.imag, rel_tol=Precision.rel_tol)
-
-def is_ghz_state(qs: QuantumState, address_space):
-    # we are looking for a superposition of |000> and |111>
-    Precision.update_threshold()
-    basis000 = 0.0
-    basis111 = 0.0
-    for (basis, value) in qs.sparse_vector.items():
-        qubit0 = (basis >> address_space(0)) & 1
-        qubit1 = (basis >> address_space(1)) & 1
-        qubit2 = (basis >> address_space(2)) & 1
-        if qubit0 == qubit1 and qubit1==qubit2:
-            if qubit0 == 0:
-                basis000 += value
-            else:
-                basis111 += value
-        else:
-            probv = value * conjugate(value)
-            if isinstance(probv, complex):
-                probv = probv.real
-            if not isclose(probv, 0.0, abs_tol=Precision.isclose_abstol): 
-                return False
-            
-    
-
-    prob000 = basis000 * conjugate(basis000)
-
-    if isinstance(prob000, complex):
-        prob000 = prob000.real
-
-    if isclose(prob000, 0.0, abs_tol=Precision.isclose_abstol):
-        return False
-    
-    basis000 = complex(basis000)
-    basis111 = complex(basis111)
-    return isclose(basis000.real, basis111.real, rel_tol=Precision.rel_tol) and isclose(basis000.imag, basis111.imag, rel_tol=Precision.rel_tol)
-
-def is_quantum_state_entangled(qs, address_space):
-    Precision.update_threshold()
-    prob00 = 0.0
-    prob11 = 0.0
-    prob01 = 0.0
-    prob10 = 0.0
-    for (basis, value) in qs.sparse_vector.items():
-        qubit0 = (basis >> address_space[0]) & 1
-        qubit1 = (basis >> address_space[1]) & 1
-        if qubit0 != qubit1:
-            probv = value * conjugate(value)
-            if isinstance(probv, complex):
-                probv = probv.real
-            if qubit0 == 0:
-                prob10 += probv
-            else:
-                prob01 += probv
-        else:
-            if qubit0 == 0:
-                prob00 += value * conjugate(value)
-            else:
-                prob11 += value * conjugate(value)
-
-    if isinstance(prob00, complex):
-        prob00 = prob00.real
-
-    if isinstance(prob11, complex):
-        prob11 = prob11.real
-    if isclose(prob00, 0.0, abs_tol=Precision.isclose_abstol):
-        return isclose(prob01, prob10)
-
-    return isclose(prob00, prob11)
-
-def get_events(all_events: List, qs: QuantumState):
-    assert isinstance(qs, QuantumState)
-    result = []
-    for (qs_, event_name) in all_events:
-        if qs == qs_:
-            result.append(event_name)
-    return result
