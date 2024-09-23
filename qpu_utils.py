@@ -45,7 +45,7 @@ class Op(Enum):
     WRITE1 = "WRITE1"
 
     DELAY = "DELAY"
-
+    CUSTOM = "CUSTOM"
     def __repr__(self) -> str:
         return self.__str__()
     

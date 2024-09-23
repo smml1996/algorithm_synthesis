@@ -1,7 +1,7 @@
 from typing import *
 from enum import Enum
 import numpy as np
-from sympy import I
+from sympy import I, conjugate
 
 class Pauli(Enum):
     I = 0
@@ -260,5 +260,31 @@ class SATFormula:
         return result
             
 
+def get_kraus_matrix_probability(matrix: List[List[float]], a0: complex, a1: complex, return_new_ampl=False):
+    """
 
+    Args:
+        matrix (List[List[float]]): kraus matrix
+        [
+            [a, b]
+            [c, d]
+        ]
+        a0 (complex): amplitude of |0>
+        a1 (complex): amplitude of |1>
+    """
+
+    assert len(matrix) == 2
+
+    for l in matrix:
+        assert len(l) == 2
+    a = matrix[0][0]
+    b = matrix[0][1]
+    c = matrix[1][0]
+    d = matrix[1][1]
+    new_a0 = a*a0 + b*a1
+    new_a1 = c*a0 + d*a1
+    prob = new_a0*conjugate(new_a0) + new_a1*conjugate(new_a1)
+    if return_new_ampl:
+        return prob, new_a0, new_a1
+    return prob
 

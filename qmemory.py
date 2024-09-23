@@ -8,6 +8,8 @@ from qstates import QuantumState
 from qpu_utils import *
 from copy import deepcopy
 
+from utils import get_kraus_matrix_probability
+
 
 def evaluate_op(op: Op, qubit: QuantumState, name: str, params=None, is_inverse: bool = True) -> Optional[QuantumState]:
     ''' Evaluates qubit->qubit op functions
@@ -74,7 +76,14 @@ def evaluate_op(op: Op, qubit: QuantumState, name: str, params=None, is_inverse:
                                 a1*(math.e**(I*params[2]))*sin_result)
         result.insert_amplitude(1, a0*(math.e**(I*params[1]))*sin_result+
                                 a1*(math.e**(I*(params[1]+params[2])))*cos_result)
-        
+    elif op == Op.CUSTOM:
+        assert params is not None
+        assert not is_inverse
+        prob, new_a0, new_a1 = get_kraus_matrix_probability(params, a0, a1, return_new_ampl=True)
+        if isclose(simplify(prob), 0):
+            return None
+        result.insert_amplitude(0, new_a0)
+        result.insert_amplitude(1, new_a1)
     elif op == Op.U2:
         if is_inverse:
             raise Exception("Missing implmentation of reverse of op U2")

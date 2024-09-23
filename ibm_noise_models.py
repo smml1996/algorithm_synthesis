@@ -1,5 +1,6 @@
+from copy import deepcopy
 from enum import Enum
-from typing import List, Optional, Set
+from typing import Dict, List, Optional, Set
 from qiskit.providers.fake_provider import *
 from qiskit_aer.noise import NoiseModel as IBMNoiseModel
 from qpu_utils import *
@@ -200,7 +201,7 @@ class KrausOperator:
     def __init__(self, operators, qubit) -> None:
         for operator in operators:
             assert operator.shape == (2,2) # for now we are dealing only with single qubit operators
-        self.operators = operators
+        self.operators = operators # these are matrices
         self.target = qubit
 
     def serialize(self):
@@ -222,7 +223,7 @@ class KrausOperator:
         }
     
 class QuantumChannel:
-    def __init__(self, all_ins_sequences, all_probabilities, target_qubits, optimize=True) -> None:
+    def __init__(self, all_ins_sequences, all_probabilities, target_qubits, optimize=False) -> None:
         self.errors = []
         self.probabilities = all_probabilities
         for seq in all_ins_sequences:
@@ -246,7 +247,16 @@ class QuantumChannel:
         }
     
     @staticmethod
-    def remove_duplicates(errors, probabilities):
+    def remove_duplicates(errors: List[List[Instruction]], probabilities: List[float]):
+        """removes identical sequences of errors
+
+        Args:
+            errors (_type_): _description_
+            probabilities (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
         new_errors = []
         def is_error_in_list(err):
             for (index,e) in enumerate(new_errors):
@@ -301,7 +311,7 @@ class QuantumChannel:
                 new_seq2.append(Instruction(instruction.target, Op.X))
                 new_seq2.append(Instruction(instruction.target, Op.Z))
                 
-        # optimize pauli sequences of gates
+        # optimize pauli sequences of gates: since pauli commute up to a global factor, we try to exploit that to have shorter error sequences
         temp_seq = []
         new_seq3 = []
         for instruction in new_seq2:
@@ -423,9 +433,7 @@ class NoiseModel:
         f = open(path, "w")
         f.write(json.dumps(self.serialize(), indent=4))
         f.close()
-
-
+            
 
 if __name__ == "__main__":
-    noise_model = NoiseModel(HardwareSpec.ALMADEN)
-    noise_model.dump_json("almaden.txt")
+    pass
