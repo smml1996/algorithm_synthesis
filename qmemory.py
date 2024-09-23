@@ -4,7 +4,7 @@ import math
 from typing import List, Optional
 from sympy import *
 
-from qstates import QuantumState
+from qstates import QuantumState, get_fidelity
 from qpu_utils import *
 from copy import deepcopy
 
@@ -87,7 +87,6 @@ def evaluate_op(op: Op, qubit: QuantumState, name: str, params=None, is_inverse:
     elif op == Op.U2:
         if is_inverse:
             raise Exception("Missing implmentation of reverse of op U2")
-        
         assert len(params) == 2
         return evaluate_op(Op.U3, qubit, name, params=[pi/2.0, params[0], params[1]], is_inverse=is_inverse)
     elif op == Op.U1:
@@ -252,7 +251,7 @@ def get_qs_probability(quantum_state, address, is_zero=False, is_floor=True):
         return prob1
 
 
-def get_seq_probability(quantum_state: QuantumState, seq):
+def get_seq_probability(quantum_state: QuantumState, seq: List[GateData], is_floor=True):
     count_meas = 0
     for s in seq:
         assert isinstance(s, GateData)
@@ -260,18 +259,23 @@ def get_seq_probability(quantum_state: QuantumState, seq):
             count_meas += 1
             if count_meas > 1:
                 raise Exception("Invalid Measurement instruction")
-    if count_meas > 0:
-        for s in seq:
-            assert isinstance(s, GateData)
-            if s.label == Op.P0:
-                return get_qs_probability(quantum_state, s.address, is_zero = True)
-            elif s.label == Op.P1:
-                return get_qs_probability(quantum_state, s.address, is_zero=False)
-            quantum_state = handle_write(quantum_state, s, is_inverse=False)
+        quantum_state = handle_write(quantum_state, s, is_inverse=False, normalize=False)
+        if quantum_state is None:
+            return None, 0.0
 
-    return 1.0
+    prob = get_fidelity(quantum_state, quantum_state)
+    assert prob <= 1.0
+    if is_floor:
+        if Precision.is_lowerbound:
+            prob = myfloor(simplify(prob1), Precision.PRECISION)
+        else:
+            prob = myceil(simplify(prob1), Precision.PRECISION)
+    else:
+        prob = round(prob1, Precision.PRECISION)
+    quantum_state.normalize()
+    return quantum_state, prob
 
-def handle_write(quantum_state: QuantumState, gate_data: GateData, is_inverse=False):
+def handle_write(quantum_state: QuantumState, gate_data: GateData, is_inverse=False, normalize=True):
     op = gate_data.label
     assert len(quantum_state.sparse_vector.keys()) > 0
     if is_multiqubit_gate(op):
@@ -295,7 +299,7 @@ def handle_write(quantum_state: QuantumState, gate_data: GateData, is_inverse=Fa
                 result = write1(quantum_state, GateData(Op.X, gate_data.address, None), is_inverse=is_inverse)
         else:
             result = write1(quantum_state, gate_data, is_inverse=is_inverse)
-    if not (result is None):
+    if normalize and (not (result is None)):
         result.remove_global_phases()
         result.normalize()
         assert len(result.sparse_vector.keys()) > 0

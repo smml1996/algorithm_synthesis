@@ -284,6 +284,7 @@ def get_kraus_matrix_probability(matrix: List[List[float]], a0: complex, a1: com
     new_a0 = a*a0 + b*a1
     new_a1 = c*a0 + d*a1
     prob = new_a0*conjugate(new_a0) + new_a1*conjugate(new_a1)
+    assert prob <= 1.0
     if return_new_ampl:
         return prob, new_a0, new_a1
     return prob

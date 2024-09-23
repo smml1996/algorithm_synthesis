@@ -1,10 +1,11 @@
 from cmath import isclose
-from qmemory import get_seq_probability
-from utils import QuantumChannel, Precision, Queue, Guard
+from ibm_noise_models import Instruction, MeasChannel, NoiseModel, QuantumChannel
+from qmemory import get_seq_probability, handle_write
+from qpu_utils import GateData, NoisyInstruction, Op
+from utils import Precision, Queue, Guard, get_kraus_matrix_probability
 from qstates import QuantumState
-from cmemory import ClassicalState
+from cmemory import ClassicalState, cwrite
 from typing import Tuple, List, Dict
-from graph import Graph
 
 INIT_CHANNEL = "INIT_"
 class POMDPVertex:
@@ -91,13 +92,10 @@ class POMDP:
         f.write("ENDPOMDP\n")
         f.close()
 
-
-
 def create_new_vertex(all_vertices, quantum_state, classical_state):
     for v in all_vertices:
         if (v.quantum_state == quantum_state) and (v.classical_state == classical_state):
             return v
-    
     v = POMDPVertex(quantum_state, classical_state)
     all_vertices.append(v)
     return v
@@ -109,7 +107,9 @@ def is_vertex_restricted(hybrid_state: POMDPVertex, guards: List[Guard], channel
                 return True
     return False
 
-def build_pomdp(channels: List[QuantumChannel], 
+
+def build_pomdp(instructions: List[Instruction],
+                noise_model: NoiseModel, 
                 initial_state: Tuple[QuantumState, ClassicalState], 
                 address_space,
                 horizon: int,
@@ -148,62 +148,76 @@ def build_pomdp(channels: List[QuantumChannel],
     visited = []
     while not q.is_empty():
         current_v, current_horizon = q.pop()
-        if (current_v in visited) or (current_horizon == horizon):
+        if (current_horizon == horizon) or (current_v in visited):
             continue
         visited.append(current_v)
         if current_v not in graph.keys():
             graph[current_v] = dict()
 
-        for channel in channels:
-            if not is_vertex_restricted(current_v, guards, channel, address_space):
-                if channel.name not in graph[current_v].keys():
-                    graph[current_v][channel.name] = dict()
-                for (seq_index, seq) in enumerate(channel.gates):
-                    new_correctqs, new_correctcs = Graph.get_channel_gate_transformation(
-                                    seq,
-                                    current_v.quantum_state,
-                                    current_v.classical_state)
-                    
-                    if not (new_correctqs is None):
-                        new_correctv = create_new_vertex(all_vertices, new_correctqs, new_correctcs)
-                        seq_prob = get_seq_probability(current_v.quantum_state, seq) # for unitary-gate sequences this should be 1, while for measurements is dependent on the quantum state
-                        assert new_correctv not in graph[current_v][channel.name].keys()
-                        graph[current_v][channel.name][new_correctv] = seq_prob * channel.probabilities[seq_index][0]
+        for noisy_instruction in instructions:
+            assert isinstance(noisy_instruction, Instruction)
+            if not is_vertex_restricted(current_v, guards, noisy_instruction, address_space):
+                # if noisy_instruction.name not in graph[current_v].keys():
+                assert noisy_instruction.op.name not in graph[current_v]
+                graph[current_v][noisy_instruction.op.name] = dict()
 
-                        # push new vertex to queue
-                        if new_correctv not in visited:
+                channel = noise_model.get_instruction_channel(noisy_instruction)
+                
+                # push to queue (new vertex, horizon)
+                if noisy_instruction.is_meas_instruction():
+                    assert isinstance(channel, MeasChannel)
+
+                    gatedata_p0 = noisy_instruction.get_gate_data(is_meas_0=True)
+                    gatedata_p1 = noisy_instruction.get_gate_data(is_meas_1=True)
+
+                    q0, meas0_prob = get_seq_probability(current_v.quantum_state, [gatedata_p0])
+                    q1, meas1_prob = get_seq_probability(current_v.quantum_state, [gatedata_p1])
+
+                    classical_state0 = cwrite(current_v.classical_state, Op.WRITE0, noisy_instruction.target)
+                    classical_state1 = cwrite(current_v.classical_state, Op.WRITE1, noisy_instruction.target)
+
+                    if meas0_prob > 0.0:
+                        new_vertex = create_new_vertex(all_vertices, q0, classical_state0)
+                        assert new_vertex not in graph[current_v][channel.name].keys()
+                        graph[current_v][channel.name][new_vertex] = meas0_prob * channel.get_ind_probability(0, 0)
+                        if new_vertex not in visited:
                             if current_horizon + 1 < horizon:
-                                q.push((new_correctv, current_horizon + 1))
-                            
-                    else:
-                        # we skip to next seq, since this one cannot happen (e.g the projector of |0><0| to a qubit that is already in |1>)
-                        continue
+                                q.push((new_vertex, current_horizon + 1))
 
-                    for (index, gate_error) in enumerate(channel.errors[seq_index]):
-                        new_errorqs, new_errorcs = Graph.get_channel_gate_transformation(
-                                                                        gate_error,
-                                                                        current_v.quantum_state,
-                                                                        current_v.classical_state)
-                        if not (new_errorqs is None):
-                            new_errorv = create_new_vertex(all_vertices, new_errorqs, new_errorcs)
-                            seq_prob = get_seq_probability(current_v.quantum_state, seq) # for unitary-gate sequences this should be 1, while for measurements is dependent on the quantum state
+                        new_vertex = create_new_vertex(all_vertices, q0, classical_state1)
+                        assert new_vertex not in graph[current_v][channel.name].keys()
+                        graph[current_v][channel.name][new_vertex] = meas0_prob * channel.get_ind_probability(0, 1)
+                        if new_vertex not in visited:
+                            if current_horizon + 1 < horizon:
+                                q.push((new_vertex, current_horizon + 1))
 
-                            # assert new_errorv not in graph[current_v][channel.name].keys()
-                            if new_errorv not in graph[current_v][channel.name].keys():
-                                graph[current_v][channel.name][new_errorv] = 0    
-                            graph[current_v][channel.name][new_errorv] += seq_prob * channel.probabilities[seq_index][index+1]
+                    if meas1_prob > 0.0:
+                        new_vertex = create_new_vertex(all_vertices, q1, classical_state1)
+                        assert new_vertex not in graph[current_v][channel.name].keys()
+                        graph[current_v][channel.name][new_vertex] = meas1_prob * channel.get_ind_probability(1, 1)
+                        if new_vertex not in visited:
+                            if current_horizon + 1 < horizon:
+                                q.push((new_vertex, current_horizon + 1))
 
-                            # push new vertex to queue
-                            if new_errorv not in visited:
+                        new_vertex = create_new_vertex(all_vertices, q1, classical_state0)
+                        assert new_vertex not in graph[current_v][channel.name].keys()
+                        graph[current_v][channel.name][new_vertex] = meas1_prob * channel.get_ind_probability(1, 0)
+                        if new_vertex not in visited:
+                            if current_horizon + 1 < horizon:
+                                q.push((new_vertex, current_horizon + 1))
+                else:
+                    assert isinstance(channel, QuantumChannel)
+                    new_qs = handle_write(current_v.quantum_state, noisy_instruction.get_gate_data())
+                    for (index, err_seq) in enumerate(channel.errors): 
+                        errored_seq, seq_prob = get_seq_probability(new_qs, err_seq)
+                        if seq_prob > 0.0:
+                            new_vertex = create_new_vertex(all_vertices, errored_seq, current_v.classical_state)
+                            assert new_vertex not in graph[current_v][channel.name].keys()
+                            graph[current_v][channel.name][new_vertex] = seq_prob * channel.probabilities[index]
+                            if new_vertex not in visited:
                                 if current_horizon + 1 < horizon:
-                                    q.push((new_errorv, current_horizon+1))
+                                    q.push((new_vertex, current_horizon + 1))
 
-                        else:
-                            # we skip to next seq, since this one cannot happen (e.g the projector of |0><0| to a qubit that is already in |1>)
-                            continue
-
-
-
-    result = POMDP(initial_v, all_vertices, channels, graph)
+    result = POMDP(initial_v, all_vertices, instructions, graph)
     return result
 

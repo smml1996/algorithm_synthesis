@@ -1,6 +1,6 @@
 from copy import deepcopy
 from enum import Enum
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 from qiskit.providers.fake_provider import *
 from qiskit_aer.noise import NoiseModel as IBMNoiseModel
 from qpu_utils import *
@@ -167,7 +167,8 @@ class Instruction:
     target: int
     control: int
     op: Op
-    def __init__(self, target: int, op: Op, control: Optional[int] = None) -> None:
+    params: Any
+    def __init__(self, target: int, op: Op, control: Optional[int] = None, params: Any = None) -> None:
         assert isinstance(op, Op)
         assert isinstance(target, int)
         assert isinstance(control, int) or (control is None)
@@ -180,21 +181,39 @@ class Instruction:
         if target == control:
             raise Exception("target is in controls")
         self.control = control
+        self.params = params
+
+    def get_gate_data(self, is_meas_0=None):
+        if self.is_meas_instruction():
+            assert self.control is None
+            assert is_meas_0 is not None
+            if is_meas_0:
+                return GateData(Op.P0, self.target)
+            else:
+                return GateData(Op.P1, self.target)
+        else:
+            assert is_meas_0 is None
+        return GateData(self.op, self.target, self.control, self.params)
+    
+    
+    def is_meas_instruction(self):
+        return self.op in [Op.MEAS]
 
     def __eq__(self, value: object) -> bool:
         if isinstance(value, KrausOperator):
             return False
-        return self.target == value.target and self.control == value.control and self.op == value.op
+        return self.target == value.target and self.control == value.control and self.op == value.op and self.params == value.params
     
     def __hash__(self):
-        return hash((self.op.value, self.target, self.control))
+        return hash((self.op.value, self.target, self.control, self.params))
     
     def serialize(self):
         return {
             'type': 'instruction',
             'target': self.target,
             'control': self.control,
-            'op': self.op.value
+            'op': self.op.value,
+            'params': self.params
         }
         
 class KrausOperator:
@@ -223,8 +242,8 @@ class KrausOperator:
         }
     
 class QuantumChannel:
-    def __init__(self, all_ins_sequences, all_probabilities, target_qubits, optimize=False) -> None:
-        self.errors = []
+    def __init__(self, all_ins_sequences, all_probabilities, target_qubits, optimize=False, flatten=True) -> None:
+        self.errors = [] # list of list of sequences of instructions/kraus operators
         self.probabilities = all_probabilities
         for seq in all_ins_sequences:
             new_seq = QuantumChannel.translate_err_sequence(seq, target_qubits, optimize)
@@ -233,7 +252,54 @@ class QuantumChannel:
 
         if optimize:
             self.errors, self.probabilities = QuantumChannel.remove_duplicates(self.errors, self.probabilities)
-    
+
+        if flatten:
+            self.flatten()
+
+    @staticmethod
+    def flatten_sequence(err_seq):
+        sequences = []
+        for err in err_seq:
+            if isinstance(err, Instruction):
+                if len(sequences) == 0:
+                    sequences.append([err])
+                else:
+                    for seq in sequences:
+                        seq.append(err)
+            else:
+                assert isinstance(err, KrausOperator)
+                if len(sequences) == 0:
+                    for matrix in err.operators:
+                        sequences.append([Instruction(err.target, Op.CUSTOM, params=matrix)])
+                else:
+                    all_seqs_temp = []
+                    for seq in sequences:
+                        for matrix in err.operators:
+                            temp_seq = deepcopy(seq)
+                            temp_seq.append(Instruction(err.target, Op.CUSTOM, params=matrix))
+                            all_seqs_temp.append(temp_seq)
+
+                    sequences = all_seqs_temp
+                
+
+        assert len(sequences) > 0
+        return sequences
+
+    def flatten(self):
+        new_probabilities = []
+        new_errors = []
+
+        for (err_seq, prob) in zip(self.errors, self.probabilities):
+            flattened_sequences = QuantumChannel.flatten_sequence(err_seq)
+
+            for flattened_seq in flattened_sequences:
+                new_probabilities.append(prob)
+                new_errors.append(flattened_seq)
+
+        self.errors = new_errors
+        self.probabilities = new_probabilities
+
+
     def serialize(self):
         serialized_errors = []
         for err_seq in self.errors:

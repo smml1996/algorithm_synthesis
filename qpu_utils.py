@@ -1,7 +1,10 @@
 from cmath import isclose
 from enum import Enum
 from math import floor
-from typing import List, Optional
+from typing import Dict, List, Optional
+
+P0 = [[1, 0], [0, 0]]
+P1 = [[0, 0], [0, 1]]
 
 class Precision:
     PRECISION = 8  # round number to `PRECISION` floating point digits
@@ -36,6 +39,8 @@ class Op(Enum):
 
     # MEASUREMENT
     MEAS = "MEASURE"
+    P0 = "P0"
+    P1 = "P1"
 
     # NON-UNITARY
     RESET = "RESET"
@@ -125,13 +130,13 @@ def is_projector(op: Op) -> bool:
 class GateData: # this was previously called GateData
     label: Op
     address: int
-    controls: Optional[List[int]]
+    controls: Optional[int]
     params: Optional[List[float]]
 
     def __init__(self, label, address, controls=None, params=None) -> None:
         self.label = label
         self.address = address
-        self.controls = controls
+        self.control = controls
         self.params = params
 
     def __eq__(self, other: object) -> bool:
@@ -145,6 +150,84 @@ class GateData: # this was previously called GateData
         d['controls'] = self.controls
         d['params'] = self.params
         return d.__str__()
+
+    def __repr__(self) -> str:
+        return self.__str__()
+    
+class NoisyInstruction:
+    name: str
+    error_free_seq: List[List[GateData]]
+    errors: List[List[GateData]]
+    probabilities: List[List[float]]
+
+    def __init__(self, name=None, error_free_seq: List[List[GateData]] = None, errors: Dict = None, instructions=None,
+                 probabilities: Dict = None, from_serializable=None) -> None:
+        if from_serializable is None:
+            self.name = name
+            self.error_free_seq = error_free_seq
+            self.errors = errors
+            self.instructions = instructions
+            self.probabilities = probabilities
+        else:
+            self.name = from_serializable['name']
+            self.error_free_seq = []
+            for g_seq in from_serializable['error_free_seq']:
+                seq_obj = []
+                for g in g_seq:
+                    seq_obj.append(GateData(g['gate'], g['address'], g['controls'], g['params']))
+                self.error_free_seq.append(seq_obj)
+
+            self.errors = dict()
+            for (error_id, error_seqs) in from_serializable['errors'].items():
+                self.errors[error_id] = []
+
+                for seq in error_seqs:
+                    seq_obj = []
+                    for g in seq:
+                        seq_obj.append(GateData(g['gate'], g['address'], g['controls'], g['params']))
+                    self.errors[error_id].append(seq_obj)
+            self.instructions = from_serializable['instructions']
+            self.probabilities = from_serializable['probabilities']
+        assert len(self.error_free_seq) == len(self.probabilities.keys())
+
+
+    def __eq__(self, other: object) -> bool:
+        if self.name != other.name:
+            return False
+
+        if self.error_free_seq != other.error_free_seq:
+            return False
+
+        if self.errors != other.errors:
+            return False
+
+        if self.instructions != other.instructions:
+            return False
+
+        if self.probabilities != other.probabilities:
+            return False
+
+        return True
+
+    def dump_channel(self):
+        d = dict()
+        d['name'] = self.name
+        d['error_free_seq'] = self.error_free_seq
+        d['errors'] = self.errors
+        d['instructions'] = self.instructions
+        d['probabilities'] = self.probabilities
+        return d
+
+    def print_channel(self):
+        print(f"***** {self.name} *****")
+        for i in range(len(self.error_free_seq)):
+            print("------")
+            print(f"{self.probabilities[i][0]} ~~ {self.error_free_seq[i]}")
+            for (j, err) in enumerate(self.errors[i]):
+                print(f"{self.probabilities[i][j + 1]} ~~ {err}")
+
+    def __str__(self) -> str:
+        return self.name
 
     def __repr__(self) -> str:
         return self.__str__()
