@@ -8,7 +8,7 @@ from qstates import QuantumState, get_fidelity
 from qpu_utils import *
 from copy import deepcopy
 
-from utils import get_kraus_matrix_probability
+from utils import get_kraus_matrix_probability, myceil, myfloor
 
 
 def evaluate_op(op: Op, qubit: QuantumState, name: str, params=None, is_inverse: bool = True) -> Optional[QuantumState]:
@@ -267,11 +267,11 @@ def get_seq_probability(quantum_state: QuantumState, seq: List[GateData], is_flo
     assert prob <= 1.0
     if is_floor:
         if Precision.is_lowerbound:
-            prob = myfloor(simplify(prob1), Precision.PRECISION)
+            prob = myfloor(simplify(prob), Precision.PRECISION)
         else:
-            prob = myceil(simplify(prob1), Precision.PRECISION)
+            prob = myceil(simplify(prob), Precision.PRECISION)
     else:
-        prob = round(prob1, Precision.PRECISION)
+        prob = round(prob, Precision.PRECISION)
     quantum_state.normalize()
     return quantum_state, prob
 

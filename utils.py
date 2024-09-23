@@ -1,7 +1,16 @@
+from math import ceil, floor
 from typing import *
 from enum import Enum
 import numpy as np
 from sympy import I, conjugate
+
+def myfloor(val, d):
+    m = 10**d
+    return floor(val * m)/m
+
+def myceil(val, d):
+    m = 10**d
+    return ceil(val * m)/m
 
 class Pauli(Enum):
     I = 0
