@@ -84,6 +84,11 @@ def evaluate_op(op: Op, qubit: QuantumState, name: str, params=None, is_inverse:
             return None
         result.insert_amplitude(0, new_a0)
         result.insert_amplitude(1, new_a1)
+    elif op == Op.RX:
+        assert params is not None
+        assert not is_inverse
+        assert len(params) == 1
+        return evaluate_op(Op.U3, qubit, name, params=[params[0], 3*pi/2, pi/2], is_inverse=is_inverse)
     elif op == Op.U2:
         if is_inverse:
             raise Exception("Missing implmentation of reverse of op U2")

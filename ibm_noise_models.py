@@ -445,7 +445,7 @@ class NoiseModel:
     def __init__(self, hardware_specification: HardwareSpec, thermal_relaxation=True) -> None:
         self.hardware_spec = hardware_specification
         ibm_noise_model = get_ibm_noise_model(hardware_specification, thermal_relaxation=thermal_relaxation)
-        self.basis_gates = [get_op(op) for op in ibm_noise_model.basis_gates]
+        self.basis_gates = get_basis_gate_type([get_op(op) for op in ibm_noise_model.basis_gates])
         self.instructions_to_channel = dict()
 
         # start translating quantum channels

@@ -4,14 +4,16 @@ from typing import Dict, List
 from cmemory import ClassicalState
 from pomdp import build_pomdp
 import qmemory
-from qpu_utils import GateData, Op, Precision
+from qpu_utils import GateData, Op, Precision, BasisGates
 sys.path.append(os.getcwd()+"/..")
 
 from qstates import QuantumState
-from ibm_noise_models import Instruction, ExperimentsReadoutNoise, get_ibm_noise_model, HardwareSpec
+from ibm_noise_models import Instruction, NoiseModel, get_ibm_noise_model, HardwareSpec
 import numpy as np
-from math import sqrt
-from copy import deepcopy
+from math import pi   
+from enum import Enum
+
+# https://pennylane.ai/qml/demos/tutorial_teleportation/
 
 POMDP_OUTPUT_DIR = None
 WITH_TERMALIZATION = False
@@ -24,6 +26,9 @@ ALICE_QUBIT = 0
 ANCILLA_ALICE = 1
 BOB_QUBIT = 2
 
+class ExperimentID(Enum):
+    ENTANGLEMENT = 0
+    CHANGEBASIS = 1
 
 class QuantumTeleportationInstance:
     """Alice wants to transfer her qubit to BOB
@@ -39,7 +44,7 @@ class QuantumTeleportationInstance:
         if self.initial_state is None:
             if exp_index == 0:
                 self.initial_state = QuantumState(0, dimension=self.num_qubits)
-                H0 = GateData(Op.H, self.embedding[ALICE_QUBIT])
+                rz_gate = GateData(Op.RX, self.embedding[ALICE_QUBIT], params=[pi/3])
                 self.initial_state = qmemory.handle_write(self.initial_state, H0)
             
             raise Exception("experiment index does not exists. unable to create initial state")
@@ -97,28 +102,49 @@ def get_embeddings(instruction_set) -> Dict[str, List[Dict[int, int]]]:
             pass
     return embeddings
     
-def get_experiments_channels(noise_model, embedding, instruction_set):
-    if instruction_set == 0:
-        # https://pennylane.ai/qml/demos/tutorial_teleportation/
+def get_experiments_channels(noise_model: NoiseModel, embedding: Dict[int, int], experiment_index: ExperimentID):
+    if noise_model.basis_gates == TYPE5:
+        raise Exception("basis gates do not have entanglement gate")
+    if experiment_index == ExperimentID.ENTANGLEMENT:
+        # alice ancilla needs to get entangled with bob's qubit. Therefore 
+        if noise_model.basis_gates in [BasisGates.TYPE1, BasisGates.TYPE6]:
+            HAncilla = noise_model.instructions_to_channel[Instruction(embedding[ANCILLA_ALICE], Op.U2, params=[0, pi])]
+            SAncilla = noise_model.instructions_to_channel[Instruction(embedding[ANCILLA_ALICE], Op.U1, params=[pi/2])]
+            TAncilla = noise_model.instructions_to_channel[Instruction(embedding[ANCILLA_ALICE], Op.U1, params=[pi/4])]
 
-        # alice ancilla needs to get entangled with bob's qubit. Therefore
-        HAncilla = noise_model.get_instruction_channel(embedding[ANCILLA_ALICE], Op.H)
-        CX_Anc_Bob = noise_model.get_instruction_channel(embedding[BOB_QUBIT], Op.CNOT, control=embedding[ANCILLA_ALICE])
+            # Bob corrects his qubits
+            if noise_model.basis_gates == BasisGates.TYPE1:
+                XBob = noise_model.instructions_to_channel[Instruction(embedding[BOB_QUBIT], Op.U3, params=[pi, 2*pi, pi])]
+            else:
+                assert noise_model.basis_gates == BasisGates.TYPE6
+                XBob = noise_model.instructions_to_channel[Instruction(embedding[BOB_QUBIT], Op.X)]
+            ZBob = noise_model.instructions_to_channel[Instruction(embedding[BOB_QUBIT], Op.U1, params=[pi])]
+        elif noise_model.basis_gates in [BasisGates.TYPE2, BasisGates.TYPE3, BasisGates.TYPE4, BasisGates.TYPE7]:
+            HAncilla = noise_model.instructions_to_channel[Instruction(embedding[ANCILLA_ALICE], Op.SX)]
+            SAncilla = noise_model.instructions_to_channel[Instruction(embedding[ANCILLA_ALICE], Op.RZ, params=[pi/2])]
+            TAncilla = noise_model.instructions_to_channel[Instruction(embedding[ANCILLA_ALICE], Op.RZ, params=[pi/4])] # https://learning.quantum.ibm.com/tutorial/explore-gates-and-circuits-with-the-quantum-composer#phase-gates
 
-        # now Alice needs to perform a change of basis
-        CX_Alice = noise_model.get_instruction_channel(embedding[ANCILLA_ALICE], Op.CNOT, control=embedding[ALICE_QUBIT])
-        HAlice = noise_model.get_instruction_channel(embedding[ALICE_QUBIT], Op.H)
+            # Bob corrects his qubits
+            XBob = noise_model.instructions_to_channel[Instruction(embedding[BOB_QUBIT], Op.X)]
+            ZBob = noise_model.instructions_to_channel[Instruction(embedding[BOB_QUBIT], Op.RZ, params=[pi])]
+
+        if noise_model.basis_gates != BasisGates.TYPE4:
+            CX_Anc_Bob = noise_model.instructions_to_channel[Instruction(embedding[BOB_QUBIT], Op.CNOT, control=embedding[ANCILLA_ALICE])]
+        else:
+            CX_Anc_Bob = noise_model.instructions_to_channel[Instruction(embedding[BOB_QUBIT], Op.CZ, control=embedding[ANCILLA_ALICE])]
+
+        # # now Alice needs to perform a change of basis
+        # CX_Alice = noise_model.get_instruction_channel(embedding[ANCILLA_ALICE], Op.CNOT, control=embedding[ALICE_QUBIT])
+        # HAlice = noise_model.get_instruction_channel(embedding[ALICE_QUBIT], Op.H)
 
         # alice qubits are measured 
         meas_alice = noise_model.get_meas_channel(Op.MEAS, embedding[ALICE_QUBIT])
         meas_ancilla = noise_model.get_meas_channel(Op.MEAS, embedding[ANCILLA_ALICE])
 
-        # Bob corrects his qubits
-        XBob = noise_model.get_instruction_channel(embedding[BOB_QUBIT], Op.X)
-        ZBob = noise_model.get_instruction_channel(embedding[BOB_QUBIT], Op.Z)
-        return [HAncilla, CX_Anc_Bob, CX_Alice, HAlice, meas_alice, meas_ancilla, XBob, ZBob]
+        
+        return [CX_Anc_Bob]
     else:
-        raise Exception(f"No experiments channels specified for {instruction_set} instruction set")
+        raise Exception(f"No experiments channels specified for {experiment_index} instruction set")
     
 
 def run_experiment_bellman(hardware_spec: str, instruction_set=0):
