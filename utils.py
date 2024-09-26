@@ -18,6 +18,13 @@ class Pauli(Enum):
     Y = 2
     Z = 3 
 
+def invert_dict(d: Dict[Any, Any]) -> Dict[Any, Any]:
+    d_inverse = dict()
+    for (key, value) in d.items():
+        assert value not in d_inverse.keys()
+        d_inverse[value] = key
+    return d_inverse
+
 def get_pauli_matrix(p: Pauli) -> np.array:
     if p == Pauli.I:
         return np.array([[1, 0], 

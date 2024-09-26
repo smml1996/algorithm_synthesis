@@ -29,15 +29,114 @@ class POMDPVertex:
 
     def __repr__(self):
         return str(self)
-    
+
+class POMDPAction:
+    def __init__(self, instruction_sequence: List[Instruction]) -> None:
+        self.instruction_sequence = instruction_sequence
+
+    def __handle_measure_instruction(self, instruction: Instruction, channel: MeasChannel, vertex: POMDPVertex, is_meas1: bool =True, result: Dict[POMDPVertex, float]=None) :
+        """applies a measurement instruction to a given hybrid state (POMDP vertex)
+
+        Args:
+            instruction (Instruction): an measurement instruction
+            channel (MeasChannel): measurement channel for the instruction
+            vertex (POMDPVertex): current vertex for which we want to know the successors when we apply the instruction and the channel
+            is_meas1 (bool, optional): _description_. is this a measurement 1 or 0?
+            result (Dict[POMDPVertex, float], optional): _description_. This is a dictionary that maps a pomdp vertex and the probability of reaching it from the current vertex. We accumulate the result in this dictionary, this is why it is a parameter.
+
+        """        
+        assert isinstance(channel, MeasChannel)
+        gatedata = instruction.get_gate_data(is_meas_0=(not is_meas1))
+        q, meas_prob = get_seq_probability(vertex.quantum_state, [gatedata])
+
+        if meas_prob > 0.0:
+            classical_state0 = cwrite(vertex.classical_state, Op.WRITE0, instruction.target)
+            classical_state1 = cwrite(vertex.classical_state, Op.WRITE1, instruction.target)
+
+            if is_meas1:
+                new_vertex_correct = POMDPVertex(q, classical_state1) # we receive the correct outcome
+                new_vertex_incorrect = POMDPVertex(q, classical_state0)
+            else:
+                new_vertex_correct = POMDPVertex(q, classical_state0) # we receive the correct outcome
+                new_vertex_incorrect = POMDPVertex(q, classical_state1)
+
+            if new_vertex_correct not in result.keys():
+                result[new_vertex_correct] = 0.0
+            if new_vertex_incorrect not in result.keys():
+                result[new_vertex_incorrect] = 0.0
+
+            result[new_vertex_correct] += meas_prob * channel.get_ind_probability(is_meas1, is_meas1)
+            result[new_vertex_incorrect] += meas_prob * channel.get_ind_probability(is_meas1, not is_meas1)
+
+    def __handle_unitary_instruction(self, instruction: Instruction, channel: QuantumChannel, vertex: POMDPVertex, result: Dict[POMDPVertex, float]=None):
+        """_summary_
+
+        Args:
+            instruction (Instruction): _description_
+            channel (QuantumChannel): _description_
+            vertex (POMDPVertex): _description_
+            result (Dict[POMDPVertex, float], optional): _description_. Defaults to None.
+        """ 
+        new_qs = handle_write(vertex.quantum_state, instruction.get_gate_data())
+        for (index, err_seq) in enumerate(channel.errors): 
+            errored_seq, seq_prob = get_seq_probability(new_qs, err_seq)
+            if seq_prob > 0.0:
+                new_vertex = POMDPVertex(errored_seq, vertex.classical_state)
+                if new_vertex not in result.keys():
+                    result[new_vertex] = 0.0
+                result[new_vertex] += seq_prob * channel.probabilities[index]
+
+    def __dfs(self, noise_model: NoiseModel, current_vertex: POMDPVertex, index_ins: int) -> Dict[POMDPVertex, float]:
+        """perform a dfs to compute successors states of the sequence of instructions.
+        It applies the instruction at index self.instructions_seq[index_ins] along with errors recursively
+
+        Args:
+            noise_model (NoiseModel): hardware noise model
+            current_vertex (POMDPVertex): 
+            index_ins (int): should be less than or equal (base case that returns empty dictionary)
+
+        Returns:
+            Dict[POMDPVertex, float]: returns a dictionary where the key is a successors POMDPVertex and the corresponding probability of reaching it from current_vertex
+        """        
+        if index_ins == self.instruction_sequence:
+            return dict()
+        assert index_ins < len(self.instruction_sequence)
+
+        current_instruction = self.instruction_sequence[index_ins]
+        instruction_channel = noise_model.instructions_to_channel[current_instruction]
+
+        result = dict()
+
+        temp_result = dict()
+        if current_instruction.is_meas_instruction():
+            # get successors for 0-measurements
+            self.__handle_measure_instruction(current_instruction, instruction_channel, current_vertex, is_meas1=False, result=temp_result)
+
+            # get successors for 1-measurements
+            self.__handle_measure_instruction(current_instruction, instruction_channel, current_vertex, is_meas0=True, result=temp_result)
+        else:
+            self.__handle_unitary_instruction(current_instruction, instruction_channel, current_vertex, result=temp_result)
+
+        for (successor, prob) in temp_result.items():
+            successors2 = self.__dfs(noise_model, successor, index_ins=index_ins+1)
+            for (succ2, prob2) in successors2.items():
+                if succ2 not in result.keys():
+                    result[succ2] = 0.0
+                result[succ2] += prob*prob2
+        return result
+
+    def get_successor_states(self, noise_model: NoiseModel, current_vertex: POMDPVertex):
+        return self.__dfs(self, noise_model, [current_vertex], 0)
+
+
 class POMDP:
     states: List[POMDPVertex]
-    actions: List[QuantumChannel]
+    actions: List[POMDPAction]
     transition_matrix: Dict[POMDPVertex, Dict[str, Dict[POMDPVertex, float]]]
     observations: List[ClassicalState]
     initial_state: POMDPVertex
 
-    def __init__(self, initial_state: POMDPVertex, states: List[POMDPVertex], actions: List[QuantumChannel], 
+    def __init__(self, initial_state: POMDPVertex, states: List[POMDPVertex], actions: List[POMDPAction], 
                 transition_matrix: Dict[POMDPVertex, Dict[str, Dict[POMDPVertex, float]]]) -> None:
         assert(isinstance(initial_state, POMDPVertex))
         self.initial_state = initial_state
@@ -54,7 +153,7 @@ class POMDP:
     def get_obs(self, state: POMDPVertex) -> ClassicalState:
         return state.classical_state
     
-    def serialize(self, is_target_qs, output_path):
+    def serialize(self, is_target_qs, output_path, embedding):
         f = open(output_path, "w")
         f.write("BEGINPOMDP\n")
         f.write(f"INITIALSTATE: {self.initial_state.id}\n")
@@ -73,12 +172,13 @@ class POMDP:
         gamma_line = ",".join([str(s.id)+":" + str(s.classical_state) for s in self.states])
         f.write(f"GAMMA: {gamma_line}\n")
         f.write("BEGINACTIONS\n")
-        for channel in self.actions:
-            instructions = ",".join([f'Instruction.{i.name}' for i in channel.instructions])
-            controls = ",".join([str(c) for c in channel.get_controls()])
+        for action in self.actions:
+            instructions = ",".join([f'Instruction.{i.name(embedding)}' for i in action.instructions])
+        
+            controls = ",".join([str(c.get_control(embedding)) for c in action.instructions])
             if controls == "":
                 controls = "-"
-            targets = ",".join([str(t) for t in channel.get_addresses()])
+            targets = ",".join([str(t.get_target(embedding)) for t in action.instructions])
             if targets == "":
                 targets = "-"
             f.write(f"{channel.name} {instructions} {controls} {targets}\n")
@@ -108,7 +208,7 @@ def is_vertex_restricted(hybrid_state: POMDPVertex, guards: List[Guard], channel
     return False
 
 
-def build_pomdp(instructions: List[Instruction],
+def build_pomdp(actions: List[POMDPAction],
                 noise_model: NoiseModel, 
                 initial_state: Tuple[QuantumState, ClassicalState], 
                 address_space,

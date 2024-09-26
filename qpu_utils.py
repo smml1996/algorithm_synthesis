@@ -16,8 +16,6 @@ class Precision:
         Precision.isclose_abstol = 0.00000000001
         Precision.rel_tol = 1/(10**(Precision.PRECISION-1))  
 
-
-
 class Op(Enum):
     # PAULI GATES
     X = "X"
@@ -62,9 +60,9 @@ class BasisGates(Enum):
     TYPE2 = [Op.CX, Op.DELAY, Op.I, Op.MEAS, Op.RESET, Op.RZ, Op.SX, Op.X]
     TYPE3 = [Op.CX, Op.I, Op.RESET, Op.RZ, Op.SX, Op.X]
     TYPE4 = [Op.CZ, Op.DELAY, Op.I, Op.MEAS, Op.RESET, Op.RZ, Op.SX, Op.X]
-    TYPE4 = [Op.I, Op.RZ, Op.SX, Op.X]
-    TYPE5 = [Op.CX, Op.I, Op.SX, Op.U1, Op.U2, Op.U3, Op.X]
-    TYPE6 = [Op.CX, Op.I, Op.RZ, Op.SX, Op.X]
+    TYPE5 = [Op.I, Op.RZ, Op.SX, Op.X]
+    TYPE6 = [Op.CX, Op.I, Op.SX, Op.U1, Op.U2, Op.U3, Op.X]
+    TYPE7 = [Op.CX, Op.I, Op.RZ, Op.SX, Op.X]
 
 def get_basis_gate_type(basis_gates):
     for b in BasisGates:

@@ -6,6 +6,8 @@ from qiskit_aer.noise import NoiseModel as IBMNoiseModel
 from qpu_utils import *
 import json
 
+from utils import invert_dict
+
 
 class HardwareSpec(Enum):
     # Quantum hardware names available in Qiskit
@@ -183,6 +185,28 @@ class Instruction:
         self.control = control
         self.params = params
 
+    def name(self, embedding):
+        inverse_embedding = invert_dict(embedding)
+        for (key, value) in embedding.items():
+            assert value not in inverse_embedding.keys()
+            inverse_embedding[value] = key
+
+        if self.control is None:
+            return f"{self.op.name}-{inverse_embedding[self.target]}"
+        else:
+            return f"{self.op.name}-{inverse_embedding[self.control]}-{inverse_embedding[self.target]}"
+        
+    def get_control(self, embedding)->str:
+        inverse_embedding = invert_dict(embedding)
+        if self.control is None:
+            return ""
+        else:
+            return str(inverse_embedding[self.control])
+        
+    def get_target(self, embedding)->str:
+        inverse_embedding = invert_dict(embedding)
+        return str(inverse_embedding[self.target])
+    
     def get_gate_data(self, is_meas_0=None):
         if self.is_meas_instruction():
             assert self.control is None
@@ -435,6 +459,8 @@ class MeasChannel:
         self.meas_errors[1][1] = one_meas_err[1] # probability that measurement outcome is 0 given that the ideal outcome should have been 1
     
     def get_ind_probability(self, ideal_outcome: int, noisy_outcome: int):
+        assert ideal_outcome in [0, 1]
+        assert noisy_outcome in [0, 1]
         return self.meas_errors[noisy_outcome][ideal_outcome]
     
     def serialize(self):
