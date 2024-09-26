@@ -5,7 +5,7 @@ from qpu_utils import GateData, NoisyInstruction, Op
 from utils import Precision, Queue, Guard, get_kraus_matrix_probability
 from qstates import QuantumState
 from cmemory import ClassicalState, cwrite
-from typing import Tuple, List, Dict
+from typing import Any, Tuple, List, Dict
 
 INIT_CHANNEL = "INIT_"
 class POMDPVertex:
@@ -31,7 +31,8 @@ class POMDPVertex:
         return str(self)
 
 class POMDPAction:
-    def __init__(self, instruction_sequence: List[Instruction]) -> None:
+    def __init__(self, name: str, instruction_sequence: List[Instruction]) -> None:
+        self.name = name
         self.instruction_sequence = instruction_sequence
 
     def __handle_measure_instruction(self, instruction: Instruction, channel: MeasChannel, vertex: POMDPVertex, is_meas1: bool =True, result: Dict[POMDPVertex, float]=None) :
@@ -125,7 +126,7 @@ class POMDPAction:
                 result[succ2] += prob*prob2
         return result
 
-    def get_successor_states(self, noise_model: NoiseModel, current_vertex: POMDPVertex):
+    def get_successor_states(self, noise_model: NoiseModel, current_vertex: POMDPVertex) -> Dict[POMDPVertex, float]:
         return self.__dfs(self, noise_model, [current_vertex], 0)
 
 
@@ -181,7 +182,7 @@ class POMDP:
             targets = ",".join([str(t.get_target(embedding)) for t in action.instructions])
             if targets == "":
                 targets = "-"
-            f.write(f"{channel.name} {instructions} {controls} {targets}\n")
+            f.write(f"{action.name} {instructions} {controls} {targets}\n")
         f.write("ENDACTIONS\n")
         
         for (fromv, fromv_dict) in self.transition_matrix.items():
@@ -200,21 +201,19 @@ def create_new_vertex(all_vertices, quantum_state, classical_state):
     all_vertices.append(v)
     return v
 
-def is_vertex_restricted(hybrid_state: POMDPVertex, guards: List[Guard], channel: QuantumChannel, address_space):
-    for guard in guards:
-        if guard.guard(hybrid_state.quantum_state, hybrid_state.classical_state, address_space):
-            if channel in guard.target_channels:
-                return True
-    return False
-
+def default_guard(vertex: POMDPVertex, embedding: Dict[int, int], action: POMDPAction):
+    assert isinstance(vertex, POMDPVertex)
+    assert isinstance(embedding, dict)
+    assert isinstance(action, POMDPAction)
+    return True
 
 def build_pomdp(actions: List[POMDPAction],
                 noise_model: NoiseModel, 
-                initial_state: Tuple[QuantumState, ClassicalState], 
-                address_space,
+                initial_state: Tuple[QuantumState, ClassicalState],
                 horizon: int,
+                embedding: Dict[int, int],
                 initial_distribution: List[
-                    Tuple[Tuple[QuantumState, ClassicalState], float]]=None, guards: List[Guard] = []) -> POMDP:
+                    Tuple[Tuple[QuantumState, ClassicalState], float]]=None, guard: Any = default_guard) -> POMDP:
     """_summary_
 
     Args:
@@ -222,8 +221,10 @@ def build_pomdp(actions: List[POMDPAction],
         initial_state (Tuple[QuantumState, ClassicalState]): A hybrid state
         horizon (int): max horizon to explore
         initial_distribution (List[Tuple[Tuple[QuantumState, ClassicalState], float]], optional): A list of pairs in which the first element of the pair is a hybrid state, while the second element of the pair is a probability denoting the probability of transition from initial_state to the initial distribution. Defaults to None.
+        guard (Any): POMDPVertex X embedding X action -> {true, false} says whether in the current set of physical qubits (embedding) of the current vertex (POMDPVertex), an action is permissible.
     """    
 
+    assert isinstance(guard, Guard)
     if not isclose(sum([x for (_, x) in initial_distribution]), 1.0, rel_tol=Precision.rel_tol):
         raise Exception("Initial distribution must sum to 1")
     
@@ -254,70 +255,22 @@ def build_pomdp(actions: List[POMDPAction],
         if current_v not in graph.keys():
             graph[current_v] = dict()
 
-        for noisy_instruction in instructions:
-            assert isinstance(noisy_instruction, Instruction)
-            if not is_vertex_restricted(current_v, guards, noisy_instruction, address_space):
-                # if noisy_instruction.name not in graph[current_v].keys():
-                assert noisy_instruction.op.name not in graph[current_v]
-                graph[current_v][noisy_instruction.op.name] = dict()
+        for action in actions:
+            assert isinstance(action, POMDPAction)
+            if guard(current_v, embedding, action):
+                assert action.name not in graph[current_v].keys()
+                graph[current_v][action.name] = dict()
 
-                channel = noise_model.get_instruction_channel(noisy_instruction)
-                
-                # push to queue (new vertex, horizon)
-                if noisy_instruction.is_meas_instruction():
-                    assert isinstance(channel, MeasChannel)
+                successors = action.get_successor_states(noise_model, current_v)
+                for (succ, prob) in successors.items():
+                    assert isinstance(succ, POMDPVertex)
+                    new_vertex = create_new_vertex(all_vertices, succ.quantum_state, succ.classical_state)
+                    assert new_vertex not in graph[current_v][action.name].keys()
+                    graph[current_v][action.name][new_vertex] = prob
+                    if new_vertex not in visited:
+                        if current_horizon + 1 < horizon:
+                            q.push((new_vertex, current_horizon + 1))
 
-                    gatedata_p0 = noisy_instruction.get_gate_data(is_meas_0=True)
-                    gatedata_p1 = noisy_instruction.get_gate_data(is_meas_1=True)
-
-                    q0, meas0_prob = get_seq_probability(current_v.quantum_state, [gatedata_p0])
-                    q1, meas1_prob = get_seq_probability(current_v.quantum_state, [gatedata_p1])
-
-                    classical_state0 = cwrite(current_v.classical_state, Op.WRITE0, noisy_instruction.target)
-                    classical_state1 = cwrite(current_v.classical_state, Op.WRITE1, noisy_instruction.target)
-
-                    if meas0_prob > 0.0:
-                        new_vertex = create_new_vertex(all_vertices, q0, classical_state0)
-                        assert new_vertex not in graph[current_v][channel.name].keys()
-                        graph[current_v][channel.name][new_vertex] = meas0_prob * channel.get_ind_probability(0, 0)
-                        if new_vertex not in visited:
-                            if current_horizon + 1 < horizon:
-                                q.push((new_vertex, current_horizon + 1))
-
-                        new_vertex = create_new_vertex(all_vertices, q0, classical_state1)
-                        assert new_vertex not in graph[current_v][channel.name].keys()
-                        graph[current_v][channel.name][new_vertex] = meas0_prob * channel.get_ind_probability(0, 1)
-                        if new_vertex not in visited:
-                            if current_horizon + 1 < horizon:
-                                q.push((new_vertex, current_horizon + 1))
-
-                    if meas1_prob > 0.0:
-                        new_vertex = create_new_vertex(all_vertices, q1, classical_state1)
-                        assert new_vertex not in graph[current_v][channel.name].keys()
-                        graph[current_v][channel.name][new_vertex] = meas1_prob * channel.get_ind_probability(1, 1)
-                        if new_vertex not in visited:
-                            if current_horizon + 1 < horizon:
-                                q.push((new_vertex, current_horizon + 1))
-
-                        new_vertex = create_new_vertex(all_vertices, q1, classical_state0)
-                        assert new_vertex not in graph[current_v][channel.name].keys()
-                        graph[current_v][channel.name][new_vertex] = meas1_prob * channel.get_ind_probability(1, 0)
-                        if new_vertex not in visited:
-                            if current_horizon + 1 < horizon:
-                                q.push((new_vertex, current_horizon + 1))
-                else:
-                    assert isinstance(channel, QuantumChannel)
-                    new_qs = handle_write(current_v.quantum_state, noisy_instruction.get_gate_data())
-                    for (index, err_seq) in enumerate(channel.errors): 
-                        errored_seq, seq_prob = get_seq_probability(new_qs, err_seq)
-                        if seq_prob > 0.0:
-                            new_vertex = create_new_vertex(all_vertices, errored_seq, current_v.classical_state)
-                            assert new_vertex not in graph[current_v][channel.name].keys()
-                            graph[current_v][channel.name][new_vertex] = seq_prob * channel.probabilities[index]
-                            if new_vertex not in visited:
-                                if current_horizon + 1 < horizon:
-                                    q.push((new_vertex, current_horizon + 1))
-
-    result = POMDP(initial_v, all_vertices, instructions, graph)
+    result = POMDP(initial_v, all_vertices, actions, graph)
     return result
 

@@ -280,6 +280,12 @@ class QuantumChannel:
         if flatten:
             self.flatten()
 
+        self.__check_probabilities()
+
+    def __check_probabilities(self):
+        for p in self.probabilities:
+            assert 0.0 < p <= 1.0
+            
     @staticmethod
     def flatten_sequence(err_seq):
         sequences = []
