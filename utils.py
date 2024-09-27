@@ -1,3 +1,4 @@
+from cmath import isclose
 from math import ceil, floor
 from typing import *
 from enum import Enum
@@ -11,6 +12,30 @@ def myfloor(val, d):
 def myceil(val, d):
     m = 10**d
     return ceil(val * m)/m
+
+class Precision:
+    PRECISION = 8  # round number to `PRECISION` floating point digits
+    isclose_abstol = None
+    rel_tol = None
+    is_lowerbound = True
+    @staticmethod
+    def update_threshold():
+        Precision.isclose_abstol = 0.00000000001
+        Precision.rel_tol = 1/(10**(Precision.PRECISION-1))  
+        
+
+def are_matrices_equal(arr1, arr2):
+    if len(arr1) != len(arr2):
+        return False
+    
+    for (row1, row2) in zip(arr1, arr2):
+        if len(row1) != len(row2):
+            return False
+        
+        for (v1, v2) in zip(row1, row2):
+            if not isclose(v1, v2, abs_tol=Precision.isclose_abstol):
+                return False
+    return True
 
 class Pauli(Enum):
     I = 0
@@ -304,4 +329,3 @@ def get_kraus_matrix_probability(matrix: List[List[float]], a0: complex, a1: com
     if return_new_ampl:
         return prob, new_a0, new_a1
     return prob
-

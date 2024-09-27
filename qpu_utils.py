@@ -6,15 +6,7 @@ from typing import Dict, List, Optional
 P0 = [[1, 0], [0, 0]]
 P1 = [[0, 0], [0, 1]]
 
-class Precision:
-    PRECISION = 8  # round number to `PRECISION` floating point digits
-    isclose_abstol = None
-    rel_tol = None
-    is_lowerbound = True
-    @staticmethod
-    def update_threshold():
-        Precision.isclose_abstol = 0.00000000001
-        Precision.rel_tol = 1/(10**(Precision.PRECISION-1))  
+
 
 class Op(Enum):
     # PAULI GATES

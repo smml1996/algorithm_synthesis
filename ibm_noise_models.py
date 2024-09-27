@@ -6,7 +6,7 @@ from qiskit_aer.noise import NoiseModel as IBMNoiseModel
 from qpu_utils import *
 import json
 
-from utils import invert_dict
+from utils import Precision, invert_dict, myceil, myfloor
 
 
 class HardwareSpec(Enum):
@@ -62,7 +62,7 @@ class HardwareSpec(Enum):
         return self.__str__()
 
 
-def get_ibm_noise_model(hardware_spec: HardwareSpec, thermal_relaxation=True):
+def get_ibm_noise_model(hardware_spec: HardwareSpec, thermal_relaxation=True) -> NoiseModel:
     backend_ = hardware_spec
     if backend_ == HardwareSpec.TENERIFE:
         backend = FakeTenerife()
@@ -265,6 +265,13 @@ class KrausOperator:
             'ops': serialized_operators,
         }
     
+def is_identity(seq: List[Op]):
+    for s in seq:
+        assert(isinstance(s, Instruction))
+        if s.op != Op.I:
+            return False
+    return True
+
 class QuantumChannel:
     def __init__(self, all_ins_sequences, all_probabilities, target_qubits, optimize=False, flatten=True) -> None:
         self.errors = [] # list of list of sequences of instructions/kraus operators
@@ -279,13 +286,30 @@ class QuantumChannel:
 
         if flatten:
             self.flatten()
-
+        
         self.__check_probabilities()
+
+        self.estimated_success_prob = self._get_success_probability()
 
     def __check_probabilities(self):
         for p in self.probabilities:
             assert 0.0 < p <= 1.0
-            
+
+    def _get_success_probability(self):
+        temp = []
+        temp_ins = []
+        for (index, instruction) in enumerate(self.errors):
+            if is_identity(instruction) or self.probabilities[index] > 0.5:
+                temp_ins.append(instruction)
+                if Precision.is_lowerbound:
+                    temp.append(float(myfloor(self.probabilities[index], Precision.PRECISION)))
+                else:
+                    temp.append(float(myceil(self.probabilities[index], Precision.PRECISION)))
+        if len(temp) == 0:
+            temp.append(0.0)
+        assert len(temp) == 1
+        return temp[0]
+
     @staticmethod
     def flatten_sequence(err_seq):
         sequences = []
@@ -474,12 +498,22 @@ class MeasChannel:
             
 
 class NoiseModel:
+    hardware_spec: HardwareSpec
+    basis_gates: List[Op]
+    instructions_to_channel: Dict[Instruction, QuantumChannel|MeasChannel]
+    num_qubits: int
+    qubit_to_indegree: List[int, int] # tells mutiqubit gates have as target a given qubit (key)
     def __init__(self, hardware_specification: HardwareSpec, thermal_relaxation=True) -> None:
         self.hardware_spec = hardware_specification
         ibm_noise_model = get_ibm_noise_model(hardware_specification, thermal_relaxation=thermal_relaxation)
         self.basis_gates = get_basis_gate_type([get_op(op) for op in ibm_noise_model.basis_gates])
         self.instructions_to_channel = dict()
+        try:
+            self.num_qubits = ibm_noise_model.configuration().num_qubits
+        except:
+            self.num_qubits = ibm_noise_model.num_qubits
 
+        self.qubit_to_indegree = dict()
         # start translating quantum channels
         all_errors = ibm_noise_model.to_dict()
         assert len(all_errors.keys()) == 1
@@ -499,6 +533,11 @@ class NoiseModel:
                 control = error_target_qubits[0]
                 target = error_target_qubits[1]
                 target_qubits = [control, target]
+
+                assert op in [Op.CNOT, Op.CZ]
+                if target not in self.qubit_to_indegree.keys():
+                    self.qubit_to_indegree[target] = 0
+                self.qubit_to_indegree[target] += 1
             else:
                 target = error_target_qubits[0]
                 target_qubits = [target]
@@ -511,6 +550,25 @@ class NoiseModel:
             else:
                 assert error['type'] == "roerror"
                 self.instructions_to_channel[target_instruction] = MeasChannel(probabilities)
+
+        assert len(self.qubit_to_indegree.keys()) == self.num_qubits
+    
+    def get_qubit_couplers(self, target: int) -> List[int]:
+        ''' Returns a list of pairs (instruciton, QuantumChannel) in which the instruction is a multiqubit gate whose target is the given qubit
+        '''
+        assert (target >= 0)
+        result = []
+
+        for (instruction, channel) in self.instructions_to_channel.items():
+            assert isinstance(instruction, Instruction)
+            if is_multiqubit_gate(instruction.op):
+                assert isinstance(instruction.target, int)
+                assert isinstance(instruction.control, int)
+                if target == instruction:
+                    result.append((instruction, channel))
+
+        result = sorted(result, key=lambda x : x[1].estimated_success_prob, reverse=False)
+        return result
     
     def serialize(self):
         instructions = []
@@ -531,7 +589,6 @@ class NoiseModel:
         f = open(path, "w")
         f.write(json.dumps(self.serialize(), indent=4))
         f.close()
-            
 
 if __name__ == "__main__":
     pass
