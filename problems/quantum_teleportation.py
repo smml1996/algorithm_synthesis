@@ -103,7 +103,7 @@ def get_embeddings(instruction_set) -> Dict[str, List[Dict[int, int]]]:
     return embeddings
     
 def get_experiments_channels(noise_model: NoiseModel, embedding: Dict[int, int], experiment_index: ExperimentID):
-    if noise_model.basis_gates == TYPE5:
+    if noise_model.basis_gates == ExperimentID.TYPE5:
         raise Exception("basis gates do not have entanglement gate")
     if experiment_index == ExperimentID.ENTANGLEMENT:
         # alice ancilla needs to get entangled with bob's qubit. Therefore 

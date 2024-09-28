@@ -1,8 +1,11 @@
 from copy import deepcopy
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
+import numpy as np
+from qiskit import QuantumCircuit, transpile
 from qiskit.providers.fake_provider import *
 from qiskit_aer.noise import NoiseModel as IBMNoiseModel
+from qiskit_aer import AerSimulator
 from qpu_utils import *
 import json
 
@@ -62,7 +65,7 @@ class HardwareSpec(Enum):
         return self.__str__()
 
 
-def get_ibm_noise_model(hardware_spec: HardwareSpec, thermal_relaxation=True) -> NoiseModel:
+def get_ibm_noise_model(hardware_spec: HardwareSpec, thermal_relaxation=True) -> IBMNoiseModel:
     backend_ = hardware_spec
     if backend_ == HardwareSpec.TENERIFE:
         backend = FakeTenerife()
@@ -170,22 +173,25 @@ class Instruction:
     control: int
     op: Op
     params: Any
-    def __init__(self, target: int, op: Op, control: Optional[int] = None, params: Any = None) -> None:
+    def __init__(self, target: int, op: Op, control: Optional[int] = None, params: Any = None, name=None) -> None:
         assert isinstance(op, Op)
         assert isinstance(target, int)
         assert isinstance(control, int) or (control is None)
         self.target = target
         self.op = op
-        if not is_multiqubit_gate(op) and (control is not None):
-            raise Exception("controls are initialized in multiqubit gate")
-        elif op == Op.CNOT and control is None:
-            raise Exception("CNOT gate should have exactly 1 control qubit")
+        if (not is_multiqubit_gate(op)) and (control is not None):
+            raise Exception(f"controls are initialized in a non-multiqubit gate ({op} {control})")
+        elif is_multiqubit_gate(op) and control is None:
+            raise Exception(f"{op} gate should have exactly 1 control ({control}) qubit")
         if target == control:
             raise Exception("target is in controls")
         self.control = control
         self.params = params
+        self.name = name
 
     def name(self, embedding):
+        if self.name is not None:
+            return self.name
         inverse_embedding = invert_dict(embedding)
         for (key, value) in embedding.items():
             assert value not in inverse_embedding.keys()
@@ -231,14 +237,17 @@ class Instruction:
     def __hash__(self):
         return hash((self.op.value, self.target, self.control, self.params))
     
-    def serialize(self):
-        return {
-            'type': 'instruction',
-            'target': self.target,
-            'control': self.control,
-            'op': self.op.value,
-            'params': self.params
-        }
+    def serialize(self, for_json=False):
+        if for_json:
+            return self.name
+        else:
+            return {
+                'type': 'instruction',
+                'target': self.target,
+                'control': self.control,
+                'op': self.op,
+                'params': self.params
+            }
         
 class KrausOperator:
     def __init__(self, operators, qubit) -> None:
@@ -296,19 +305,14 @@ class QuantumChannel:
             assert 0.0 < p <= 1.0
 
     def _get_success_probability(self):
-        temp = []
-        temp_ins = []
+        temp = 0.5
         for (index, instruction) in enumerate(self.errors):
             if is_identity(instruction) or self.probabilities[index] > 0.5:
-                temp_ins.append(instruction)
                 if Precision.is_lowerbound:
-                    temp.append(float(myfloor(self.probabilities[index], Precision.PRECISION)))
+                    temp = max(temp, float(myfloor(self.probabilities[index], Precision.PRECISION)))
                 else:
-                    temp.append(float(myceil(self.probabilities[index], Precision.PRECISION)))
-        if len(temp) == 0:
-            temp.append(0.0)
-        assert len(temp) == 1
-        return temp[0]
+                    temp = max(temp, float(myceil(self.probabilities[index], Precision.PRECISION)))
+        return temp
 
     @staticmethod
     def flatten_sequence(err_seq):
@@ -502,16 +506,14 @@ class NoiseModel:
     basis_gates: List[Op]
     instructions_to_channel: Dict[Instruction, QuantumChannel|MeasChannel]
     num_qubits: int
-    qubit_to_indegree: List[int, int] # tells mutiqubit gates have as target a given qubit (key)
+    qubit_to_indegree: Dict[int, int] # tells mutiqubit gates have as target a given qubit (key)
     def __init__(self, hardware_specification: HardwareSpec, thermal_relaxation=True) -> None:
         self.hardware_spec = hardware_specification
         ibm_noise_model = get_ibm_noise_model(hardware_specification, thermal_relaxation=thermal_relaxation)
+        assert isinstance(ibm_noise_model, IBMNoiseModel)
         self.basis_gates = get_basis_gate_type([get_op(op) for op in ibm_noise_model.basis_gates])
         self.instructions_to_channel = dict()
-        try:
-            self.num_qubits = ibm_noise_model.configuration().num_qubits
-        except:
-            self.num_qubits = ibm_noise_model.num_qubits
+        self.num_qubits = len(ibm_noise_model.noise_qubits)
 
         self.qubit_to_indegree = dict()
         # start translating quantum channels
@@ -550,11 +552,15 @@ class NoiseModel:
             else:
                 assert error['type'] == "roerror"
                 self.instructions_to_channel[target_instruction] = MeasChannel(probabilities)
-
-        assert len(self.qubit_to_indegree.keys()) == self.num_qubits
     
+    def get_qubit_indegree(self, qubit) -> int:
+        if qubit in self.qubit_to_indegree.keys():
+            return self.qubit_to_indegree[qubit]
+        else:
+            return 0
+        
     def get_qubit_couplers(self, target: int) -> List[int]:
-        ''' Returns a list of pairs (instruciton, QuantumChannel) in which the instruction is a multiqubit gate whose target is the given qubit
+        ''' Returns a list of pairs (qubit_control, QuantumChannel) in which the instruction is a multiqubit gate whose target is the given qubit
         '''
         assert (target >= 0)
         result = []
@@ -564,8 +570,8 @@ class NoiseModel:
             if is_multiqubit_gate(instruction.op):
                 assert isinstance(instruction.target, int)
                 assert isinstance(instruction.control, int)
-                if target == instruction:
-                    result.append((instruction, channel))
+                if target == instruction.target:
+                    result.append((instruction.control, channel))
 
         result = sorted(result, key=lambda x : x[1].estimated_success_prob, reverse=False)
         return result
@@ -589,6 +595,41 @@ class NoiseModel:
         f = open(path, "w")
         f.write(json.dumps(self.serialize(), indent=4))
         f.close()
+
+def instruction_to_ibm(qc, basis_gates, instruction):
+    assert isinstance(instruction, Instruction)
+    assert isinstance(qc, QuantumCircuit)
+    if instruction == Instruction.X:
+        assert 'x' in basis_gates
+        qc.x(instruction.target)
+    elif instruction == Instruction.Z:
+        assert 'z' in basis_gates
+        qc.z(instruction.target)
+    elif instruction == Instruction.H:
+        assert 'h' in 'basis_gates'
+        qc.h(instruction.target)
+    elif instruction == Instruction.MEAS:
+        qc.measure(instruction.target, instruction.target)
+    elif instruction == Instruction.CNOT:
+        assert 'cx' in basis_gates
+        assert instruction.control is not None
+        qc.cx(instruction.control, instruction.target)
+    elif instruction == Instruction.I:
+        pass
+    else:
+        raise Exception(f"Instruction {instruction.name} could not be translated to IBM instruction. Missing implementation.")
+    
+def ibm_simulate_circuit(qc: QuantumCircuit, noise_model, shots, initial_layout, seed=1):
+    # Create noisy simulator backend
+    sim_noise = AerSimulator(method ='statevector', noise_model=noise_model)
+
+    # Transpile circuit for noisy basis gates
+    circ_tnoise = transpile(qc, sim_noise, optimization_level=0, initial_layout=initial_layout)
+    # Run and get counts
+    
+    result = sim_noise.run(circ_tnoise, run_options={"shots":2000, "seed_simulator": seed}).result()
+    
+    return np.asarray(result.data()['res'])
 
 if __name__ == "__main__":
     pass

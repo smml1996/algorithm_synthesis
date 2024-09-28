@@ -1,5 +1,8 @@
 from cmath import isclose
+from collections import deque
+from contextlib import contextmanager
 from math import ceil, floor
+import signal
 from typing import *
 from enum import Enum
 import numpy as np
@@ -12,6 +15,26 @@ def myfloor(val, d):
 def myceil(val, d):
     m = 10**d
     return ceil(val * m)/m
+
+class Queue:
+    queue: deque
+
+    def __init__(self) -> None:
+        self.queue = deque()
+
+    def pop(self) -> Any:
+        if self.is_empty():
+            raise Exception("trying to pop empty queue")
+        return self.queue.popleft()
+
+    def push(self, v):
+        self.queue.append(v)
+
+    def is_empty(self) -> bool:
+        return len(self.queue) == 0
+
+    def len(self) -> int:
+        return len(self.queue)
 
 class Precision:
     PRECISION = 8  # round number to `PRECISION` floating point digits
@@ -329,3 +352,4 @@ def get_kraus_matrix_probability(matrix: List[List[float]], a0: complex, a1: com
     if return_new_ampl:
         return prob, new_a0, new_a1
     return prob
+

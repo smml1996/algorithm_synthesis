@@ -1,8 +1,8 @@
 from cmath import isclose
 from ibm_noise_models import Instruction, MeasChannel, NoiseModel, QuantumChannel
 from qmemory import get_seq_probability, handle_write
-from qpu_utils import GateData, NoisyInstruction, Op
-from utils import Precision, Queue, Guard, get_kraus_matrix_probability
+from qpu_utils import Op
+from utils import Precision, Queue
 from qstates import QuantumState
 from cmemory import ClassicalState, cwrite
 from typing import Any, Tuple, List, Dict
@@ -154,7 +154,7 @@ class POMDP:
     def get_obs(self, state: POMDPVertex) -> ClassicalState:
         return state.classical_state
     
-    def serialize(self, is_target_qs, output_path, embedding):
+    def serialize(self, problem_instance: Any, output_path: str):
         f = open(output_path, "w")
         f.write("BEGINPOMDP\n")
         f.write(f"INITIALSTATE: {self.initial_state.id}\n")
@@ -164,7 +164,7 @@ class POMDP:
         # computing target vertices
         target_vertices = []
         for v in self.states:
-            if is_target_qs((v.quantum_state, v.classical_state)):
+            if problem_instance.is_target_qs((v.quantum_state, v.classical_state)):
                 target_vertices.append(v.id)
         target_v_line = ",".join([str(v) for v in target_vertices])
         f.write(f"TARGETV: {target_v_line}\n")
@@ -174,12 +174,12 @@ class POMDP:
         f.write(f"GAMMA: {gamma_line}\n")
         f.write("BEGINACTIONS\n")
         for action in self.actions:
-            instructions = ",".join([f'Instruction.{i.name(embedding)}' for i in action.instructions])
+            instructions = ",".join([f'Instruction.{i.name(problem_instance.embedding)}' for i in action.instructions])
         
-            controls = ",".join([str(c.get_control(embedding)) for c in action.instructions])
+            controls = ",".join([str(c.get_control(problem_instance.embedding)) for c in action.instructions])
             if controls == "":
                 controls = "-"
-            targets = ",".join([str(t.get_target(embedding)) for t in action.instructions])
+            targets = ",".join([str(t.get_target(problem_instance.embedding)) for t in action.instructions])
             if targets == "":
                 targets = "-"
             f.write(f"{action.name} {instructions} {controls} {targets}\n")

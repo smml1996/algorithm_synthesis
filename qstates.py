@@ -8,10 +8,13 @@ class QuantumState:
     sparse_vector : Dict # map basis states to sympy-Symbolic
     substitutions: List = []
 
-    def __init__(self, init_basis: Optional[int] = 0, 
+    def __init__(self, init_basis: Optional[int] = None, 
                  init_amplitude = complex(1.0, 0.0), qubits_used=[]):
         self.sparse_vector = dict()
-        self.insert_amplitude(init_basis, init_amplitude)
+        if init_basis is not None:
+            self.insert_amplitude(init_basis, init_amplitude)
+        if len(qubits_used) == 0:
+            raise Exception("no indices of qubits specified!")
         self.qubits_used = sorted(qubits_used, reverse=False) # addresses of qubits that are used, we need this to build efficiently density matrices that contain only these qubits
         
 
@@ -92,29 +95,25 @@ class QuantumState:
         if len(self.sparse_vector.keys()) != len(other.sparse_vector.keys()):
             return False
         
-        factor = None
-        for (key, val1) in self.sparse_vector.items():
-            if key not in other.sparse_vector.keys():
-                return False
-            val2 = other.sparse_vector[key]
-            if factor is None:
-                factor = val1/val2
-            current_factor = val1/val2
-            if current_factor != factor:
-                return False
-        return True
+        # here we check for global phases: two states are equal if they only differ by a global factor
+        inner_product = get_fidelity(self, other)
+        return abs(inner_product)
     
-    @staticmethod
     def _get_physical_basis(self, virtual_basis: int):
-        binary = int_to_bin(0, zero_padding=max(self.qubits_used))
-
-        index = 0
-        while virtual_basis > 0:
-            if virtual_basis % 2 == 1:
-                binary[index] = '1'
-            index += 1
-            virtual_basis//=2
-        return bin_to_int(binary)
+        assert len(self.qubits_used) > 0
+        vb_index = 0
+        answer = ""
+        for index in range(max(self.qubits_used)+1):
+            if index == self.qubits_used[vb_index]:
+                if virtual_basis % 2 == 1:
+                    answer += "1"
+                else:
+                    answer += "0"
+                vb_index += 1    
+                virtual_basis //= 2
+            else:
+                answer += "0"
+        return bin_to_int(answer)
 
     def get_density_matrix(self) -> List[List[int]]:
         result = []
@@ -126,12 +125,12 @@ class QuantumState:
                 temp.append(0.0)
             result.append(temp)
 
-        for virtual_row in range(2**len(self.qubits_used)):
-            physical_row = self._get_physical_basis(virtual_row)
+        for virtual_row in range(2**len(self.qubits_used)): # the virtual row is only proportial to the size of the qubits that are actually used
+            physical_row = self._get_physical_basis(virtual_row) # this is the real basis
             for virtual_col in range(2**len(self.qubits_used)):
                 physical_col = self._get_physical_basis(virtual_col)
                 assert result[virtual_row][physical_col] == 0.0
-                result[virtual_row][virtual_col] = self.get_amplitude(physical_row) * self.get_amplitude(physical_col).conj()
+                result[virtual_row][virtual_col] = self.get_amplitude(physical_row) * conjugate(self.get_amplitude(physical_col))
 
         assert len(result) == 2**len(self.qubits_used)
         return result
@@ -156,15 +155,14 @@ class QuantumState:
         Returns:
             _type_: _description_
         """
-        if qubit_used is None:
-            qubit_used = deepcopy(self.qubits_used)
-        if index in qubits_used:
-            raise Exception(f"Cannot remove index {index} from quantum state of dimension {self.dimension}")
+        if qubits_used is None:
+            qubits_used = deepcopy(self.qubits_used)
+        if index not in qubits_used:
+            raise Exception(f"Cannot remove index {index} from quantum state with qubits{qubits_used}")
 
         
         if rho is None:
             rho = self.get_density_matrix()
-
 
         initial_dim = len(rho)
         assert (initial_dim % 2) == 0
@@ -173,25 +171,28 @@ class QuantumState:
         # change index cause density matrix is only over qubits used
         index = QuantumState._get_real_index(qubits_used, index)
 
-        # initialize the result as a matrix full of zeros
+        # initialize the result as a matrix full of zeros. Since we are tracing out a qubit the new dimension is initial dimension/2
         result = []
-        for _ in range(initial_dim/2):
-            temp = 0
-            for _ in range(initial_dim/2):
+        for _ in range(initial_dim//2):
+            temp = []
+            for _ in range(initial_dim//2):
                 temp.append(0)                
             result.append(temp)
-
         for ket in range(initial_dim):
-            bin_ket = int_to_bin(ket, zero_padding=initial_dim)
-            bin_new_ket = bin_ket[:index] + bin_ket[index+1:]
-            index_new_ket = bin_to_int(bin_new_ket)
+            bin_ket = int_to_bin(ket, zero_padding=initial_dim) # this is the original ket, we get the binary representation
+            assert len(bin_ket) == initial_dim
+            assert isinstance(bin_ket, str)
+            bin_new_ket = bin_ket[:index] + bin_ket[index+1:] # now we create a binary string without the bit that we want to remove (located at index)
+            assert len(bin_ket) == len(bin_new_ket) + 1
+            index_new_ket = bin_to_int(bin_new_ket) # index of the row in the result(-ing density matrix)
             for bra in range(initial_dim):
-                bin_bra = int_to_bin(bra, zero_padding=initial_dim)
-                bin_new_bra = bin_bra[:index] + bin_bra[index+1:]
-                index_new_bra = bin_to_int(bin_new_bra)
-                assert result[index_new_ket][index_new_bra] == 0
+                bin_bra = int_to_bin(bra, zero_padding=initial_dim) # original bra
+                bin_new_bra = bin_bra[:index] + bin_bra[index+1:] # remove the bit in the index we dont want
+                index_new_bra = bin_to_int(bin_new_bra) # index of the row in the result(-ing density matrix)   
+
                 if bin_ket[index] == bin_bra[index]:
-                    result[index_new_ket][index_new_bra] = rho[ket][bra]
+                    result[index_new_ket][index_new_bra] += rho[ket][bra]
+
         assert len(result) == initial_dim/2
         return result
 
@@ -257,8 +258,10 @@ def get_fidelity(qstate1: QuantumState, qstate2: QuantumState) -> float:
     inner_product = 0
     for (key, val1) in qstate1.sparse_vector.items():
         val2 = qstate2.get_amplitude(key)
-        inner_product += val1*val2
+        inner_product += val1*conjugate(val2)
     return inner_product
 
+
+    
 
 

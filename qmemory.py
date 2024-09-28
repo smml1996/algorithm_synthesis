@@ -15,7 +15,7 @@ def evaluate_op(op: Op, qubit: QuantumState, name: str, params=None, is_inverse:
     ''' Evaluates qubit->qubit op functions
     '''
     assert(qubit.is_qubit())
-    result = QuantumState()
+    result = QuantumState(qubits_used=qubit.qubits_used)
     a0, a1 = qubit.get_qubit_amplitudes()
 
     # some useful constants
@@ -142,9 +142,9 @@ def evaluate_op(op: Op, qubit: QuantumState, name: str, params=None, is_inverse:
 def get_qubit_from_basis(basis: int, address: int) -> QuantumState:
     bin_number = "{0:b}".format(basis)[::-1]
     if address >= len(bin_number):
-        return QuantumState(0)
+        return QuantumState(0, qubits_used=[address])
     else:
-        return QuantumState(int(bin_number[address]))
+        return QuantumState(int(bin_number[address]), qubits_used=[address])
     
 def glue_qubit_in_basis(basis: int, address: int, qubit_basis: int) -> int:
     bin_number = list("{0:b}".format(basis)[::-1])
@@ -161,7 +161,7 @@ def glue_qubit_in_basis(basis: int, address: int, qubit_basis: int) -> int:
 
 def write1(quantum_state: QuantumState, gate_data: GateData, name="", is_inverse=False) -> Optional[QuantumState]:
     assert is_inverse == False # TODO: remove this
-    result = QuantumState()
+    result = QuantumState(qubits_used=quantum_state.qubits_used)
     at_least_one_perform_op = False
     op = gate_data.label
     address = gate_data.address
@@ -180,7 +180,6 @@ def write1(quantum_state: QuantumState, gate_data: GateData, name="", is_inverse
             a0, a1 = qubit.get_qubit_amplitudes()
             a0 *= value
             a1 *= value
-            
             basis0 = glue_qubit_in_basis(basis, address, 0)
             basis1 = glue_qubit_in_basis(basis, address, 1)
             result.add_amplitude(basis0, a0)
@@ -201,17 +200,14 @@ def are_controls_true(basis, controls: List[int]) -> bool:
 def write2(quantum_state: QuantumState, gate_data: GateData, is_inverse: bool= False) -> Optional[QuantumState]:
     
     op = gate_data.label
-    controls = gate_data.controls
+    controls = [gate_data.control]
     address = gate_data.address
-    result = QuantumState()
-    # print(******)
-    # print(quantum_state)
+    result = QuantumState(qubits_used=quantum_state.qubits_used)
     for (basis, value) in quantum_state.sparse_vector.items():
         if are_controls_true(basis, controls):
-            basis_state = QuantumState(basis, value)
+            basis_state = QuantumState(basis, value, qubits_used=quantum_state.qubits_used)
             if op == Op.CNOT:
                 gate_data2 = GateData(Op.X, address, None)
-                # print(basis_state, gate_data2)
                 written_basis = write1(basis_state, gate_data2, is_inverse=is_inverse)
                 assert written_basis is not None
             elif op == Op.CU3:
@@ -305,7 +301,6 @@ def handle_write(quantum_state: QuantumState, gate_data: GateData, is_inverse=Fa
         else:
             result = write1(quantum_state, gate_data, is_inverse=is_inverse)
     if normalize and (not (result is None)):
-        result.remove_global_phases()
         result.normalize()
         assert len(result.sparse_vector.keys()) > 0
     return result

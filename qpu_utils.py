@@ -2,6 +2,7 @@ from cmath import isclose
 from enum import Enum
 from math import floor
 from typing import Dict, List, Optional
+from utils import Precision
 
 P0 = [[1, 0], [0, 0]]
 P1 = [[0, 0], [0, 1]]
@@ -48,13 +49,13 @@ class Op(Enum):
         return self.__str__()
     
 class BasisGates(Enum):
-    TYPE1 = [Op.CX, Op.I, Op.U1, Op.U2, Op.U3]
-    TYPE2 = [Op.CX, Op.DELAY, Op.I, Op.MEAS, Op.RESET, Op.RZ, Op.SX, Op.X]
-    TYPE3 = [Op.CX, Op.I, Op.RESET, Op.RZ, Op.SX, Op.X]
+    TYPE1 = [Op.CNOT, Op.I, Op.U1, Op.U2, Op.U3]
+    TYPE2 = [Op.CNOT, Op.DELAY, Op.I, Op.MEAS, Op.RESET, Op.RZ, Op.SX, Op.X]
+    TYPE3 = [Op.CNOT, Op.I, Op.RESET, Op.RZ, Op.SX, Op.X]
     TYPE4 = [Op.CZ, Op.DELAY, Op.I, Op.MEAS, Op.RESET, Op.RZ, Op.SX, Op.X]
     TYPE5 = [Op.I, Op.RZ, Op.SX, Op.X]
-    TYPE6 = [Op.CX, Op.I, Op.SX, Op.U1, Op.U2, Op.U3, Op.X]
-    TYPE7 = [Op.CX, Op.I, Op.RZ, Op.SX, Op.X]
+    TYPE6 = [Op.CNOT, Op.I, Op.SX, Op.U1, Op.U2, Op.U3, Op.X]
+    TYPE7 = [Op.CNOT, Op.I, Op.RZ, Op.SX, Op.X]
 
 def get_basis_gate_type(basis_gates):
     for b in BasisGates:
@@ -80,14 +81,12 @@ def get_op(op_: str) -> Op:
 
 def is_multiqubit_gate(op: Op):
     assert isinstance(op, Op)
-    if op in [Op.CNOT, Op.RZ, Op.C, Op.SWAP]:
+    if op in [Op.CNOT, Op.CZ, Op.SWAP]:
         return True
     return False
     
 def int_to_bin(n: int, zero_padding=None) -> str:
     assert n >= 0
-    if n == 0:
-        return "0"
     result = ""
     while n > 0:
         if (n % 2) == 1:
@@ -99,11 +98,13 @@ def int_to_bin(n: int, zero_padding=None) -> str:
     if zero_padding is not None:
         while len(result) < zero_padding:
             result += "0"
+    if len(result) == 0:
+        return "0"
     return result
 
 def bin_to_int(bin: str) -> int:
     result = 0
-    for (b, power) in enumerate(bin):
+    for (power, b) in enumerate(bin):
         assert b=="0" or b == "1"
         result += int(b)*(2**power)
     return result 
@@ -148,14 +149,14 @@ class GateData: # this was previously called GateData
         self.params = params
 
     def __eq__(self, other: object) -> bool:
-        return (self.label, self.address, self.controls, self.params) == (
-        other.label, other.address, other.controls, self.params)
+        return (self.label, self.address, self.control, self.params) == (
+        other.label, other.address, other.control, self.params)
 
     def __str__(self) -> str:
         d = dict()
         d['gate'] = self.label
         d['address'] = self.address
-        d['controls'] = self.controls
+        d['controls'] = self.control
         d['params'] = self.params
         return d.__str__()
 
@@ -239,3 +240,4 @@ class NoisyInstruction:
 
     def __repr__(self) -> str:
         return self.__str__()
+
