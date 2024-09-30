@@ -10,10 +10,10 @@ import json
 from qiskit import IBMQ, ClassicalRegister, QuantumCircuit, QuantumRegister, execute
 from algorithm import AlgorithmNode, execute_algorithm, load_algorithms_file
 from cmemory import ClassicalState
-from pomdp import POMDPAction, build_pomdp
+from pomdp import POMDP, POMDPAction, POMDPVertex, build_pomdp
 import qmemory
 from qpu_utils import GateData, Op, BasisGates
-from utils import are_matrices_equal, Precision
+from utils import are_matrices_equal, is_matrix_in_list, Precision
 sys.path.append(os.getcwd()+"/..")
 
 from qstates import QuantumState
@@ -26,7 +26,7 @@ from experiments_utils import ReadoutNoise
 
 
 
-POMDP_OUTPUT_DIR = "../synthesis/bitflip/"
+POMDP_OUTPUT_DIR = "/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/synthesis/bitflip/"
 WITH_TERMALIZATION = False
 MAX_HORIZON = 7
 MIN_HORIZON = 4
@@ -34,6 +34,36 @@ MAX_PRECISION = 10
 TIME_OUT = 10800 # (in seconds) i.e 3 hours
 
 EMBEDDINGS_FILE = "embeddings.json"
+
+bell0_real_rho = [
+                    [0.5, 0, 0, 0.5],
+                    [0, 0, 0, 0],
+                    [0, 0, 0, 0],
+                    [0.5, 0, 0, 0.5],
+                ]
+        
+bell1_real_rho = [
+                    [0, 0, 0, 0],
+                    [0, 0.5, 0.5, 0],
+                    [0, 0.5, 0.5, 0],
+                    [0, 0, 0, 0],
+                ]
+        
+bell2_real_rho = [
+                    [0.5, 0, 0, -0.5],
+                    [0, 0, 0, 0],
+                    [0, 0, 0, 0],
+                    [-0.5, 0, 0, 0.5],
+                ]
+        
+bell3_real_rho = [
+                    [0, 0, 0, 0],
+                    [0, 0.5, -0.5, 0],
+                    [0, -0.5, 0.5, 0],
+                    [0, 0, 0, 0],
+                ]
+        
+bell_state_pts = [bell0_real_rho, bell1_real_rho, bell2_real_rho, bell3_real_rho]
 
 class ExperimentID(Enum):
     IPMA = 0
@@ -90,11 +120,13 @@ class BitFlipInstance:
         self.initial_state.append((bell3, initial_cs))
 
 
-    def is_target_state(self, hybrid_state) -> bool:
+    def is_target_qs(self, hybrid_state) -> bool:
         qs , _ = hybrid_state
         current_rho = qs.single_partial_trace(index=self.embedding[2])
-        bell0_rho = self.initial_state[0].single_partial_trace(index=self.embedding[2])
-        bell1_rho = self.initial_state[2].single_partial_trace(index=self.embedding[2])
+        initial_qs, _ = self.initial_state[0]
+        bell0_rho = initial_qs.single_partial_trace(index=self.embedding[2])
+        initial_qs,_ = self.initial_state[2]
+        bell1_rho = initial_qs.single_partial_trace(index=self.embedding[2])
         assert len(bell0_rho) == 4
         assert len(bell1_rho) == 4
         return are_matrices_equal(current_rho, bell0_rho) or are_matrices_equal(current_rho, bell1_rho)
@@ -202,7 +234,7 @@ class IBMBitFlipInstance:
                     assert qs.get_amplitude(index) == 0.0
                     qs.insert_amplitude(index, amp) 
 
-        return self.bitflip_instance.is_target_state(qs)
+        return self.bitflip_instance.is_target_qs(qs)
     
     def ibm_execute_my_algo(self, shots, alg, backend, is_simulated=True, log=None):
         shots_per_initial_state = shots/4
@@ -247,44 +279,66 @@ class IBMBitFlipInstance:
             log_file.close()
         return round(accuracy/(1024*4), 3)
     
-def get_selected_hardware():
-    answer = []
-
-    for hardware_spec in HardwareSpec:
-        noise_model = NoiseModel(hardware_spec, False)
-        if (Op.CNOT in noise_model.basis_gates.value) and len(noise_model.instructions_to_channel.keys()) > 0:
-            answer.append(hardware_spec)
-    return answer
+def is_hardware_selected(noise_model: NoiseModel):
+    return (Op.CNOT in noise_model.basis_gates.value) and len(noise_model.instructions_to_channel.keys()) > 0
+        
 
 def generate_embeddings():
     if not os.path.exists(POMDP_OUTPUT_DIR):
         os.mkdir(POMDP_OUTPUT_DIR) 
         
     result = dict()
-    selected_hardware = get_selected_hardware()
-    assert len(selected_hardware) == 44
     c_embeddings = 0
-    for hardware_spec in selected_hardware:
-        assert hardware_spec not in result.keys()
-        result[hardware_spec.value] = dict()
-        embeddings = get_backend_embeddings(hardware_spec)
-        result[hardware_spec.value]["count"] = len(embeddings)
-        result[hardware_spec.value]["embeddings"] = embeddings
-        c_embeddings += len(embeddings)
+    for hardware_spec in HardwareSpec:
+        noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_TERMALIZATION)
+        if is_hardware_selected(noise_model):
+            assert hardware_spec not in result.keys()
+            result[hardware_spec.value] = dict()
+            embeddings = get_backend_embeddings(hardware_spec)
+            result[hardware_spec.value]["count"] = len(embeddings)
+            result[hardware_spec.value]["embeddings"] = embeddings
+            c_embeddings += len(embeddings)
 
     result["count"] = c_embeddings
     f = open(f"{POMDP_OUTPUT_DIR}{EMBEDDINGS_FILE}", "w")
     f.write(json.dumps(result))
     f.close()
 
+def load_embeddings(experiment_id: ExperimentID):
+    with open(f"{POMDP_OUTPUT_DIR}{EMBEDDINGS_FILE}", 'r') as file:
+        result = dict()
+        data = json.load(file)
+        assert data["count"] == 225
+        result["count"] = 225
 
+        for hardware_spec in HardwareSpec:
+            noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_TERMALIZATION)
+            if is_hardware_selected(noise_model):
+                result[hardware_spec] = dict()
+                result[hardware_spec]["count"] = data[hardware_spec.value]["count"]
+                result[hardware_spec]["embeddings"] = []
+
+                for embedding in data[hardware_spec.value]["embeddings"]:
+                    d = dict()
+                    for (key, value) in embedding.items():
+                        d[int(key)] = int(value)
+                    if experiment_id == ExperimentID.CXH:
+                        temp = d[2]
+                        d[2] = d[1]
+                        d[1] = temp
+                    result[hardware_spec]["embeddings"].append(d)
+            else:
+                assert hardware_spec.value not in data.keys()
+        
+        return result
+    raise Exception(f"could not load embeddings file {POMDP_OUTPUT_DIR}{EMBEDDINGS_FILE}")
 
 def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: ExperimentID):
     if experiment_id == ExperimentID.IPMA:
-        if NoiseModel.basis_gates in [BasisGates.TYPE1]:
+        if noise_model.basis_gates in [BasisGates.TYPE1]:
             X0 = POMDPAction("X0", [Instruction(embedding[0], Op.U3, params=[pi, 2*pi, pi])])
         else:
-            X0 = POMDPAction("X0", Instruction(embedding[0], Op.X))
+            X0 = POMDPAction("X0", [Instruction(embedding[0], Op.X)])
             
         P2 = POMDPAction("P2", [Instruction(embedding[2], Op.MEAS)])
         CX02 = POMDPAction("CX02", [Instruction(embedding[2], Op.CNOT, control=embedding[0])])
@@ -313,39 +367,71 @@ def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], e
         CX01 = POMDPAction("CX01", [Instruction(embedding[1], Op.CNOT, control=embedding[0])])
         return [H2, H1, CX21, CX01, P2]
     
+
+def guard(vertex: POMDPVertex, embedding: Dict[int, int], action: POMDPAction):
+    assert len(action.instruction_sequence) == 1
+    if action.instruction_sequence[0].op != Op.MEAS:
+        return True
+    assert isinstance(vertex, POMDPVertex)
+    assert isinstance(embedding, dict)
+    assert isinstance(action, POMDPAction)
+    qs = vertex.quantum_state
+    meas_instruction = Instruction(embedding[2], Op.MEAS)
+    qs0 = qmemory.handle_write(qs, meas_instruction.get_gate_data(is_meas_0=True))
+    qs1 = qmemory.handle_write(qs, meas_instruction.get_gate_data(is_meas_0=False))
+
+    if qs0 is not None:
+        pt0 = qs0.single_partial_trace(index=embedding[2])
+        if not is_matrix_in_list(pt0, bell_state_pts):
+            return False
+    
+    if qs1 is not None:
+        pt1 = qs1.single_partial_trace(index=embedding[2])
+        return is_matrix_in_list(pt1, bell_state_pts)
+    return True
+    
+
+def generate_pomdp(experiment_id: ExperimentID, hardware_spec: HardwareSpec, 
+                embedding: Dict[int, int], pomdp_write_path: str, return_pomdp=False):
+    noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_TERMALIZATION)
+    if not is_hardware_selected(noise_model):
+        return None
+    bitflip_instance = BitFlipInstance(embedding)
+    actions = get_experiments_actions(noise_model, embedding, experiment_id)
+    initial_distribution = []
+    for s in bitflip_instance.initial_state:
+        initial_distribution.append((s, 0.25))
+
+    start_time = time.time()
+    pomdp = build_pomdp(actions, noise_model, MAX_HORIZON, embedding, initial_distribution=initial_distribution, guard=guard)
+    end_time = time.time()
+    if return_pomdp:
+        return pomdp
+    pomdp.serialize(bitflip_instance, pomdp_write_path)
+    return end_time-start_time
+    
 def generate_pomdps(experiment_id: ExperimentID):
     if not os.path.isdir(f"{POMDP_OUTPUT_DIR}pomdps{experiment_id.value}/"):
         os.mkdir(f"{POMDP_OUTPUT_DIR}pomdps{experiment_id.value}/")
-
-    if not os.path.isdir(f"{POMDP_OUTPUT_DIR}inverse_mappings{experiment_id.value}/"):
-        os.mkdir(f"{POMDP_OUTPUT_DIR}inverse_mappings{experiment_id.value}/")
     
     if not os.path.isdir(f"{POMDP_OUTPUT_DIR}analysis_results{experiment_id.value}/"):
         os.mkdir(f"{POMDP_OUTPUT_DIR}analysis_results{experiment_id.value}/")
+
+    all_embeddings = load_embeddings(experiment_id)
     times_file = open(f"{POMDP_OUTPUT_DIR}analysis_results{experiment_id.value}/pomdp_times.csv", "w")
     times_file.write("backend,embedding,time\n")
-
     for backend in HardwareSpec:
-        embeddings = get_backend_embeddings(backend)
-        noise_model = NoiseModel(backend, thermal_relaxation=WITH_TERMALIZATION)
-        for (index, m) in enumerate(embeddings):
-            print(backend, index, m)
-            bitflip_instance = BitFlipInstance(m)
+        try:
+            embeddings = all_embeddings[backend]["embeddings"]
+            for (index, m) in enumerate(embeddings):
+                print(backend, index, m)
+                time_taken = generate_pomdp(experiment_id, backend, m, f"{POMDP_OUTPUT_DIR}pomdps{experiment_id.value}/{backend.value}_{index}.txt")
+                if time_taken is not None:
+                    times_file.write(f"{backend.name},{index},{time_taken}\n")
+            times_file.flush()
+        except Exception as err:
+            print(f"Unexpected {err=}, {type(err)=}")
             
-            actions = get_experiments_actions(noise_model, m, experiment_id)
-            initial_distribution = []
-            for s in bitflip_instance.initial_state:
-                initial_distribution.append((s, 0.25))
-            start_time = time.time()
-            pomdp = build_pomdp(actions, noise_model, bitflip_instance.initial_state, MAX_HORIZON, m, initial_distribution)
-            end_time = time.time()
-            times_file.write(f"{backend.name},{index},{end_time-start_time}\n")
-            pomdp.serialize(bitflip_instance, f"{POMDP_OUTPUT_DIR}pomdps{experiment_id.value}/{backend}_{index}.txt")
-            f = open(f"{POMDP_OUTPUT_DIR}inverse_mappings{experiment_id.value}/{backend}_{index}.txt", "w")
-            for i in range(3):
-                f.write(f"{m[i]} {i}\n")
-            f.close()
-        times_file.flush()
     times_file.close()
 
 def get_lambdas(backend, embedding_index, dir_prefix=""):
@@ -376,8 +462,9 @@ def test_programs(experiment_id: ExperimentID, shots=2000, factor=2):
     output_file = open(POMDP_OUTPUT_DIR + f"analysis_results{experiment_id.value}/test_lambdas.csv", "w")
     output_file.write("backend,horizon,lambda,acc,diff\n")
     
+    all_embeddings = load_embeddings(experiment_id)
     for backend in HardwareSpec: 
-        embeddings = get_backend_embeddings(backend)
+        embeddings = all_embeddings[backend]["embeddings"]
         for (index, embedding) in enumerate(embeddings):
             if experiment_id == ExperimentID.IPMA:
                 m = embedding
@@ -417,40 +504,11 @@ class Test:
 
         bf.get_initial_states()
 
-        bell0_real_rho = [
-                            [0.5, 0, 0, 0.5],
-                            [0, 0, 0, 0],
-                            [0, 0, 0, 0],
-                            [0.5, 0, 0, 0.5],
-                          ]
-        
-        bell1_real_rho = [
-                            [0, 0, 0, 0],
-                            [0, 0.5, 0.5, 0],
-                            [0, 0.5, 0.5, 0],
-                            [0, 0, 0, 0],
-                          ]
-        
-        bell2_real_rho = [
-                            [0.5, 0, 0, -0.5],
-                            [0, 0, 0, 0],
-                            [0, 0, 0, 0],
-                            [-0.5, 0, 0, 0.5],
-                          ]
-        
-        bell3_real_rho = [
-                            [0, 0, 0, 0],
-                            [0, 0.5, -0.5, 0],
-                            [0, -0.5, 0.5, 0],
-                            [0, 0, 0, 0],
-                          ]
-        
-        real_rhos = [bell0_real_rho, bell1_real_rho, bell2_real_rho, bell3_real_rho]
         for (index, initial_state) in enumerate(bf.initial_state):
             qs, cs = initial_state
             assert isinstance(qs, QuantumState)
             current_rho = qs.single_partial_trace(index=2)
-            assert are_matrices_equal(current_rho, real_rhos[index])
+            assert are_matrices_equal(current_rho, bell_state_pts[index])
 
     @staticmethod
     def _load_real_embeddings(hardware: HardwareSpec) -> List[Dict[int, int]]:
@@ -480,27 +538,100 @@ class Test:
         for embedding in real_embeddings:
             if embedding not in current_embeddings:
                 in_real.append(embedding)
-
         return in_current, in_real
 
+    @staticmethod
+    def __check_embeddings(hardware_spec, embeddings):
+        real_embeddings = Test._load_real_embeddings(hardware_spec)
+        in_current, in_real = Test.get_diff_embeddings(embeddings, real_embeddings)
+
+        if len(in_current) > 0 or len(in_real) > 0:
+            print("Pivot Qubits: ")
+            raise Exception(f"Embeddings do not match {hardware_spec}: Pivot Qubits: {get_pivot_qubits(NoiseModel(hardware_spec, thermal_relaxation=WITH_TERMALIZATION))}\n{in_current}\n{in_real}")
+        if len(embeddings) != Test.real_embedding_count[hardware_spec.value]:
+            raise Exception(f"{hardware_spec} embedding count does not match with expected ({len(embeddings)} != {Test.real_embedding_count[hardware_spec.value]})")
 
     @staticmethod
     def check_embeddings():
         assert len(Test.real_embedding_count.keys()) == 44
-        selected_hardware = get_selected_hardware()
-        assert len(Test.real_embedding_count.keys()) == 44
         
-        for hardware_spec in selected_hardware:
-            embeddings = get_backend_embeddings(hardware_spec)
-            real_embeddings = Test._load_real_embeddings(hardware_spec)
-            in_current, in_real = Test.get_diff_embeddings(embeddings, real_embeddings)
+        for hardware_spec in HardwareSpec:
+            noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_TERMALIZATION)
+            if is_hardware_selected(noise_model):
+                embeddings = get_backend_embeddings(hardware_spec)
+                Test.__check_embeddings(hardware_spec, embeddings)
+                
+    
+    @staticmethod
+    def check_embeddings_file():
+        all_embeddings = load_embeddings(ExperimentID.IPMA)
 
-            if len(in_current) > 0 or len(in_real) > 0:
-                print("Pivot Qubits: ")
-                raise Exception(f"Embeddings do not match {hardware_spec}: Pivot Qubits: {get_pivot_qubits(NoiseModel(hardware_spec, thermal_relaxation=WITH_TERMALIZATION))}\n{in_current}\n{in_real}")
-            if len(embeddings) != Test.real_embedding_count[hardware_spec.value]:
-                raise Exception(f"{hardware_spec} embedding count does not match with expected ({len(embeddings)} != {Test.real_embedding_count[hardware_spec.value]})")
+        for hardware_spec in HardwareSpec:
+            noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_TERMALIZATION)
+            if is_hardware_selected(noise_model):
+                embeddings = all_embeddings[hardware_spec]["embeddings"]
+                Test.__check_embeddings(hardware_spec, embeddings)
+
             
+    @staticmethod
+    def check_selected_hardware():
+        c = 0
+        for hardware_spec in HardwareSpec:
+            noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_TERMALIZATION)
+
+            if is_hardware_selected(noise_model):
+                c += 1
+        assert c == 44
+
+    @staticmethod
+    def check_instruction_sets(experiment_id: ExperimentID):
+        all_embeddings = load_embeddings(experiment_id)
+        for hardware_spec in HardwareSpec:
+            noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_TERMALIZATION)
+            if is_hardware_selected(noise_model):
+                hardware_spec_embeddings = all_embeddings[hardware_spec]["embeddings"]
+                for embedding in hardware_spec_embeddings:
+                    actions = get_experiments_actions(noise_model, embedding, experiment_id)
+                    for action in actions:
+                        assert isinstance(action, POMDPAction)
+                        for instruction in action.instruction_sequence:
+                            assert isinstance(instruction, Instruction)
+                            if instruction not in noise_model.instructions_to_channel.keys():
+                                for instruction_ in noise_model.instructions_to_channel.keys():
+                                    print(instruction_)
+                                raise Exception(f"{instruction} not in noise model ({hardware_spec.value}) ({noise_model.basis_gates})")
+                            
+    @staticmethod
+    def test_pomdp(hardware_spec, embedding_index, experiment_id):
+        all_embeddings = load_embeddings(ExperimentID.IPMA)
+        embedding = all_embeddings[hardware_spec]["embeddings"][embedding_index]
+        
+        time = generate_pomdp(experiment_id, hardware_spec, embedding, f"{POMDP_OUTPUT_DIR}pomdps{experiment_id.value}/{hardware_spec.value}_{embedding_index}.txt")
+
+        print(f"time taken to build (seconds): {time}")
+        
+    @staticmethod
+    def dump_actions(hardware_spec, embedding_index, experiment_id):
+        noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_TERMALIZATION)
+        all_embeddings = load_embeddings(experiment_id)
+        embedding = all_embeddings[hardware_spec]['embeddings'][embedding_index]
+        actions = get_experiments_actions(noise_model, embedding, experiment_id)
+        
+        for action in actions:
+            assert isinstance(action, POMDPAction)
+            print(action.name, action.instruction_sequence)
+            assert len(action.instruction_sequence) == 1
+            target_instruction = action.instruction_sequence[0]
+            print(noise_model.instructions_to_channel[target_instruction])
+            print()
+            
+    @staticmethod
+    def print_pomdp(hardware_spec, embedding_index, experiment_id):
+        all_embeddings = load_embeddings(experiment_id)
+        embedding = all_embeddings[hardware_spec]['embeddings'][embedding_index]
+        pomdp = generate_pomdp(experiment_id, hardware_spec, embedding, "", return_pomdp=True)
+        assert isinstance(pomdp, POMDP)
+        pomdp.print_graph()
 
 
 
@@ -510,9 +641,29 @@ if __name__ == "__main__":
     Precision.update_threshold()
 
     if arg_backend == "embeddings":
+        # step 1
         generate_embeddings()   
+
+    if arg_backend == "all_pomdps":
+        # step 2: generate all pomdps
+        experiment_id = sys.argv[2]
+        assert experiment_id.lower() in ["ipma", "cxh"]
+        if experiment_id.lower() == "ipma":
+            experiment_id = ExperimentID.IPMA
+        else:
+            experiment_id = ExperimentID.CXH
+        generate_pomdps(experiment_id)
 
 
     if arg_backend == "test" :
-        Test.check_bell_state_creation()
+        pass
+        # Test.check_selected_hardware()
         # Test.check_embeddings()
+        # Test.check_embeddings_file()
+        # Test.check_bell_state_creation()
+        # Test.check_instruction_sets(ExperimentID.IPMA)
+        # Test.check_instruction_sets(ExperimentID.CXH)
+        Test.test_pomdp(HardwareSpec.ALMADEN, 0, ExperimentID.IPMA)
+        # Test.dump_actions(HardwareSpec.TENERIFE, 0, ExperimentID.IPMA)
+        # Test.print_pomdp(HardwareSpec.TENERIFE, 0, ExperimentID.IPMA)
+        
