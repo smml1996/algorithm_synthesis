@@ -632,6 +632,31 @@ class Test:
         pomdp = generate_pomdp(experiment_id, hardware_spec, embedding, "", return_pomdp=True)
         assert isinstance(pomdp, POMDP)
         pomdp.print_graph()
+        
+    @staticmethod
+    def parse_lambdas_file(path):
+        result = dict()
+        f = open(path)
+        lines = f.readlines()
+        assert lines[0] == "embedding,horizon,lambda,time\n" # first line is the heading
+        for line in lines[1:]:
+            elements = line.split(",")
+            embedding_index = int(elements[0])
+            horizon = int(elements[1])
+            lambda_ = float(elements[2])
+            if embedding_index not in result.keys():
+                result[embedding_index] = dict()
+            assert horizon not in result[embedding_index].keys()
+            result[embedding_index][horizon] = lambda_
+        f.close()
+    
+    
+    @staticmethod
+    def compare_lambdas(hardware_spec):
+        # this is only for experiment IPMA
+        old_lambdas = Test.parse_lambdas_file(f"/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/algorithm_synthesis/qalgorithm_synthesis/lambdas/{hardware_spec.value}.txt")
+        
+        
 
 
 
@@ -663,7 +688,8 @@ if __name__ == "__main__":
         # Test.check_bell_state_creation()
         # Test.check_instruction_sets(ExperimentID.IPMA)
         # Test.check_instruction_sets(ExperimentID.CXH)
-        Test.test_pomdp(HardwareSpec.ALMADEN, 0, ExperimentID.IPMA)
+        # Test.test_pomdp(HardwareSpec.ALMADEN, 0, ExperimentID.IPMA)
         # Test.dump_actions(HardwareSpec.TENERIFE, 0, ExperimentID.IPMA)
         # Test.print_pomdp(HardwareSpec.TENERIFE, 0, ExperimentID.IPMA)
+        Test.compare_lambdas(HardwareSpec.TENERIFE)
         
