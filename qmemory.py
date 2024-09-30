@@ -4,6 +4,7 @@ import math
 from typing import List, Optional
 from sympy import *
 
+from ibm_noise_models import Instruction
 from qstates import QuantumState, get_fidelity
 from qpu_utils import *
 from copy import deepcopy
@@ -105,13 +106,6 @@ def evaluate_op(op: Op, qubit: QuantumState, name: str, params=None, is_inverse:
         else:
             assert a0 == 1.0 or a1 == 1.0
             result.insert_amplitude(0, 1.0)
-    elif op == Op.XZ:
-        if is_inverse:
-            after_x = evaluate_op(Op.X, qubit, name)
-            return evaluate_op(Op.Z, after_x, name)
-        else:
-            after_z = evaluate_op(Op.Z, qubit, name)
-            return evaluate_op(Op.X, after_z, name)
     elif is_projector(op):
         if is_inverse:
             s0 = Symbol(f"proj0_{name}")
@@ -256,6 +250,7 @@ def get_seq_probability(quantum_state: QuantumState, seq: List[GateData], is_flo
     count_meas = 0
     for s in seq:
         assert isinstance(s, GateData)
+        assert s.label != Op.MEAS
         if s.label == Op.P0 or s.label == Op.P1:
             count_meas += 1
             if count_meas > 1:
@@ -265,7 +260,7 @@ def get_seq_probability(quantum_state: QuantumState, seq: List[GateData], is_flo
             return None, 0.0
 
     prob = get_fidelity(quantum_state, quantum_state)
-    assert prob <= 1.0
+    
     if is_floor:
         if Precision.is_lowerbound:
             prob = myfloor(simplify(prob), Precision.PRECISION)

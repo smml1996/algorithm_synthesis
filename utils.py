@@ -60,6 +60,12 @@ def are_matrices_equal(arr1, arr2):
                 return False
     return True
 
+def is_matrix_in_list(matrix, matrix_list):
+    for m in matrix_list:
+        if are_matrices_equal(matrix, m):
+            return True
+    return False
+
 class Pauli(Enum):
     I = 0
     X = 1

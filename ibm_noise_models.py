@@ -213,6 +213,13 @@ class Instruction:
         inverse_embedding = invert_dict(embedding)
         return str(inverse_embedding[self.target])
     
+    def get_params(self) -> str:
+        if self.params is None:
+            return "-"
+        if isinstance(self.params, list):
+            return ",".join([str(x) for x in self.params])
+        return self.params
+    
     def get_gate_data(self, is_meas_0=None):
         if self.is_meas_instruction():
             assert self.control is None
@@ -232,10 +239,10 @@ class Instruction:
     def __eq__(self, value: object) -> bool:
         if isinstance(value, KrausOperator):
             return False
-        return self.target == value.target and self.control == value.control and self.op == value.op and self.params == value.params
+        return self.target == value.target and self.control == value.control and self.op == value.op
     
     def __hash__(self):
-        return hash((self.op.value, self.target, self.control, self.params))
+        return hash((self.op.value, self.target, self.control))
     
     def serialize(self, for_json=False):
         if for_json:
@@ -248,6 +255,12 @@ class Instruction:
                 'op': self.op,
                 'params': self.params
             }
+        
+    def __str__(self) -> str:
+        return f"Instruction(target={self.target}, control={self.control}, op={self.op}, params={self.params})"
+    
+    def __repr__(self) -> str:
+        return self.__str__()
         
 class KrausOperator:
     def __init__(self, operators, qubit) -> None:
@@ -274,15 +287,16 @@ class KrausOperator:
             'ops': serialized_operators,
         }
     
-def is_identity(seq: List[Op]):
+def is_identity(seq: List[GateData]):
     for s in seq:
-        assert(isinstance(s, Instruction))
-        if s.op != Op.I:
+        assert(isinstance(s, GateData))
+        assert isinstance(s.label, Op)
+        if s.label != Op.I:
             return False
     return True
 
 class QuantumChannel:
-    def __init__(self, all_ins_sequences, all_probabilities, target_qubits, optimize=False, flatten=True) -> None:
+    def __init__(self, all_ins_sequences, all_probabilities, target_qubits, optimize=False, flatten=False) -> None:
         self.errors = [] # list of list of sequences of instructions/kraus operators
         self.probabilities = all_probabilities
         for seq in all_ins_sequences:
@@ -291,16 +305,31 @@ class QuantumChannel:
         assert len(self.errors) == len(self.probabilities)
 
         if optimize:
+            assert False # TODO: Remove me
             self.errors, self.probabilities = QuantumChannel.remove_duplicates(self.errors, self.probabilities)
 
+        if len(self.probabilities) == 0:
+            self.probabilities = [1.0]
+            self.errors = [[Instruction(target_qubits[0], Op.I).get_gate_data()]]
+        else:
+            assert len(self.errors) > 0
+
         if flatten:
+            assert False # TODO: Remove me
             self.flatten()
-        
-        self.__check_probabilities()
 
         self.estimated_success_prob = self._get_success_probability()
+        
+        self.__check_probabilities()
+        
+    def __str__(self) -> str:
+        return {"type": "QuantumChannel", "errors": self.errors, "probs":self.probabilities}.__str__()
+    
+    def __repr__(self):
+        return self.__str__()
 
     def __check_probabilities(self):
+        assert len(self.probabilities) > 0
         for p in self.probabilities:
             assert 0.0 < p <= 1.0
 
@@ -325,16 +354,17 @@ class QuantumChannel:
                     for seq in sequences:
                         seq.append(err)
             else:
+                assert False
                 assert isinstance(err, KrausOperator)
                 if len(sequences) == 0:
                     for matrix in err.operators:
-                        sequences.append([Instruction(err.target, Op.CUSTOM, params=matrix)])
+                        sequences.append([Instruction(err.target, Op.CUSTOM, params=matrix).get_gate_data()])
                 else:
                     all_seqs_temp = []
                     for seq in sequences:
                         for matrix in err.operators:
                             temp_seq = deepcopy(seq)
-                            temp_seq.append(Instruction(err.target, Op.CUSTOM, params=matrix))
+                            temp_seq.append(Instruction(err.target, Op.CUSTOM, params=matrix).get_gate_data())
                             all_seqs_temp.append(temp_seq)
 
                     sequences = all_seqs_temp
@@ -401,6 +431,7 @@ class QuantumChannel:
 
     @staticmethod
     def optimize_pauli_seq(seq):
+        assert False # TODO: remove this
         paulis_counts = dict()
         for instruction in seq:
             assert is_pauli(instruction.op)
@@ -451,6 +482,7 @@ class QuantumChannel:
     
     @staticmethod
     def translate_err_sequence(err_seq, target_qubits, optimize):
+        assert not optimize # TODO: remove me
         answer = []
         for err in err_seq:
             if err['name'] == 'pauli':
@@ -460,7 +492,7 @@ class QuantumChannel:
                 for (p, qubit) in zip(err['params'][0], err['qubits']):
                     op = get_op(p)
                     target_qubit = target_qubits[qubit]
-                    answer.append(Instruction(target_qubit, op))
+                    answer.append(Instruction(target_qubit, op).get_gate_data())
             elif err['name'] == 'kraus':
                 assert len(err['qubits']) == 1
                 answer.append(KrausOperator(err['params'], target_qubits[err['qubits'][0]]))
@@ -468,8 +500,9 @@ class QuantumChannel:
                 op = get_op(err['name'])
                 assert len(err['qubits']) == 1
                 target_qubit = target_qubits[err['qubits'][0]]
-                answer.append(Instruction(target_qubit, op))
+                answer.append(Instruction(target_qubit, op).get_gate_data())
         if optimize:
+            assert False # TODO: remove this
             return QuantumChannel.optimize_err_sequence(answer)
         else:
             return answer
@@ -484,21 +517,27 @@ class MeasChannel:
         assert len(zero_meas_err) == 2
         self.meas_errors[0] = dict()
         self.meas_errors[0][0] = zero_meas_err[0] # probability that measurement outcome is 0 given that the ideal outcome should have been 0
-        self.meas_errors[0][1] = zero_meas_err[1] # probability that measurement outcome is 0 given that the ideal outcome should have been 1
+        self.meas_errors[0][1] = zero_meas_err[1] # probability that measurement outcome is 1 given that the ideal outcome should have been 0
 
         one_meas_err = all_probabilities[1]
         assert len(one_meas_err) == 2
         self.meas_errors[1] = dict()
-        self.meas_errors[1][0] = one_meas_err[0] # probability that measurement outcome is 1 given that the ideal outcome should have been 0
-        self.meas_errors[1][1] = one_meas_err[1] # probability that measurement outcome is 0 given that the ideal outcome should have been 1
+        self.meas_errors[1][0] = one_meas_err[0] # probability that measurement outcome is 0 given that the ideal outcome should have been 1
+        self.meas_errors[1][1] = one_meas_err[1] # probability that measurement outcome is 1 given that the ideal outcome should have been 1
     
     def get_ind_probability(self, ideal_outcome: int, noisy_outcome: int):
         assert ideal_outcome in [0, 1]
         assert noisy_outcome in [0, 1]
-        return self.meas_errors[noisy_outcome][ideal_outcome]
+        return self.meas_errors[ideal_outcome][noisy_outcome]
     
     def serialize(self):
         return self.meas_errors
+    
+    def __str__(self) -> str:
+        return {"type": "MeasChannel", "errors": self.meas_errors}.__str__()
+    
+    def __repr__(self):
+        return self.__str__()
             
 
 class NoiseModel:
@@ -549,9 +588,34 @@ class NoiseModel:
             if error['type'] == "qerror":    
                 error_instructions = error['instructions']
                 self.instructions_to_channel[target_instruction] = QuantumChannel(error_instructions, probabilities, target_qubits)
+                
+                # TODO: remove this
+                # if op == Op.CNOT and target_instruction.control==1 and target_instruction.target== 0:
+                #     print(hardware_specification, target_instruction)
+                #     print(probabilities, "\n")
+                
             else:
                 assert error['type'] == "roerror"
                 self.instructions_to_channel[target_instruction] = MeasChannel(probabilities)
+        
+        # check that all single qubit gates exist
+        report = dict()
+        for qubit in range(self.num_qubits):
+            for op in self.basis_gates.value:
+                assert isinstance(op, Op)
+                if not is_multiqubit_gate(op):
+                    instruction_ = Instruction(qubit, op)
+                    if instruction_ not in self.instructions_to_channel.keys():
+                        if op not in report.keys():
+                            report[op] = 0
+                        report[op] += 1
+
+                        # create a perfect quantum channel for this operation
+                        self.instructions_to_channel[instruction_] = QuantumChannel([], [], [qubit])
+        self.report = report
+        # if len(report.keys()) > 0:
+        #     print(f"WARNING ({hardware_specification.value}) (qubits={self.num_qubits}) ({self.basis_gates.value}): no quantum channel found for {report}")
+
     
     def get_qubit_indegree(self, qubit) -> int:
         if qubit in self.qubit_to_indegree.keys():

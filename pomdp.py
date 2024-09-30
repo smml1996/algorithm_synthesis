@@ -67,7 +67,8 @@ class POMDPAction:
                 result[new_vertex_incorrect] = 0.0
 
             result[new_vertex_correct] += meas_prob * channel.get_ind_probability(is_meas1, is_meas1)
-            result[new_vertex_incorrect] += meas_prob * channel.get_ind_probability(is_meas1, not is_meas1)
+            result[new_vertex_incorrect] += meas_prob * channel.get_ind_probability( is_meas1, not is_meas1)
+            assert isclose(channel.get_ind_probability(is_meas1, is_meas1) + channel.get_ind_probability(is_meas1, not is_meas1), 1, rel_tol=Precision.rel_tol )
 
     def __handle_unitary_instruction(self, instruction: Instruction, channel: QuantumChannel, vertex: POMDPVertex, result: Dict[POMDPVertex, float]=None):
         """_summary_
@@ -77,9 +78,10 @@ class POMDPAction:
             channel (QuantumChannel): _description_
             vertex (POMDPVertex): _description_
             result (Dict[POMDPVertex, float], optional): _description_. Defaults to None.
-        """ 
-        new_qs = handle_write(vertex.quantum_state, instruction.get_gate_data())
+        """
+        
         for (index, err_seq) in enumerate(channel.errors): 
+            new_qs = handle_write(vertex.quantum_state, instruction.get_gate_data())
             errored_seq, seq_prob = get_seq_probability(new_qs, err_seq)
             if seq_prob > 0.0:
                 new_vertex = POMDPVertex(errored_seq, vertex.classical_state)
@@ -98,15 +100,14 @@ class POMDPAction:
 
         Returns:
             Dict[POMDPVertex, float]: returns a dictionary where the key is a successors POMDPVertex and the corresponding probability of reaching it from current_vertex
-        """        
-        if index_ins == self.instruction_sequence:
-            return dict()
+        """     
+        assert isinstance(current_vertex, POMDPVertex)  
+        if index_ins == len(self.instruction_sequence):
+            return {current_vertex: 1.0}
         assert index_ins < len(self.instruction_sequence)
 
         current_instruction = self.instruction_sequence[index_ins]
         instruction_channel = noise_model.instructions_to_channel[current_instruction]
-
-        result = dict()
 
         temp_result = dict()
         if current_instruction.is_meas_instruction():
@@ -114,20 +115,24 @@ class POMDPAction:
             self.__handle_measure_instruction(current_instruction, instruction_channel, current_vertex, is_meas1=False, result=temp_result)
 
             # get successors for 1-measurements
-            self.__handle_measure_instruction(current_instruction, instruction_channel, current_vertex, is_meas0=True, result=temp_result)
+            self.__handle_measure_instruction(current_instruction, instruction_channel, current_vertex, is_meas1=True, result=temp_result)
         else:
             self.__handle_unitary_instruction(current_instruction, instruction_channel, current_vertex, result=temp_result)
 
+        result = dict()
         for (successor, prob) in temp_result.items():
             successors2 = self.__dfs(noise_model, successor, index_ins=index_ins+1)
             for (succ2, prob2) in successors2.items():
                 if succ2 not in result.keys():
                     result[succ2] = 0.0
                 result[succ2] += prob*prob2
+        assert len(temp_result.keys()) > 0
+        if not isclose(sum(result.values()), 1.0, rel_tol=Precision.rel_tol):
+            raise Exception(f"Probabilities sum={sum(result.values())} ({self.instruction_sequence[index_ins]}): {result}")
         return result
 
     def get_successor_states(self, noise_model: NoiseModel, current_vertex: POMDPVertex) -> Dict[POMDPVertex, float]:
-        return self.__dfs(self, noise_model, [current_vertex], 0)
+        return self.__dfs(noise_model, current_vertex, 0)
 
 
 class POMDP:
@@ -174,15 +179,16 @@ class POMDP:
         f.write(f"GAMMA: {gamma_line}\n")
         f.write("BEGINACTIONS\n")
         for action in self.actions:
-            instructions = ",".join([f'Instruction.{i.name(problem_instance.embedding)}' for i in action.instructions])
+            instructions = ",".join([f'Instruction.{i.op.name}' for i in action.instruction_sequence])
         
-            controls = ",".join([str(c.get_control(problem_instance.embedding)) for c in action.instructions])
+            controls = ",".join([str(c.get_control(problem_instance.embedding)) for c in action.instruction_sequence])
             if controls == "":
                 controls = "-"
-            targets = ",".join([str(t.get_target(problem_instance.embedding)) for t in action.instructions])
+            targets = ",".join([str(t.get_target(problem_instance.embedding)) for t in action.instruction_sequence])
             if targets == "":
                 targets = "-"
-            f.write(f"{action.name} {instructions} {controls} {targets}\n")
+            params = ",".join([str(i.get_params()) for i in action.instruction_sequence])
+            f.write(f"{action.name} {instructions} {controls} {targets} {params}\n")
         f.write("ENDACTIONS\n")
         
         for (fromv, fromv_dict) in self.transition_matrix.items():
@@ -209,9 +215,9 @@ def default_guard(vertex: POMDPVertex, embedding: Dict[int, int], action: POMDPA
 
 def build_pomdp(actions: List[POMDPAction],
                 noise_model: NoiseModel, 
-                initial_state: Tuple[QuantumState, ClassicalState],
                 horizon: int,
                 embedding: Dict[int, int],
+                initial_state: Tuple[QuantumState, ClassicalState] = None,
                 initial_distribution: List[
                     Tuple[Tuple[QuantumState, ClassicalState], float]]=None, guard: Any = default_guard) -> POMDP:
     """_summary_
@@ -222,9 +228,9 @@ def build_pomdp(actions: List[POMDPAction],
         horizon (int): max horizon to explore
         initial_distribution (List[Tuple[Tuple[QuantumState, ClassicalState], float]], optional): A list of pairs in which the first element of the pair is a hybrid state, while the second element of the pair is a probability denoting the probability of transition from initial_state to the initial distribution. Defaults to None.
         guard (Any): POMDPVertex X embedding X action -> {true, false} says whether in the current set of physical qubits (embedding) of the current vertex (POMDPVertex), an action is permissible.
-    """    
-
-    assert isinstance(guard, Guard)
+    """
+    if initial_state is None:
+        initial_state = (QuantumState(0, qubits_used=list(embedding.values())), ClassicalState())
     if not isclose(sum([x for (_, x) in initial_distribution]), 1.0, rel_tol=Precision.rel_tol):
         raise Exception("Initial distribution must sum to 1")
     
@@ -252,6 +258,7 @@ def build_pomdp(actions: List[POMDPAction],
         if (current_horizon == horizon) or (current_v in visited):
             continue
         visited.append(current_v)
+        assert current_v not in graph.keys()
         if current_v not in graph.keys():
             graph[current_v] = dict()
 
@@ -262,11 +269,15 @@ def build_pomdp(actions: List[POMDPAction],
                 graph[current_v][action.name] = dict()
 
                 successors = action.get_successor_states(noise_model, current_v)
+                assert len(successors) > 0
                 for (succ, prob) in successors.items():
                     assert isinstance(succ, POMDPVertex)
+                    
                     new_vertex = create_new_vertex(all_vertices, succ.quantum_state, succ.classical_state)
-                    assert new_vertex not in graph[current_v][action.name].keys()
-                    graph[current_v][action.name][new_vertex] = prob
+                    # assert new_vertex not in graph[current_v][action.name].keys()
+                    if new_vertex not in graph[current_v][action.name].keys():
+                        graph[current_v][action.name][new_vertex] = 0.0
+                    graph[current_v][action.name][new_vertex] += prob
                     if new_vertex not in visited:
                         if current_horizon + 1 < horizon:
                             q.push((new_vertex, current_horizon + 1))

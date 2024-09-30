@@ -97,7 +97,7 @@ class QuantumState:
         
         # here we check for global phases: two states are equal if they only differ by a global factor
         inner_product = get_fidelity(self, other)
-        return abs(inner_product)
+        return isclose(abs(inner_product), 1) 
     
     def _get_physical_basis(self, virtual_basis: int):
         assert len(self.qubits_used) > 0
@@ -129,7 +129,7 @@ class QuantumState:
             physical_row = self._get_physical_basis(virtual_row) # this is the real basis
             for virtual_col in range(2**len(self.qubits_used)):
                 physical_col = self._get_physical_basis(virtual_col)
-                assert result[virtual_row][physical_col] == 0.0
+                assert result[virtual_row][virtual_col] == 0.0
                 result[virtual_row][virtual_col] = self.get_amplitude(physical_row) * conjugate(self.get_amplitude(physical_col))
 
         assert len(result) == 2**len(self.qubits_used)

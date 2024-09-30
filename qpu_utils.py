@@ -17,8 +17,13 @@ class Op(Enum):
     I = "I"
 
     SX = "SX"
+    SXD = "SXD"
+    S = "S"
+    SD = "SD"
     U3 = "U3"
     U2 = "U2"
+    TD = "TD"
+    T = "T"
     U1 = "U1"
 
     # HADAMARD
@@ -132,7 +137,7 @@ def get_num_controls(op: Op) -> int:
         raise Exception(f"multiqubit op not implemented ({op})")
     
 def is_projector(op: Op) -> bool:
-    if op in [Op.MEAS]:
+    if op in [Op.MEAS, Op.P0, Op.P1]:
         return True
     return False
     
