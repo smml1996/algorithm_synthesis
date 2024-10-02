@@ -655,10 +655,6 @@ class Test:
     def compare_lambdas(hardware_spec):
         # this is only for experiment IPMA
         old_lambdas = Test.parse_lambdas_file(f"/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/algorithm_synthesis/qalgorithm_synthesis/lambdas/{hardware_spec.value}.txt")
-        
-        
-
-
 
 if __name__ == "__main__":
     arg_backend = sys.argv[1]
