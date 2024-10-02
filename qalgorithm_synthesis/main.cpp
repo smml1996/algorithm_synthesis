@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
         }
 
         // we output the computed lambdas in the following file:
-        ofstream lambdas_file( output_dir + "lambdas.txt");
+        ofstream lambdas_file( output_dir + "lambdas.csv");
         lambdas_file << "embedding,horizon,lambda,time\n";
         lambdas_file.flush();
 
@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
                                 << (time_after-time_before) << "\n";
                     lambdas_file.flush();
                     write_algorithm_file(result.first,
-                                        output_dir+"algorithms/"+hardware+"_"+ to_string(embedding_index)+"_"+ to_string(horizon));
+                                        output_dir+"algorithms/"+hardware+"_"+ to_string(embedding_index)+"_"+ to_string(horizon)+".json");
                 }
             }
         }

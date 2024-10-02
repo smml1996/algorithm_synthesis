@@ -14,13 +14,6 @@ using json = nlohmann::json;
 
 using namespace std;
 
-struct Instruction {
-    int control{}; // only CX supported as a multi-qubit gate
-    int target{};
-    vector<string> params;
-    string instruction;
-};
-
 
 void split_str(string const &str, const char delim, vector<string> &out) {
     stringstream s(str);
@@ -82,24 +75,20 @@ public:
 
 class Algorithm {
 public:
-    Instruction instruction;
+    string action;
     Algorithm *next_ins;
     Algorithm *case0; // We assume that single-qubit measurements are possible only, therefore only two cases
     Algorithm *case1;
 
-    Algorithm(Instruction instruction, Algorithm *next_ins, Algorithm *case0, Algorithm *case1){
-        this->instruction = std::move(instruction);
+    Algorithm(string action, Algorithm *next_ins, Algorithm *case0, Algorithm *case1){
+        this->action = std::move(action);
         this->next_ins = next_ins;
         this->case0 = case0;
         this->case1 = case1;
     }
 
     Algorithm(json data){
-        auto instruction = Instruction();
-        instruction.instruction = data["instruction"];
-        instruction.control = data["control"];
-        instruction.target = data["target"];
-        this->instruction = instruction;
+        this->action = data["action"];
 
         if (data["next"] == -1){
             this->next_ins = nullptr;
@@ -146,19 +135,8 @@ public:
             serialized_case1 = this->case1->serialize();
         }
 
-        json control;
-        if (this->instruction.control == -1) {
-            control = "None";
-        } else {
-            control = this->instruction.control;
-        }
-        assert(this->instruction.target != -1);
-
         json result;
-        result["instruction"] = this->instruction.instruction;
-        result["target"] = this->instruction.target;
-        result["control"] = control;
-        result["params"] = this->instruction.params;
+        result["action"] = this->action;
         result["next"] = serialized_next_ins;
         result["case0"] = serialized_case0;
         result["case1"] = serialized_case1; 
