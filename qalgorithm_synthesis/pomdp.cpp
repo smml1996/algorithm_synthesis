@@ -56,25 +56,7 @@ public:
     }
 };
 
-pair<int, int> check_states_integrity(const string &line) {
-    vector<string> out1;
-    split_str(line, ' ', out1);
-
-    assert(out1.size() == 2);
-    assert(out1[0] == "STATES:");
-
-    vector<string> out2;
-    split_str(out1[1], ',', out2);
-    int prev = stoi(out2[0]);
-    int state0 = prev;
-    for (int i = 1; i < out2.size(); i++) {
-        assert(stoi(out2[i]) == prev + 1);
-        prev = stoi(out2[i]);
-    }
-    return make_pair(state0, prev); // all the states-ids are within this range
-}
-
-void fill_pomdp_gamma(POMDP &pomdp, const pair<int, int> &states_range, const string &line){
+void fill_pomdp_gamma(POMDP &pomdp, const string &line){
     vector<string> out1;
     split_str(line, ' ', out1);
 
@@ -90,8 +72,6 @@ void fill_pomdp_gamma(POMDP &pomdp, const pair<int, int> &states_range, const st
         assert(out3.size() == 2);
         int v = stoi(out3[0]);
         int obs = stoi(out3[1]);
-        assert(v >= states_range.first);
-        assert(v <= states_range.second);
         pomdp.insert_gamma(v, obs);
     }
 }
@@ -120,8 +100,7 @@ POMDP parse_pomdp_file (const string& fname) {
     if (getline (f, line)) {
         assert (line == "BEGINPOMDP");
     } else {
-        cout << "error POMDP reading file" << endl;
-        assert(false);
+        throw std::runtime_error("Error reading POMDP file: "+ fname);
     }
 
 
@@ -135,9 +114,7 @@ POMDP parse_pomdp_file (const string& fname) {
     pomdp.initial_state = initial_state;
 
     // STATES:
-    getline(f, line);
-    pair<int, int> states_range = check_states_integrity(line); // this is the line of all the states of the POMDP
-    assert(initial_state == states_range.first);
+    getline(f, line); // this is the line of all the states of the POMDP
 
     // target vertices
     getline(f, line);
@@ -145,7 +122,7 @@ POMDP parse_pomdp_file (const string& fname) {
 
     // GAMMA:
     getline(f, line);
-    fill_pomdp_gamma(pomdp, states_range, line);
+    fill_pomdp_gamma(pomdp, line);
 
     // Actions
     getline(f, line);
@@ -154,10 +131,10 @@ POMDP parse_pomdp_file (const string& fname) {
     while(line != "ENDACTIONS"){
         vector<string> elements;
         split_str(line, ' ', elements);
-        assert(elements.size() == 4);
-        string channel_name = elements[0];
-        assert(pomdp.actions_to_instructions.find(channel_name) == pomdp.actions_to_instructions.end()); // it should be a unique name that we havent already used
-        pomdp.actions_to_instructions[channel_name] = vector<Instruction>();
+        assert(elements.size() == 5);
+        string action_name = elements[0];
+        assert(pomdp.actions_to_instructions.find(action_name) == pomdp.actions_to_instructions.end()); // it should be a unique name that we havent already used
+        pomdp.actions_to_instructions[action_name] = vector<Instruction>();
 
         vector<string> instructions;
         split_str(elements[1], ',', instructions);
@@ -168,12 +145,16 @@ POMDP parse_pomdp_file (const string& fname) {
         vector<string> targets;
         split_str(elements[3], ',', targets);
 
+        vector<string> parameters;
+        split_str(elements[4], ',', parameters);
+
         assert(instructions.size() == controls.size());
         assert(targets.size() == controls.size());
+        assert(parameters.size() == targets.size());
 
         for (int i = 0; i < instructions.size(); i++) {
             int control;
-            if (controls[i] == "None") {
+            if (controls[i] == "-") {
                 control = -1;
             } else {
                 control = stoi(controls[i]);
@@ -185,8 +166,12 @@ POMDP parse_pomdp_file (const string& fname) {
             ins.instruction = instructions[i];
             ins.target = target;
             ins.control = control;
+            if (!((parameters[i].size() == 1) && (parameters[i][0] == '-'))){ // check there are parameters
+                split_str(parameters[i], ';', ins.params);
+            }
+            
 
-            pomdp.actions_to_instructions[channel_name].push_back(ins);
+            pomdp.actions_to_instructions[action_name].push_back(ins);
         }
 
         getline(f, line);

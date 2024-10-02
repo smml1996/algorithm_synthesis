@@ -1,0 +1,8 @@
+{
+    "name": "tenerife_test",
+    "embeddings_path": "/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/algorithm_synthesis/qalgorithm_synthesis/configs/embeddings_tenerife.json",
+    "pomdps_path": "/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/synthesis/bitflip/pomdps0/",
+    "min_horizon": 4,
+    "max_horizon": 5,
+    "output_dir": "/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/synthesis/bitflip/"
+}
