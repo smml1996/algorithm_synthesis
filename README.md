@@ -79,5 +79,5 @@ The analysis of synthesized algorithms is performed in the notebooks `pomdp_gen/
 #### Algorithm synthesis
 Navigate to the folder `qalgorithm_synthesis`. Given a quantum hardware, e.g. `almaden` we can synthesize the algorithms for all horizons and embeddings by running
 ```sh
-./qprogram_synthesis almaden
+./qprogram_synthesis bellmaneq almaden
 ```
