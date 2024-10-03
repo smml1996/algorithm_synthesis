@@ -179,16 +179,7 @@ class POMDP:
         f.write(f"GAMMA: {gamma_line}\n")
         f.write("BEGINACTIONS\n")
         for action in self.actions:
-            instructions = ",".join([f'Instruction.{i.op.name}' for i in action.instruction_sequence])
-        
-            controls = ",".join([str(c.get_control(problem_instance.embedding)) for c in action.instruction_sequence])
-            if controls == "":
-                controls = "-"
-            targets = ",".join([str(t.get_target(problem_instance.embedding)) for t in action.instruction_sequence])
-            if targets == "":
-                targets = "-"
-            params = ",".join([str(i.get_params()) for i in action.instruction_sequence])
-            f.write(f"{action.name} {instructions} {controls} {targets} {params}\n")
+            f.write(f"{action.name}\n")
         f.write("ENDACTIONS\n")
         
         for (fromv, fromv_dict) in self.transition_matrix.items():

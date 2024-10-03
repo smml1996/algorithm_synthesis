@@ -684,8 +684,9 @@ if __name__ == "__main__":
         # Test.check_bell_state_creation()
         # Test.check_instruction_sets(ExperimentID.IPMA)
         # Test.check_instruction_sets(ExperimentID.CXH)
-        # Test.test_pomdp(HardwareSpec.ALMADEN, 0, ExperimentID.IPMA)
+        Test.test_pomdp(HardwareSpec.TENERIFE, 0, ExperimentID.IPMA)
+        Test.test_pomdp(HardwareSpec.TENERIFE, 1, ExperimentID.IPMA)
         # Test.dump_actions(HardwareSpec.TENERIFE, 0, ExperimentID.IPMA)
         # Test.print_pomdp(HardwareSpec.TENERIFE, 0, ExperimentID.IPMA)
-        Test.compare_lambdas(HardwareSpec.TENERIFE)
+        # Test.compare_lambdas(HardwareSpec.TENERIFE)
         

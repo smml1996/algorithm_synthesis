@@ -217,7 +217,7 @@ class Instruction:
         if self.params is None:
             return "-"
         if isinstance(self.params, list):
-            return ",".join([str(x) for x in self.params])
+            return ";".join([str(x) for x in self.params])
         return self.params
     
     def get_gate_data(self, is_meas_0=None):
