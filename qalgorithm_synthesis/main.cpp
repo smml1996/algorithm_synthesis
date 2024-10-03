@@ -11,8 +11,7 @@ using json = nlohmann::json;
 
 using namespace  std;
 
-auto all_keys_required = {"name", "min_horizon", "max_horizon", "output_dir", 
-"pomdps_path"};
+auto all_keys_required = {"name", "min_horizon", "max_horizon", "output_dir"};
 
 /// @brief 
 /// @param argc 
@@ -44,12 +43,11 @@ int main(int argc, char **argv) {
     string experiment_id = config_json["experiment_id"];
     int min_horizon = config_json["min_horizon"];
     int max_horizon = config_json["max_horizon"];
-    filesystem::path all_pomdps_path = config_json["pomdps_path"];
     filesystem::path output_dir = config_json["output_dir"];
     filesystem::path embeddings_file_ = "embeddings.json";
     filesystem::path embeddings_path  = output_dir / embeddings_file_;
     
-    filesystem::path pomdps_path = all_pomdps_path / experiment_id;
+    filesystem::path pomdps_path = output_dir / "pomdps/";
     // check embedding file exists
     if (!std::filesystem::exists(embeddings_path)) {
         throw std::runtime_error("Embedding files does not exist");
@@ -88,9 +86,9 @@ int main(int argc, char **argv) {
         }
 
         // we output the computed lambdas in the following file:
-        filesystem::path lambdas_file_path = output_dir / (experiment_id + "-"+experiment_name + "_lambdas.csv");
+        filesystem::path lambdas_file_path = output_dir / "lambdas.csv";
         ofstream lambdas_file(lambdas_file_path);
-        lambdas_file << "embedding,horizon,lambda,time\n";
+        lambdas_file << "hardware,embedding,horizon,lambda,time\n";
         lambdas_file.flush();
 
         for (auto& el : all_embeddings.items()) {
@@ -109,7 +107,7 @@ int main(int argc, char **argv) {
                     auto result = get_bellman_value(pomdp, initial_belief, horizon);
                     long time_after = time(nullptr);
                     auto lambda = result.second;
-                    lambdas_file << embedding_index << "," << horizon << "," << lambda << ","
+                    lambdas_file << hardware << "," << embedding_index << "," << horizon << "," << lambda << ","
                                 << (time_after-time_before) << "\n";
                     lambdas_file.flush();
                     filesystem::path instance_algo_path = algorithms_path / (hardware+"_"+ to_string(embedding_index)+"_"+ to_string(horizon)+".json");
@@ -126,7 +124,7 @@ int main(int argc, char **argv) {
             throw std::runtime_error("algorithms file does not exist");
         } 
 
-        filesystem::path accuracies_file_path = output_dir / (experiment_id + "-" +experiment_name + "-exact_accuracies.csv");
+        filesystem::path accuracies_file_path = output_dir / "exact_accuracies.csv";
         ofstream output_file(accuracies_file_path);
         output_file << "horizon,diff_index,real_hardware,acc\n";
 

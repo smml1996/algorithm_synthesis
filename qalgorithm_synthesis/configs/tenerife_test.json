@@ -1,9 +1,9 @@
 {
     "name": "tenerifeTest",
     "experiment_id": "ipma",
-    "pomdps_path": "/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/synthesis/bitflip/pomdps0/",
     "min_horizon": 4,
     "max_horizon": 5,
     "output_dir": "/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/synthesis/bitflip/",
-    "algorithms_file": ""
+    "algorithms_file": "",
+    "hardware": ["fake_tenerife"]
 }
