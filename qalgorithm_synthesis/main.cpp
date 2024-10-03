@@ -40,6 +40,7 @@ int main(int argc, char **argv) {
         std::cout << el.key() << " : " << el.value() << "\n\n";
     }
 
+    string experiment_name = config_json["name"];
     int min_horizon = config_json["min_horizon"];
     int max_horizon = config_json["max_horizon"];
     string embeddings_path = config_json["embeddings_path"];
@@ -69,7 +70,6 @@ int main(int argc, char **argv) {
     
     if ( arg1.compare("bellmaneq") == 0) {
         
-        
         // create directory where algorithms should be stored (if it does not already exists)
         if (!std::filesystem::exists(output_dir+"algorithms/")) {
             std::cout << "algorithms dir does not exists. Creating directory..." << std::endl;
@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
         }
 
         // we output the computed lambdas in the following file:
-        ofstream lambdas_file( output_dir + "lambdas.csv");
+        ofstream lambdas_file( output_dir +"["+ experiment_name +"]lambdas.csv");
         lambdas_file << "embedding,horizon,lambda,time\n";
         lambdas_file.flush();
 
@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
             throw std::runtime_error("algorithms file does not exist");
         } 
 
-        ofstream output_file(output_dir + "exact_accuracies.csv");
+        ofstream output_file(output_dir +"[" +experiment_name+"]exact_accuracies.csv");
         output_file << "horizon,diff_index,real_hardware,acc\n";
 
         for (int horizon = min_horizon; horizon < max_horizon; horizon++) {
