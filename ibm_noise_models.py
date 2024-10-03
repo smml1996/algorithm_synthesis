@@ -9,7 +9,7 @@ from qiskit_aer import AerSimulator
 from qpu_utils import *
 import json
 
-from utils import Precision, invert_dict, myceil, myfloor
+from utils import CONFIG_KEYS, Precision, find_enum_object, invert_dict, myceil, myfloor
 
 
 class HardwareSpec(Enum):
@@ -64,6 +64,29 @@ class HardwareSpec(Enum):
     def __repr__(self) -> str:
         return self.__str__()
 
+def load_config_file(path: str, experimentID: Enum):
+    f = open(path)
+    result = json.load(f)
+    for k in CONFIG_KEYS:
+        if k not in result.keys():
+            raise Exception(f"{k} not in config file")
+    assert isinstance(result["min_horizon"], int)
+    assert isinstance(result["max_horizon"], int)
+    
+    if result["output_dir"][-1] != "/" :
+        result["output_dir"] += "/"
+     
+    experiment_id = find_enum_object(result["experiment_id"], experimentID)
+    if experiment_id is None:
+        raise Exception(f"Invalid experiment_id (available values {[x.value for x in experimentID]})")
+    
+    if result["hardware"] == ["all"] or result["hardware"] == "all":
+        result["hardware"] = [x.value for x in HardwareSpec]
+    result["experiment_id"] = experiment_id
+    f.close()
+    
+    print(result)
+    return result
 
 def get_ibm_noise_model(hardware_spec: HardwareSpec, thermal_relaxation=True) -> IBMNoiseModel:
     backend_ = hardware_spec

@@ -1,12 +1,15 @@
 from cmath import isclose
 from collections import deque
 from contextlib import contextmanager
+import json
 from math import ceil, floor
 import signal
 from typing import *
 from enum import Enum
 import numpy as np
 from sympy import I, conjugate
+
+CONFIG_KEYS = ["name", "experiment_id", "min_horizon", "max_horizon", "output_dir", "algorithms_file", "hardware"]
 
 def myfloor(val, d):
     m = 10**d
@@ -15,6 +18,12 @@ def myfloor(val, d):
 def myceil(val, d):
     m = 10**d
     return ceil(val * m)/m
+
+def find_enum_object(val: str, Obj: Enum):
+    for element in Obj:
+        if val == element.value:
+            return element
+    return None
 
 class Queue:
     queue: deque
