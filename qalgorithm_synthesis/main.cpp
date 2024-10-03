@@ -11,7 +11,7 @@ using json = nlohmann::json;
 
 using namespace  std;
 
-auto all_keys_required = {"name", "embeddings_path", "min_horizon", "max_horizon", "output_dir", 
+auto all_keys_required = {"name", "min_horizon", "max_horizon", "output_dir", 
 "pomdps_path"};
 
 /// @brief 
@@ -41,11 +41,15 @@ int main(int argc, char **argv) {
     }
 
     string experiment_name = config_json["name"];
+    string experiment_id = config_json["experiment_id"];
     int min_horizon = config_json["min_horizon"];
     int max_horizon = config_json["max_horizon"];
-    string embeddings_path = config_json["embeddings_path"];
-    string output_dir = config_json["output_dir"];
-    string pomdps_path = config_json["pomdps_path"];
+    filesystem::path all_pomdps_path = config_json["pomdps_path"];
+    filesystem::path output_dir = config_json["output_dir"];
+    filesystem::path embeddings_file_ = "embeddings.json";
+    filesystem::path embeddings_path  = output_dir / embeddings_file_;
+    
+    filesystem::path pomdps_path = all_pomdps_path / experiment_id;
     // check embedding file exists
     if (!std::filesystem::exists(embeddings_path)) {
         throw std::runtime_error("Embedding files does not exist");
@@ -69,11 +73,12 @@ int main(int argc, char **argv) {
     }
     
     if ( arg1.compare("bellmaneq") == 0) {
-        
+  
+        filesystem::path algorithms_path = output_dir / "algorithms";
         // create directory where algorithms should be stored (if it does not already exists)
-        if (!std::filesystem::exists(output_dir+"algorithms/")) {
+        if (!std::filesystem::exists(algorithms_path)) {
             std::cout << "algorithms dir does not exists. Creating directory..." << std::endl;
-            if (std::filesystem::create_directory(output_dir+"algorithms/")) {
+            if (std::filesystem::create_directory(algorithms_path)) {
                 std::cout << "algorithms directory created successfully." << std::endl;
             } else {
                 std::cout << "Failed to create algorithms directory or it already exists.\n" << std::endl;
@@ -83,7 +88,8 @@ int main(int argc, char **argv) {
         }
 
         // we output the computed lambdas in the following file:
-        ofstream lambdas_file( output_dir +"["+ experiment_name +"]lambdas.csv");
+        filesystem::path lambdas_file_path = output_dir / (experiment_id + "-"+experiment_name + "_lambdas.csv");
+        ofstream lambdas_file(lambdas_file_path);
         lambdas_file << "embedding,horizon,lambda,time\n";
         lambdas_file.flush();
 
@@ -94,7 +100,8 @@ int main(int argc, char **argv) {
             int count = el.value()["count"];
 
             for (int embedding_index = 0; embedding_index < count; embedding_index ++) {
-                auto pomdp = parse_pomdp_file(pomdps_path+hardware+"_"+ to_string(embedding_index)) ;
+                filesystem::path instance_pomdp_path = pomdps_path / (hardware+"_"+ to_string(embedding_index) + ".txt");
+                auto pomdp = parse_pomdp_file(instance_pomdp_path);
                 Belief initial_belief = get_initial_belief(pomdp);
                 for (int horizon = min_horizon; horizon < max_horizon+1; horizon++) {
                     cout << "Running experiment: " << hardware << embedding_index << " h="<< horizon << endl;
@@ -105,8 +112,8 @@ int main(int argc, char **argv) {
                     lambdas_file << embedding_index << "," << horizon << "," << lambda << ","
                                 << (time_after-time_before) << "\n";
                     lambdas_file.flush();
-                    write_algorithm_file(result.first,
-                                        output_dir+"algorithms/"+hardware+"_"+ to_string(embedding_index)+"_"+ to_string(horizon)+".json");
+                    filesystem::path instance_algo_path = algorithms_path / (hardware+"_"+ to_string(embedding_index)+"_"+ to_string(horizon)+".json");
+                    write_algorithm_file(result.first, instance_algo_path);
                 }
             }
         }
@@ -119,7 +126,8 @@ int main(int argc, char **argv) {
             throw std::runtime_error("algorithms file does not exist");
         } 
 
-        ofstream output_file(output_dir +"[" +experiment_name+"]exact_accuracies.csv");
+        filesystem::path accuracies_file_path = output_dir / (experiment_id + "-" +experiment_name + "-exact_accuracies.csv");
+        ofstream output_file(accuracies_file_path);
         output_file << "horizon,diff_index,real_hardware,acc\n";
 
         for (int horizon = min_horizon; horizon < max_horizon; horizon++) {
@@ -137,8 +145,8 @@ int main(int argc, char **argv) {
                     string hardware = el.key();
                     int count = el.value()["count"];
                     for (int embedding_index = 0; embedding_index < count; embedding_index ++) {
-                        auto pomdp = parse_pomdp_file(
-                                pomdps_path+hardware+"_"+ to_string(embedding_index));
+                        filesystem::path instance_pomdp_path = pomdps_path / (hardware+"_"+ to_string(embedding_index) + ".txt");
+                        auto pomdp = parse_pomdp_file(instance_pomdp_path);
                         Belief initial_belief = get_initial_belief(pomdp);
                         auto acc = get_algorithm_acc(pomdp, algorithm, initial_belief);
                         output_file << horizon << "," << alg_index << "," << hardware << embedding_index << "," << acc << "\n";

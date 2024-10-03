@@ -1,6 +1,6 @@
 {
-    "name": "tenerife_test",
-    "embeddings_path": "/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/algorithm_synthesis/qalgorithm_synthesis/configs/embeddings_tenerife.json",
+    "name": "tenerifeTest",
+    "experiment_id": "ipma",
     "pomdps_path": "/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/synthesis/bitflip/pomdps0/",
     "min_horizon": 4,
     "max_horizon": 5,

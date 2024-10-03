@@ -148,8 +148,6 @@ public:
 void write_algorithm_file(Algorithm *algorithm, const string &output_path) {
     json serialized_algorithm = algorithm->serialize();
     ofstream f(output_path);
-
-    
     f << serialized_algorithm.dump(4) << endl;
     f.close();
 }

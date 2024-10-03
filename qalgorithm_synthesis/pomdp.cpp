@@ -102,7 +102,7 @@ void fill_target_vertices(POMDP &pomdp, const string &line) {
 POMDP parse_pomdp_file (const string& fname) {
     POMDP pomdp;
 
-    ifstream f(fname + ".txt");
+    ifstream f(fname);
     string line;
     if (getline (f, line)) {
         assert (line == "BEGINPOMDP");
