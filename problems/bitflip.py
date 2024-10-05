@@ -762,8 +762,31 @@ def generate_server_sbatchs():
     f = open("server_script.sh", "w")
     batches = get_batches()
     for num_qubits in batches.keys():
-        f.write(f"sbatch sscript.sh {num_qubits}")
+        f.write(f"sbatch sscript.sh {num_qubits}\n")
     f.close()
+    
+def generate_server_synthesis_script():
+    f_ipma = open("../algorithm_synthesis/qalgorithm_synthesis/ipma_script.sh", "w")
+    f_cxh = open("../algorithm_synthesis/qalgorithm_synthesis/cxh.sh", "w")
+    batches = get_batches()
+    for num_qubits in batches.keys():
+        f_ipma.write(f"sbatch experiments_script.sh ./input/ipma_b{num_qubits}.input\n")
+        f_cxh.write(f"sbatch experiments_script.sh ./input/cxh_b{num_qubits}.input\n")
+        
+            
+    f_ipma.close()
+    f_cxh.close()
+    
+def generate_input_files_for_script():
+    batches = get_batches()
+    for num_qubits in batches.keys():
+        f_ipma = open(f"../algorithm_synthesis/qalgorithm_synthesis/inputs/ipma_b{num_qubits}.input", "w")
+        f_cxh = open(f"../algorithm_synthesis/qalgorithm_synthesis/inputs/cxh_b{num_qubits}.input", "w")
+        
+        f_ipma.write(f"/nfs/scistore16/tomgrp/smuroyal/im_time_evolution/configs/ipma_b{num_qubits}.json\n")
+        f_cxh.write(f"/nfs/scistore16/tomgrp/smuroyal/im_time_evolution/configs/cxh_b{num_qubits}.json\n")
+        f_ipma.close()
+        f_cxh.close()
     
 if __name__ == "__main__":
     arg_backend = sys.argv[1]
@@ -810,8 +833,7 @@ if __name__ == "__main__":
 
     elif arg_backend == "test" :
         pass     
-        generate_pomdp(BitflipExperimentID.CXH, HardwareSpec.ATHENS, 
-                {0: 0, 1: 1, 2: 2}, "", return_pomdp=True)
+        # generate_pomdp(BitflipExperimentID.CXH, HardwareSpec.ATHENS, {0: 0, 1: 1, 2: 2}, "", return_pomdp=True)
         # Test.check_selected_hardware()
         # Test.check_embeddings()
         # Test.check_embeddings_file()
@@ -825,7 +847,9 @@ if __name__ == "__main__":
         # Test.compare_lambdas(HardwareSpec.TENERIFE)
         # config_path = sys.argv[2]
         # Test.ibm_run(config_path)
-        generate_server_sbatchs()
+        # generate_server_sbatchs()
+        generate_server_synthesis_script()
+        generate_input_files_for_script()
     else:
         raise Exception("argument does not run any procedure in this script")
         
