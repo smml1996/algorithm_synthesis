@@ -1,0 +1,10 @@
+sbatch experiments_script.sh ./input/ipma_b5.input
+sbatch experiments_script.sh ./input/ipma_b20.input
+sbatch experiments_script.sh ./input/ipma_b7.input
+sbatch experiments_script.sh ./input/ipma_b27.input
+sbatch experiments_script.sh ./input/ipma_b65.input
+sbatch experiments_script.sh ./input/ipma_b28.input
+sbatch experiments_script.sh ./input/ipma_b16.input
+sbatch experiments_script.sh ./input/ipma_b15.input
+sbatch experiments_script.sh ./input/ipma_b53.input
+sbatch experiments_script.sh ./input/ipma_b127.input
