@@ -758,6 +758,13 @@ def gen_paper_configs():
         json.dump(config_cxh, cxh_file, indent=4)
         cxh_file.close()
     
+def generate_server_sbatchs():
+    f = open("server_script.sh", "w")
+    batches = get_batches()
+    for num_qubits in batches.keys():
+        f.write(f"sbatch sscript.sh {num_qubits}")
+    f.close()
+    
 if __name__ == "__main__":
     arg_backend = sys.argv[1]
     Precision.PRECISION = MAX_PRECISION
@@ -777,16 +784,17 @@ if __name__ == "__main__":
             generate_embeddings(f"../configs/ipma_b{num_qubits}.json")
             generate_embeddings(f"../configs/cxh_b{num_qubits}.json")
     elif arg_backend == "all_pomdps":
+        # TODO: clean me up
         # step 2: generate all pomdps
-        # config_path = sys.argv[2]
+        config_path = sys.argv[2]
         # generate_pomdps(config_path)
         
         # generate paper embeddings
-        batches = get_batches()
+        # batches = get_batches()
         
-        for num_qubits in batches.keys():
+        # for num_qubits in batches.keys():
             # generate_pomdps(f"../configs/ipma_b{num_qubits}.json")
-            generate_pomdps(f"../configs/cxh_b{num_qubits}.json")
+        generate_pomdps(f"../configs/cxh_b{config_path}.json")
         
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)
     
@@ -817,7 +825,7 @@ if __name__ == "__main__":
         # Test.compare_lambdas(HardwareSpec.TENERIFE)
         # config_path = sys.argv[2]
         # Test.ibm_run(config_path)
-        
+        generate_server_sbatchs()
     else:
         raise Exception("argument does not run any procedure in this script")
         
