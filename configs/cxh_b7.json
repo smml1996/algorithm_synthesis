@@ -1,0 +1,16 @@
+{
+    "name": "B7",
+    "experiment_id": "cxh",
+    "min_horizon": 4,
+    "max_horizon": 7,
+    "output_dir": "../synthesis/bitflip/cxh/B7/",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_perth",
+        "fake_lagos",
+        "fake_nairobi",
+        "fake_casablanca",
+        "fake_oslo",
+        "fake_jakarta"
+    ]
+}

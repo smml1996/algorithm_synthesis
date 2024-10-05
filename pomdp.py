@@ -130,6 +130,9 @@ class POMDPAction:
         if not isclose(sum(result.values()), 1.0, rel_tol=Precision.rel_tol):
             raise Exception(f"Probabilities sum={sum(result.values())} ({self.instruction_sequence[index_ins]}): {result}")
         return result
+    
+    def get_target(self):
+        return self.instruction_sequence[-1].target
 
     def get_successor_states(self, noise_model: NoiseModel, current_vertex: POMDPVertex) -> Dict[POMDPVertex, float]:
         return self.__dfs(noise_model, current_vertex, 0)

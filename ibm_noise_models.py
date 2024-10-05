@@ -1,5 +1,6 @@
 from copy import deepcopy
 from enum import Enum
+from math import pi
 from typing import Any, Dict, List, Optional, Set
 import numpy as np
 from qiskit import QuantumCircuit, transpile
@@ -209,6 +210,9 @@ class Instruction:
         if target == control:
             raise Exception("target is in controls")
         self.control = control
+        if params is not None:
+            for pa in params:
+                assert isinstance(pa, float)
         self.params = params
         self.name = name
 
@@ -683,38 +687,38 @@ class NoiseModel:
         f.write(json.dumps(self.serialize(), indent=4))
         f.close()
 
-def instruction_to_ibm(qc, basis_gates, instruction):
-    assert isinstance(instruction, Instruction)
-    assert isinstance(qc, QuantumCircuit)
-    if instruction == Instruction.X:
-        assert 'x' in basis_gates
-        qc.x(instruction.target)
-    elif instruction == Instruction.Z:
-        assert 'z' in basis_gates
-        qc.z(instruction.target)
-    elif instruction == Instruction.H:
-        assert 'h' in 'basis_gates'
-        qc.h(instruction.target)
-    elif instruction == Instruction.MEAS:
-        qc.measure(instruction.target, instruction.target)
-    elif instruction == Instruction.CNOT:
-        assert 'cx' in basis_gates
-        assert instruction.control is not None
-        qc.cx(instruction.control, instruction.target)
-    elif instruction == Instruction.I:
-        pass
-    else:
-        raise Exception(f"Instruction {instruction.name} could not be translated to IBM instruction. Missing implementation.")
+def instruction_to_ibm(qc, instruction_sequence):
+    for instruction in instruction_sequence:
+        assert isinstance(instruction, Instruction)
+        assert isinstance(qc, QuantumCircuit)
+        if instruction.op == Op.X:
+            qc.x(instruction.target)
+        elif instruction.op == Op.Z:
+            qc.z(instruction.target)
+        elif instruction.op == Op.MEAS:
+            qc.measure(instruction.target, instruction.target)
+        elif instruction.op == Op.CNOT:
+            assert instruction.control is not None
+            qc.cx(instruction.control, instruction.target)
+        elif instruction.op == Op.U3:
+            qc.u(instruction.params[0], instruction.params[1], instruction.params[2], instruction.target)
+        elif instruction.op == Op.U2:
+            qc.u(pi/2, instruction.params[0], instruction.params[1], instruction.target)
+        elif instruction.op == Op.SX:
+            qc.sx(instruction.target)
+        elif instruction.op == Op.RZ:
+            qc.rz(instruction.params[0], instruction.target)
+        else:
+            raise Exception(f"Instruction {instruction.name} could not be translated to IBM instruction. Missing implementation.")
     
-def ibm_simulate_circuit(qc: QuantumCircuit, noise_model, shots, initial_layout, seed=1):
+def ibm_simulate_circuit(qc: QuantumCircuit, noise_model, initial_layout, seed=1):
     # Create noisy simulator backend
     sim_noise = AerSimulator(method ='statevector', noise_model=noise_model)
-
     # Transpile circuit for noisy basis gates
     circ_tnoise = transpile(qc, sim_noise, optimization_level=0, initial_layout=initial_layout)
     # Run and get counts
     
-    result = sim_noise.run(circ_tnoise, run_options={"shots":2000, "seed_simulator": seed}).result()
+    result = sim_noise.run(circ_tnoise, run_options={"seed_simulator": seed}).result()
     
     return np.asarray(result.data()['res'])
 

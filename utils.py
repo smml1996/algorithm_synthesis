@@ -368,3 +368,10 @@ def get_kraus_matrix_probability(matrix: List[List[float]], a0: complex, a1: com
         return prob, new_a0, new_a1
     return prob
 
+def get_index(value, values):
+    
+    for (index, v) in enumerate(values):
+        if v == value:
+            return index
+    raise Exception("no value in values")
+        

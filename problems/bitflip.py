@@ -7,13 +7,13 @@ import time
 from typing import Dict, List
 import json
 
-from qiskit import IBMQ, ClassicalRegister, QuantumCircuit, QuantumRegister, execute
-from algorithm import AlgorithmNode, execute_algorithm, load_algorithms_file
+from qiskit import ClassicalRegister, QuantumCircuit, QuantumRegister
+from algorithm import AlgorithmNode, execute_algorithm
 from cmemory import ClassicalState
 from pomdp import POMDP, POMDPAction, POMDPVertex, build_pomdp
 import qmemory
 from qpu_utils import GateData, Op, BasisGates
-from utils import are_matrices_equal, is_matrix_in_list, Precision
+from utils import are_matrices_equal, get_index, is_matrix_in_list, Precision
 sys.path.append(os.getcwd()+"/..")
 
 from qstates import QuantumState
@@ -24,8 +24,6 @@ from enum import Enum
 from experiments_utils import ReadoutNoise
 
 WITH_TERMALIZATION = False
-MAX_HORIZON = 7
-MIN_HORIZON = 4
 MAX_PRECISION = 10
 TIME_OUT = 10800 # (in seconds) i.e 3 hours
 
@@ -204,9 +202,15 @@ class IBMBitFlipInstance:
     SHOTS = 1024 * 4
     def __init__(self, embedding) -> None:
         self.embedding = embedding
-        self.bitflip_instance = BitFlipInstance(embedding)
+        
+        new_embedding = dict()
+        values = sorted(self.embedding.values())
+        for (key, value) in self.embedding.items():
+            new_embedding[key] = get_index(value, values)
+        self.bitflip_instance = BitFlipInstance(new_embedding)
 
-    def prepare_bell_state(qc: QuantumCircuit, bell_index):
+    @staticmethod
+    def prepare_bell_state(qc: QuantumCircuit, bell_index: int):
         qc.h(0)
         qc.cx(0, 1)
         if bell_index == 1:
@@ -222,42 +226,37 @@ class IBMBitFlipInstance:
     def is_target_qs(self, state_vector):
         assert len(state_vector) == 8 # 3 qubits
         qs = None
-        for (index, amp) in state_vector:
+        for (index, amp) in enumerate(state_vector):
             if not isclose(amp, 0.0, abs_tol=Precision.isclose_abstol):
                 if qs is None:
-                    qs = QuantumState(index, amp, qubits_used=list(self.embedding.values()))
+                    qs = QuantumState(index, amp, qubits_used=list(self.embedding.keys()))
                 else:
                     assert qs.get_amplitude(index) == 0.0
                     qs.insert_amplitude(index, amp) 
 
-        return self.bitflip_instance.is_target_qs(qs)
+        return self.bitflip_instance.is_target_qs((qs, None))
     
-    def ibm_execute_my_algo(self, shots, alg, backend, is_simulated=True, log=None):
-        shots_per_initial_state = shots/4
+    def ibm_execute_my_algo(self, alg, backend, is_simulated=True, log=None):
         accuracy = 0
-        initial_layout = [self.embedding[0], self.embedding[1], self.embedding[2]]
+        
         ibm_noise_model = get_ibm_noise_model(backend, thermal_relaxation=WITH_TERMALIZATION)
-        basis_gates = ibm_noise_model.basis_gates
 
-        assert isinstance(backend, str)
-        real_hardware_name = backend.lower().replace("fake", "ibm")
+        real_hardware_name = backend.value.lower().replace("fake", "ibm")
         
         if log is not None:
             log_file = open(log, "w")
-            log_file.write(f"shots={shots}\n")
 
         for bell_state_index in range(4):
             qr = QuantumRegister(3)
             cr = ClassicalRegister(3)
             qc = QuantumCircuit(qr, cr)
-            self.prepare_bell_state(qc, bell_state_index)
-            if isinstance(alg, AlgorithmNode):
-                execute_algorithm(alg, qc, basis_gates=basis_gates, cbits=cr)
-            else:
-                alg(qc, basis_gates, cr)
+            initial_layout = {qr[0]: self.embedding[0], qr[1]:self.embedding[1], qr[2]:self.embedding[2]}
+            IBMBitFlipInstance.prepare_bell_state(qc, bell_state_index)
+            assert isinstance(alg, AlgorithmNode)
+            execute_algorithm(alg, qc, cbits=cr)
             if is_simulated:
                 qc.save_statevector('res', pershot=True)
-                state_vs = ibm_simulate_circuit(qc, ibm_noise_model, shots_per_initial_state, initial_layout)
+                state_vs = ibm_simulate_circuit(qc, ibm_noise_model, initial_layout)
                 for state in state_vs:
                     if self.is_target_qs(state):
                         accuracy += 1
@@ -358,8 +357,8 @@ def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], e
     else:
         assert experiment_id == BitflipExperimentID.CXH
         if noise_model.basis_gates in [BasisGates.TYPE1, BasisGates.TYPE6]:
-            H2 = POMDPAction("H2", [Instruction(embedding[2], Op.U2, params=[0, pi])])
-            H1 = POMDPAction("H1", [Instruction(embedding[1], Op.U2, params=[0, pi])])
+            H2 = POMDPAction("H2", [Instruction(embedding[2], Op.U2, params=[0.0, pi])])
+            H1 = POMDPAction("H1", [Instruction(embedding[1], Op.U2, params=[0.0, pi])])
         else:
             assert noise_model.basis_gates in [BasisGates.TYPE2, BasisGates.TYPE3, BasisGates.TYPE4, BasisGates.TYPE7]
             H2 = POMDPAction("H2", [
@@ -380,7 +379,6 @@ def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], e
     
 
 def guard(vertex: POMDPVertex, embedding: Dict[int, int], action: POMDPAction):
-    assert len(action.instruction_sequence) == 1
     if action.instruction_sequence[0].op != Op.MEAS:
         return True
     assert isinstance(vertex, POMDPVertex)
@@ -414,7 +412,7 @@ def generate_pomdp(experiment_id: BitflipExperimentID, hardware_spec: HardwareSp
         initial_distribution.append((s, 0.25))
 
     start_time = time.time()
-    pomdp = build_pomdp(actions, noise_model, MAX_HORIZON, embedding, initial_distribution=initial_distribution, guard=guard)
+    pomdp = build_pomdp(actions, noise_model, 7, embedding, initial_distribution=initial_distribution, guard=guard) # WARNING: 7 is the horizon for which we are interested in this particular experiment for the bitflip problem
     end_time = time.time()
     if return_pomdp:
         return pomdp
@@ -477,11 +475,11 @@ def parse_lambdas_file(config):
     f.close()
     return result
 
-def test_programs(config_path, shots=2000, factor=2):
+def test_programs(config_path, shots=2000, factor=1):
     config = load_config_file(config_path, BitflipExperimentID)
+    experiment_id = config["experiment_id"]
     if not os.path.exists(config["output_dir"]):
-        print("creating directory: ", config["output_dir"])
-        os.mkdir(config["output_dir"]) 
+        raise Exception("output_dir in config does not exists")
     
     lambdas_path = os.path.join(config["output_dir"], 'lambdas.csv')
     if not os.path.exists(lambdas_path):
@@ -497,33 +495,38 @@ def test_programs(config_path, shots=2000, factor=2):
     
     all_embeddings = load_embeddings(config=config)
     
-    all_lambdas = parse_lambdas_file( config) 
+    all_lambdas = parse_lambdas_file(config) 
     
     for backend in HardwareSpec: 
-        embeddings = all_embeddings[backend]["embeddings"]
-        for (index, embedding) in enumerate(embeddings):
-            lambdas_d = all_lambdas[backend.name][index]
-            if experiment_id == BitflipExperimentID.IPMA:
+        if backend.value in config["hardware"]:
+            embeddings = all_embeddings[backend]["embeddings"]
+            noise_model = NoiseModel(backend, thermal_relaxation=WITH_TERMALIZATION)
+            # we need to be able to translate the actions to the actual instructions for the qpu
+            actions_to_instructions = dict()
+            actions = get_experiments_actions(noise_model, {0:0, 1:1, 2:2}, experiment_id)
+            for action in actions:
+                actions_to_instructions[action.name] = action.instruction_sequence
+                    
+            for (index, embedding) in enumerate(embeddings):
+                lambdas_d = all_lambdas[backend.value][index]
                 m = embedding
-            else:
-                m = dict()
-                m[0] = embedding[0]
-                m[1] = embedding[2]
-                m[2] = embedding[1]
-            ibm_bitflip_instance = IBMBitFlipInstance(m)
-            
-            for horizon in range(MIN_HORIZON, MAX_HORIZON):
-                algorithm_path = os.path.join(algorithm_path, "{backend.value}_{index}_{horizon}.json")
-                algorithms = load_algorithms_file(algorithm_path)
-                assert len(algorithms) == 1
-                for algorithm in algorithms[:3]:
+                ibm_bitflip_instance = IBMBitFlipInstance(m)
+                
+                for horizon in range(config["min_horizon"], config["max_horizon"]+1):
+                    algorithm_path = os.path.join(algorithms_path, f"{backend.value}_{index}_{horizon}.json")
+                    
+                    # load algorithm json
+                    f_algorithm = open(algorithm_path)
+                    algorithm = AlgorithmNode(serialized=json.load(f_algorithm), actions_to_instructions=actions_to_instructions)
+                    f_algorithm.close()  
+                            
                     acc = 0
                     for _ in range(factor):
-                        acc += ibm_bitflip_instance.ibm_execute_my_algo(shots, algorithm, backend)
+                        acc += ibm_bitflip_instance.ibm_execute_my_algo(algorithm, backend)
                     acc /= factor  
                     acc = round(acc, 3)
                     output_file.write(f"{backend}-{index},{horizon},{lambdas_d[horizon]},{acc},{round(lambdas_d[horizon]-acc,3)}\n")
-        output_file.flush()
+                    output_file.flush()
     output_file.close()
 
 class Test:
@@ -684,45 +687,137 @@ class Test:
     def compare_lambdas(hardware_spec):
         # this is only for experiment IPMA
         old_lambdas = Test.parse_lambdas_file(f"/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/algorithm_synthesis/qalgorithm_synthesis/lambdas/{hardware_spec.value}.txt")
+        
+    @staticmethod
+    def ibm_run(config_path):
+        config = load_config_file(config_path, BitflipExperimentID)
+        experiment_id = config["experiment_id"]
+        backend = HardwareSpec.TENERIFE
+        noise_model = NoiseModel(backend, thermal_relaxation=WITH_TERMALIZATION)
+        index = 1
+        horizon = 4
+        algorithms_path = os.path.join(config["output_dir"], "algorithms")
+        algorithm_path = os.path.join(algorithms_path, f"{backend.value}_{index}_{horizon}.json")
+        
+        # we need to be able to translate the actions to the actual instructions for the qpu
+        actions_to_instructions = dict()
+        actions = get_experiments_actions(noise_model, {0:0, 1:1, 2:2}, experiment_id)
+        for action in actions:
+            actions_to_instructions[action.name] = action.instruction_sequence
+                
+        # load algorithm json
+        f_algorithm = open(algorithm_path)
+        algorithm = AlgorithmNode(serialized=json.load(f_algorithm), actions_to_instructions=actions_to_instructions)
+        f_algorithm.close()
+        m = {0: 4, 1: 3, 2: 2}
+        ibm_bitflip_instance = IBMBitFlipInstance(m)
+        print(ibm_bitflip_instance.ibm_execute_my_algo(algorithm, backend) )
 
+
+def get_batches():
+    s = dict()
+    for hardware in HardwareSpec:
+        nm = NoiseModel(hardware, thermal_relaxation=WITH_TERMALIZATION)
+        if is_hardware_selected(nm):
+            if nm.num_qubits not in s.keys():
+                s[nm.num_qubits] = []
+            s[nm.num_qubits].append(hardware.value) 
+    return s
+    
+def gen_paper_configs():
+    # divide experiments into batches
+    batches = get_batches()
+    
+    for (num_qubits, batch) in batches.items():
+        # we create a config that will run experiments for all quantum computers that have the same number of qubits
+        
+        # IPMA
+        config_ipma = dict()
+        config_ipma["name"] = f"B{num_qubits}"
+        config_ipma["experiment_id"] = "ipma"
+        config_ipma["min_horizon"] = 4
+        config_ipma["max_horizon"] = 7
+        config_ipma["output_dir"] = f"../synthesis/bitflip/ipma/B{num_qubits}/"
+        config_ipma["algorithms_file"] = ""
+        config_ipma["hardware"] = batch
+        
+        ipma_file = open(f"../configs/ipma_b{num_qubits}.json", "w")
+        json.dump(config_ipma, ipma_file, indent=4)
+        ipma_file.close()
+    
+        # CX+H
+        config_cxh = dict()
+        config_cxh["name"] = f"B{num_qubits}"
+        config_cxh["experiment_id"] = "cxh"
+        config_cxh["min_horizon"] = 4
+        config_cxh["max_horizon"] = 7
+        config_cxh["output_dir"] = f"../synthesis/bitflip/cxh/B{num_qubits}/"
+        config_cxh["algorithms_file"] = ""
+        config_cxh["hardware"] = batch
+        cxh_file = open(f"../configs/cxh_b{num_qubits}.json", "w")
+        json.dump(config_cxh, cxh_file, indent=4)
+        cxh_file.close()
+    
 if __name__ == "__main__":
     arg_backend = sys.argv[1]
     Precision.PRECISION = MAX_PRECISION
     Precision.update_threshold()
-
-    if arg_backend == "embeddings":
+    if arg_backend == "gen_paper_configs":
+        # step 0
+        gen_paper_configs()
+    elif arg_backend == "embeddings":
         # step 1
-        config_path = sys.argv[2]
-        generate_embeddings(config_path)   
+        # config_path = sys.argv[2]
+        # generate_embeddings(config_path)   
 
-    if arg_backend == "all_pomdps":
+        # generate paper embeddings
+        batches = get_batches()
+        
+        for num_qubits in batches.keys():
+            generate_embeddings(f"../configs/ipma_b{num_qubits}.json")
+            generate_embeddings(f"../configs/cxh_b{num_qubits}.json")
+    elif arg_backend == "all_pomdps":
         # step 2: generate all pomdps
-        config_path = sys.argv[2]
-        generate_pomdps(config_path)
+        # config_path = sys.argv[2]
+        # generate_pomdps(config_path)
+        
+        # generate paper embeddings
+        batches = get_batches()
+        
+        for num_qubits in batches.keys():
+            # generate_pomdps(f"../configs/ipma_b{num_qubits}.json")
+            generate_pomdps(f"../configs/cxh_b{num_qubits}.json")
         
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)
     
-    if arg_backend == "simulator_test":
+    elif arg_backend == "simulator_test":
         # step 4: simulate algorithms and compare accuracy with guarantees. Show that it is accurate
         config_path = sys.argv[2]
         test_programs(config_path)
     
-    if arg_backend == "backends_vs":
+    elif arg_backend == "backends_vs":
         # simulate all synthesized algorithms in all backends
         experiment_id = sys.argv[2]
 
 
-    if arg_backend == "test" :
-        pass
+    elif arg_backend == "test" :
+        pass     
+        generate_pomdp(BitflipExperimentID.CXH, HardwareSpec.ATHENS, 
+                {0: 0, 1: 1, 2: 2}, "", return_pomdp=True)
         # Test.check_selected_hardware()
         # Test.check_embeddings()
         # Test.check_embeddings_file()
         # Test.check_bell_state_creation()
         # Test.check_instruction_sets(BitflipExperimentID.IPMA)
         # Test.check_instruction_sets(BitflipExperimentID.CXH)
-        # Test.test_pomdp(HardwareSpec.TENERIFE, 0, BitflipExperimentID.IPMA)
+        # Test.test_pomdp(HardwareSpec.BOGOTA, 0, BitflipExperimentID.IPMA)
         # Test.test_pomdp(HardwareSpec.TENERIFE, 1, BitflipExperimentID.IPMA)
         # Test.dump_actions(HardwareSpec.TENERIFE, 0, BitflipExperimentID.IPMA)
         # Test.print_pomdp(HardwareSpec.TENERIFE, 0, BitflipExperimentID.IPMA)
         # Test.compare_lambdas(HardwareSpec.TENERIFE)
+        # config_path = sys.argv[2]
+        # Test.ibm_run(config_path)
+        
+    else:
+        raise Exception("argument does not run any procedure in this script")
         
