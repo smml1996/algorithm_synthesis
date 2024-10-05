@@ -3,7 +3,7 @@
     "experiment_id": "ipma",
     "min_horizon": 4,
     "max_horizon": 7,
-    "output_dir": "../synthesis/bitflip/ipma/B5/",
+    "output_dir": "/nfs/scistore16/tomgrp/smuroyal/im_time_evolution/synthesis/bitflip/ipma/B5/",
     "algorithms_file": "",
     "hardware": [
         "fake_tenerife",

@@ -737,7 +737,7 @@ def gen_paper_configs():
         config_ipma["experiment_id"] = "ipma"
         config_ipma["min_horizon"] = 4
         config_ipma["max_horizon"] = 7
-        config_ipma["output_dir"] = f"../synthesis/bitflip/ipma/B{num_qubits}/"
+        config_ipma["output_dir"] = f"/nfs/scistore16/tomgrp/smuroyal/im_time_evolution/synthesis/bitflip/ipma/B{num_qubits}/"
         config_ipma["algorithms_file"] = ""
         config_ipma["hardware"] = batch
         
@@ -751,7 +751,7 @@ def gen_paper_configs():
         config_cxh["experiment_id"] = "cxh"
         config_cxh["min_horizon"] = 4
         config_cxh["max_horizon"] = 7
-        config_cxh["output_dir"] = f"../synthesis/bitflip/cxh/B{num_qubits}/"
+        config_cxh["output_dir"] = f"/nfs/scistore16/tomgrp/smuroyal/im_time_evolution/synthesis/bitflip/cxh/B{num_qubits}/"
         config_cxh["algorithms_file"] = ""
         config_cxh["hardware"] = batch
         cxh_file = open(f"../configs/cxh_b{num_qubits}.json", "w")
