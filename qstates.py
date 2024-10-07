@@ -259,7 +259,7 @@ def get_fidelity(qstate1: QuantumState, qstate2: QuantumState) -> float:
     for (key, val1) in qstate1.sparse_vector.items():
         val2 = qstate2.get_amplitude(key)
         inner_product += val1*conjugate(val2)
-    return inner_product
+    return simplify(inner_product*conjugate(inner_product))
 
 
     
