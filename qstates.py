@@ -254,11 +254,15 @@ def does_observable_exists(obs_to_qs: Dict, quantum_states: List) -> Optional[in
             return obs
     return None
 
-def get_fidelity(qstate1: QuantumState, qstate2: QuantumState) -> float:
+def get_inner_product(qstate1, qstate2) -> float:
     inner_product = 0
     for (key, val1) in qstate1.sparse_vector.items():
         val2 = qstate2.get_amplitude(key)
         inner_product += val1*conjugate(val2)
+    return inner_product
+
+def get_fidelity(qstate1: QuantumState, qstate2: QuantumState) -> float:
+    inner_product = get_inner_product(qstate1, qstate2)
     return simplify(inner_product*conjugate(inner_product))
 
 
