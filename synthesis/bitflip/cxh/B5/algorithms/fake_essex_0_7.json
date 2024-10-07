@@ -1,0 +1,36 @@
+{
+    "action": "H2",
+    "case0": "None",
+    "case1": "None",
+    "next": {
+        "action": "CX21",
+        "case0": "None",
+        "case1": "None",
+        "next": {
+            "action": "H1",
+            "case0": "None",
+            "case1": "None",
+            "next": {
+                "action": "CX01",
+                "case0": "None",
+                "case1": "None",
+                "next": {
+                    "action": "H2",
+                    "case0": "None",
+                    "case1": "None",
+                    "next": {
+                        "action": "CX21",
+                        "case0": "None",
+                        "case1": "None",
+                        "next": {
+                            "action": "P2",
+                            "case0": "None",
+                            "case1": "None",
+                            "next": "None"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

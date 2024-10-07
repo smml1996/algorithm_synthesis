@@ -1,0 +1,51 @@
+{
+    "action": "CX12",
+    "case0": "None",
+    "case1": "None",
+    "next": {
+        "action": "CX02",
+        "case0": "None",
+        "case1": "None",
+        "next": {
+            "action": "P2",
+            "case0": {
+                "action": "P2",
+                "case0": {
+                    "action": "P2",
+                    "case0": {
+                        "action": "P2",
+                        "case0": "None",
+                        "case1": {
+                            "action": "X0",
+                            "case0": "None",
+                            "case1": "None",
+                            "next": "None"
+                        },
+                        "next": "None"
+                    },
+                    "case1": {
+                        "action": "X0",
+                        "case0": "None",
+                        "case1": "None",
+                        "next": "None"
+                    },
+                    "next": "None"
+                },
+                "case1": {
+                    "action": "X0",
+                    "case0": "None",
+                    "case1": "None",
+                    "next": "None"
+                },
+                "next": "None"
+            },
+            "case1": {
+                "action": "X0",
+                "case0": "None",
+                "case1": "None",
+                "next": "None"
+            },
+            "next": "None"
+        }
+    }
+}
