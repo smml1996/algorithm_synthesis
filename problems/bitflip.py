@@ -74,7 +74,6 @@ class BitFlipInstance:
             embedding (Dict[int, int]): a mapping from logical qubits to physical qubits
         """
         self.embedding = embedding
-        self.num_qubits = max(embedding.values())
         self.initial_state = None
         self.get_initial_states()
         # check embedding
@@ -770,8 +769,8 @@ def generate_server_synthesis_script():
     f_cxh = open("../algorithm_synthesis/qalgorithm_synthesis/cxh.sh", "w")
     batches = get_batches()
     for num_qubits in batches.keys():
-        f_ipma.write(f"sbatch experiments_script.sh ./input/ipma_b{num_qubits}.input\n")
-        f_cxh.write(f"sbatch experiments_script.sh ./input/cxh_b{num_qubits}.input\n")
+        f_ipma.write(f"sbatch experiments_script.sh /nfs/scistore16/tomgrp/smuroyal/im_time_evolution/configs/ipma_b{num_qubits}.json\n")
+        f_cxh.write(f"sbatch experiments_script.sh /nfs/scistore16/tomgrp/smuroyal/im_time_evolution/configs/cxh_b{num_qubits}.json\n")
         
             
     f_ipma.close()
