@@ -5,7 +5,7 @@ from typing import List, Optional
 from sympy import *
 
 from ibm_noise_models import Instruction
-from qstates import QuantumState, get_fidelity
+from qstates import QuantumState, get_fidelity, get_inner_product
 from qpu_utils import *
 from copy import deepcopy
 
@@ -264,7 +264,7 @@ def get_seq_probability(quantum_state: QuantumState, seq: List[GateData], is_flo
         if quantum_state is None:
             return None, 0.0
 
-    prob = get_fidelity(quantum_state, quantum_state)
+    prob = get_inner_product(quantum_state, quantum_state)
     
     if is_floor:
         if Precision.is_lowerbound:
