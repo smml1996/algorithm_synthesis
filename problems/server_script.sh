@@ -1,5 +1,3 @@
-sbatch sscript.sh 5
-sbatch sscript.sh 20
 sbatch sscript.sh 7
 sbatch sscript.sh 27
 sbatch sscript.sh 65

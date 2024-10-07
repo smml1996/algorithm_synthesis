@@ -447,7 +447,7 @@ def generate_pomdps(config_path):
                     time_taken = generate_pomdp(experiment_id, backend, m, f"{output_folder}/{backend.value}_{index}.txt")
                     if time_taken is not None:
                         times_file.write(f"{backend.name},{index},{time_taken}\n")
-                times_file.flush()
+                    times_file.flush()
             except Exception as err:
                 print(f"Unexpected {err=}, {type(err)=}")
     times_file.close()
