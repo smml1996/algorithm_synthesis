@@ -773,7 +773,132 @@ class Test:
         m = {0: 4, 1: 3, 2: 2}
         ibm_bitflip_instance = IBMBitFlipInstance(m)
         print(ibm_bitflip_instance.ibm_execute_my_algo(algorithm, backend) )
-
+    
+    @staticmethod
+    def compare_pomdps():
+        print("compare pomdp")
+        def _compare_pomdps(pomdp1, pomdp2):
+            if len(pomdp1) != len(pomdp2):
+                return False
+            assert pomdp1[0] == pomdp2[0]
+            assert pomdp1[0] == "BEGINPOMDP\n"
+            v1_to_v2 = dict()
+            
+            # initial states
+            initial_state1 = int(pomdp1[1].split(" ")[1])
+            initial_state2 = int(pomdp2[1].split(" ")[1])
+            
+            # parse states
+            states1 = [int(x) for x in pomdp1[2].split(" ")[1].split(",")]
+            states2 = [int(x) for x in pomdp2[2].split(" ")[1].split(",")]
+            
+            for (state1, state2) in zip(states1, states2):
+                v1_to_v2[state1] = state2
+                
+            if v1_to_v2[initial_state1] != initial_state2:
+                return False
+            
+            # parse target states
+            targetv1 = [int(x) for x in pomdp1[3].split(" ")[1].split(",")]
+            targetv2 = [int(x) for x in pomdp2[3].split(" ")[1].split(",")]
+            
+            for (t1, t2) in zip(targetv1, targetv2):
+                if v1_to_v2[t1] != t2:
+                    return False
+            
+            # parse gamma
+            gamma1_elements = pomdp1[4].split(" ")[1].split(",")
+            gamma2_elements = pomdp2[4].split(" ")[1].split(",")
+            
+            for (g1, g2) in zip(gamma1_elements, gamma2_elements):
+                e1 = g1.split(":")
+                e2 = g2.split(":")
+                
+                v1 = int(e1[0])
+                o1 = int(e1[1])
+                
+                v2 = int(e2[0])
+                o2 = int(e2[1])
+                
+                if o1 != o2:
+                    return False
+                
+                if v1_to_v2[v1] != v2:
+                    return False
+                
+            # parse actions
+            current_line_index = 5
+            assert pomdp1[current_line_index] == pomdp2[current_line_index]
+            assert pomdp1[current_line_index] == "BEGINACTIONS\n"
+            current_line_index += 1
+            actions = []
+            
+            while pomdp1[current_line_index] != "ENDACTIONS\n":
+                if pomdp1[current_line_index] != pomdp2[current_line_index]:
+                    return False
+                actions.append(pomdp1[current_line_index])
+                current_line_index +=1
+            
+            if pomdp2[current_line_index] != "ENDACTIONS\n":
+                return False
+            
+            current_line_index += 1
+            while pomdp1[current_line_index] != "ENDPOMDP\n":
+                e1 = pomdp1[current_line_index].split(" ")
+                e2 = pomdp2[current_line_index].split(" ")
+                
+                s1 = int(e1[0])
+                action1 = e1[1]
+                s1_t = int(e1[2])
+                p1 = float(e1[3])
+                
+                s2 = int(e2[0])
+                action2 = e2[1]
+                s2_t = int(e2[2])
+                p2 = float(e2[3])
+                
+                if v1_to_v2[s1] != s2:
+                    return False
+                
+                if action1 != action2:
+                    return False
+                
+                if v1_to_v2[s1_t] != s2_t:
+                    return False
+                
+                if p1 != p2:
+                    return False
+                current_line_index += 1
+            
+            if pomdp2[current_line_index] != "ENDPOMDP\n":
+                return False
+            
+            return True
+        long_time_path = "/Users/stefaniemuroyalei/Downloads/bitflip/"
+        
+        batches = get_batches()
+        for experiment_id in BitflipExperimentID:
+            for n_qubits in batches.keys():
+                config = load_config_file(f"/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/configs/{experiment_id.value}_b{n_qubits}.json", BitflipExperimentID)
+                embeddings = json.load(open(get_embeddings_path(config)))
+                for hardware_str in config["hardware"]:
+                    num_embeddings = embeddings[hardware_str]["count"]
+                    for embedding_index in range(num_embeddings):
+                        pomdp2_path = os.path.join(long_time_path, experiment_id.value, f"B{n_qubits}", "pomdps",f"{hardware_str}_{embedding_index}.txt")
+                        if not os.path.isfile(pomdp2_path):
+                            print(f"WARNING: pomdp path not found {pomdp2_path}")
+                            continue
+                        pomdp1_file = open(os.path.join(config["output_dir"], "pomdps", f"{hardware_str}_{embedding_index}.txt"))
+                        pomdp2_file = open(pomdp2_path)
+                        
+                        pomdp1 = pomdp1_file.readlines()
+                        pomdp2 = pomdp2_file.readlines()
+                        print( _compare_pomdps(pomdp1, pomdp2))
+                        pomdp1_file.close()
+                        pomdp2_file.close()
+                
+                    
+                    
 
 def get_batches():
     s = dict()
@@ -870,16 +995,15 @@ if __name__ == "__main__":
         gen_paper_configs()
         # TODO: clean me up
         # step 2: generate all pomdps
-        config_path = sys.argv[2]
+        # config_path = sys.argv[2]
         # generate_pomdps(config_path)
         
         # generate paper embeddings
-        # batches = get_batches()
+        batches = get_batches()
         
-        # for num_qubits in batches.keys():
-        #     generate_pomdps(f"../configs/ipma_b{num_qubits}.json")
-        
-        generate_pomdps(f"../configs/cxh_b{config_path}.json")
+        for num_qubits in batches.keys():
+            generate_pomdps(f"../configs/ipma_b{num_qubits}.json")
+            generate_pomdps(f"../configs/cxh_b{num_qubits}.json")
         
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)
     
@@ -894,11 +1018,11 @@ if __name__ == "__main__":
 
 
     elif arg_backend == "test" :
-        with cProfile.Profile() as pr:
-            generate_pomdps(f"../configs/tenerife_test.json")
-        stats = pstats.Stats(pr)
-        stats.sort_stats('cumulative').print_stats(10)
-        pass     
+        # with cProfile.Profile() as pr:
+        #     generate_pomdps(f"../configs/tenerife_test.json")
+        # stats = pstats.Stats(pr)
+        # stats.sort_stats('cumulative').print_stats(10)
+        # pass     
         # generate_pomdp(BitflipExperimentID.CXH, HardwareSpec.ATHENS, {0: 0, 1: 1, 2: 2}, "", return_pomdp=True)
         # Test.check_selected_hardware()
         # Test.check_embeddings()
@@ -916,7 +1040,9 @@ if __name__ == "__main__":
         # generate_server_sbatchs()
         # generate_server_synthesis_script()
         # generate_input_files_for_script()
-        Test.compare_lambdas()
+        # Test.compare_lambdas()
+        Test.compare_pomdps()
+        
     else:
         raise Exception("argument does not run any procedure in this script")
         
