@@ -1,7 +1,8 @@
-from cmath import isclose
+from cmath import isclose, sqrt
 from copy import deepcopy
-from typing import Any, List, Optional
-from sympy import *
+from typing import Any, List, Optional, Dict, Tuple
+
+from numpy import conjugate
 from qpu_utils import Precision, get_complex, int_to_bin, bin_to_int
 
 class QuantumState:
@@ -49,21 +50,21 @@ class QuantumState:
     
     def is_qubit_0(self) -> bool:
         assert self.is_qubit()
-        return isclose(simplify(self.get_amplitude(0)), 1)
+        return isclose(self.get_amplitude(0), 1)
     
     def get_qubit_amplitudes(self) -> Tuple:
         return self.get_amplitude(0), self.get_amplitude(1)
     
     def insert_amplitude(self, basis: int, amplitude: Any) -> bool:
-        amplitude = get_complex(simplify(amplitude))
+        amplitude = get_complex(amplitude)
         if isclose(amplitude.real, 0.0, abs_tol=Precision.isclose_abstol) and isclose(amplitude.imag, 0.0, abs_tol=Precision.isclose_abstol):
                 return False
 
-        self.sparse_vector[basis] = simplify(amplitude)
+        self.sparse_vector[basis] = amplitude
         return True
 
     def add_amplitude(self, basis: int, amplitude: Any) ->  bool:
-        amplitude = get_complex(simplify(amplitude))
+        amplitude = get_complex(amplitude)
 
         
         if isclose(amplitude.real, 0.0, abs_tol=Precision.isclose_abstol) and isclose(amplitude.imag, 0.0, abs_tol=Precision.isclose_abstol):
@@ -71,7 +72,7 @@ class QuantumState:
             return False
         
         prev_amplitude = self.get_amplitude(basis)
-        current_amplitude = get_complex(simplify(prev_amplitude + amplitude))
+        current_amplitude = get_complex(prev_amplitude + amplitude)
         if isclose(current_amplitude.real, 0.0, abs_tol=Precision.isclose_abstol) and isclose(current_amplitude.imag, 0.0, abs_tol=Precision.isclose_abstol):
             # if the new amplitude is 0 in both the real and imaginary part we delete this key
             del self.sparse_vector[basis]
@@ -82,12 +83,12 @@ class QuantumState:
     def normalize(self):
         sum_ = 0
         for val in self.sparse_vector.values():
-            sum_ += simplify(val*conjugate(val))
+            sum_ += val*conjugate(val)
 
-        norm = simplify(sqrt(sum_))
+        norm = sqrt(sum_)
 
         for key in self.sparse_vector.keys():
-            val = simplify(self.sparse_vector[key] / norm)
+            val = self.sparse_vector[key] / norm
             self.sparse_vector[key] = val
 
     def __eq__(self, other):
@@ -263,7 +264,7 @@ def get_inner_product(qstate1, qstate2) -> float:
 
 def get_fidelity(qstate1: QuantumState, qstate2: QuantumState) -> float:
     inner_product = get_inner_product(qstate1, qstate2)
-    return simplify(inner_product*conjugate(inner_product))
+    return inner_product*conjugate(inner_product)
 
 
     

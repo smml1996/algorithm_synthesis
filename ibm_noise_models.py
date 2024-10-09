@@ -1,7 +1,7 @@
 from copy import deepcopy
 from enum import Enum
 from math import pi
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 import numpy as np
 from qiskit import QuantumCircuit, transpile
 from qiskit.providers.fake_provider import *

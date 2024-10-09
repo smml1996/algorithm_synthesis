@@ -1,13 +1,13 @@
-from cmath import isclose
+from cmath import cos, isclose, sin
 from math import sqrt, pi
 import math
 from typing import List, Optional
-from sympy import *
+
+from numpy import conjugate
 
 from ibm_noise_models import Instruction
-from qstates import QuantumState, get_fidelity, get_inner_product
+from qstates import QuantumState, get_inner_product
 from qpu_utils import *
-from copy import deepcopy
 
 from utils import get_kraus_matrix_probability, myceil, myfloor
 
@@ -22,6 +22,7 @@ def evaluate_op(op: Op, qubit: QuantumState, name: str, params=None, is_inverse:
     # some useful constants
     # half_prob = myfloor(complex(1/sqrt(2), 0.0), Precision.PRECISION)
     half_prob = complex(1/sqrt(2), 0.0)
+    I = complex(0, 1)
     if op == Op.I:
         return qubit
     elif op == Op.X:
@@ -81,7 +82,7 @@ def evaluate_op(op: Op, qubit: QuantumState, name: str, params=None, is_inverse:
         assert params is not None
         assert not is_inverse
         prob, new_a0, new_a1 = get_kraus_matrix_probability(params, a0, a1, return_new_ampl=True)
-        if isclose(simplify(prob), 0):
+        if isclose(prob, 0):
             return None
         result.insert_amplitude(0, new_a0)
         result.insert_amplitude(1, new_a1)
@@ -112,28 +113,16 @@ def evaluate_op(op: Op, qubit: QuantumState, name: str, params=None, is_inverse:
             assert a0 == 1.0 or a1 == 1.0
             result.insert_amplitude(0, 1.0)
     elif is_projector(op):
-        if is_inverse:
-            s0 = Symbol(f"proj0_{name}")
-            s1 = Symbol(f"proj1_{name}")
-            QuantumState.symbolic_vars.append(s0)
-            QuantumState.symbolic_vars.append(s1)
-            result.insert_amplitude(0, s0)
-            result.insert_amplitude(1, s1)
-
-            if op == Op.P0:
-                result.constraints.append(simplify(s0*conjugate(s0)) > 0)
-            else:
-                result.constraints.append(simplify(s1*conjugate(s1)) > 0)
+        assert not is_inverse
+        if op == Op.P0:
+            if a0 == 0:
+                return None
+            result.insert_amplitude(0, complex(1, 0.0))
         else:
-            if op == Op.P0:
-                if a0 == 0:
-                    return None
-                result.insert_amplitude(0, complex(1, 0.0))
-            else:
-                assert op == Op.P1
-                if a1 == 0:
-                    return None
-                result.insert_amplitude(1, complex(1, 0.0))
+            assert op == Op.P1
+            if a1 == 0:
+                return None
+            result.insert_amplitude(1, complex(1, 0.0))
     else:
         print(f"eval_op: op not implemented ({op})")
     return result
@@ -235,9 +224,9 @@ def get_qs_probability(quantum_state, address, is_zero=False, is_floor=True):
             prob1 += value*conjugate(value)
     if is_floor:
         if Precision.is_lowerbound:
-            prob1 = myfloor(simplify(prob1), Precision.PRECISION)
+            prob1 = myfloor(prob1, Precision.PRECISION)
         else:
-            prob1 = myceil(simplify(prob1), Precision.PRECISION)
+            prob1 = myceil(prob1, Precision.PRECISION)
     else:
         prob1 = round(prob1, Precision.PRECISION)
     if prob1 > 1.0:
@@ -268,9 +257,9 @@ def get_seq_probability(quantum_state: QuantumState, seq: List[GateData], is_flo
     
     if is_floor:
         if Precision.is_lowerbound:
-            prob = myfloor(simplify(prob), Precision.PRECISION)
+            prob = myfloor(prob, Precision.PRECISION)
         else:
-            prob = myceil(simplify(prob), Precision.PRECISION)
+            prob = myceil(prob, Precision.PRECISION)
     else:
         prob = round(prob, Precision.PRECISION)
     quantum_state.normalize()
@@ -350,7 +339,6 @@ def get_qs_probabiltiies(quantum_state, address):
     for (basis, value) in quantum_state.sparse_vector.items():
         if are_controls_true(basis, [address]):
             prob1 += value*conjugate(value)
-    prob1 = simplify(prob1)
     if prob1 > 1.0:
         # assert isclose(prob1, 1.0)
         prob1 = 1.0

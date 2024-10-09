@@ -1,23 +1,32 @@
 from cmath import isclose
 from collections import deque
-from contextlib import contextmanager
-import json
 from math import ceil, floor
-import signal
 from typing import *
 from enum import Enum
 import numpy as np
-from sympy import I, conjugate
 
+PROJECT_PATH = "/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/"
 CONFIG_KEYS = ["name", "experiment_id", "min_horizon", "max_horizon", "output_dir", "algorithms_file", "hardware"]
 
 def myfloor(val, d):
     m = 10**d
-    return floor(val * m)/m
+    if isinstance(val, complex):
+        v = val*m
+        answer = complex(floor(v.real)/m, floor(v.imag)/m)
+        if isclose(answer.imag, 0.0, abs_tol=Precision.isclose_abstol):
+            answer = answer.real
+        return answer
+    return floor(val*m)/m
 
 def myceil(val, d):
     m = 10**d
-    return ceil(val * m)/m
+    if isinstance(val, complex):
+        v = val*m
+        answer = complex(ceil(v.real)/m, ceil(v.imag)/m)
+        if isclose(answer.imag, 0.0, abs_tol=Precision.isclose_abstol):
+            answer = answer.real
+        return answer
+    return ceil(val*m)/m
 
 def find_enum_object(val: str, Obj: Enum):
     for element in Obj:
@@ -89,6 +98,7 @@ def invert_dict(d: Dict[Any, Any]) -> Dict[Any, Any]:
     return d_inverse
 
 def get_pauli_matrix(p: Pauli) -> np.array:
+    I = complex(0, 1)
     if p == Pauli.I:
         return np.array([[1, 0], 
                          [0, 1]])
@@ -362,7 +372,7 @@ def get_kraus_matrix_probability(matrix: List[List[float]], a0: complex, a1: com
     d = matrix[1][1]
     new_a0 = a*a0 + b*a1
     new_a1 = c*a0 + d*a1
-    prob = new_a0*conjugate(new_a0) + new_a1*conjugate(new_a1)
+    prob = new_a0*np.conjugate(new_a0) + new_a1*np.conjugate(new_a1)
     assert prob <= 1.0
     if return_new_ampl:
         return prob, new_a0, new_a1
@@ -374,4 +384,5 @@ def get_index(value, values):
         if v == value:
             return index
     raise Exception("no value in values")
+
         

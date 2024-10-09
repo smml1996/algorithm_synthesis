@@ -1,5 +1,3 @@
-from enum import Enum
-from importlib.machinery import SourceFileLoader
 from typing import List
 
 from qiskit import QuantumCircuit
@@ -111,7 +109,7 @@ class AlgorithmNode:
         }
 
       
-def execute_algorithm(node: AlgorithmNode, qpu, count_ins=0, cbits=None):
+def execute_algorithm(node: AlgorithmNode, qpu: QuantumCircuit, count_ins=0, cbits=None):
     if node is None:
         return count_ins
     
