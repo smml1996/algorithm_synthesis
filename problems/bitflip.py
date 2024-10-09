@@ -13,7 +13,7 @@ from cmemory import ClassicalState
 from pomdp import POMDP, POMDPAction, POMDPVertex, build_pomdp
 import qmemory
 from qpu_utils import GateData, Op, BasisGates
-from utils import are_matrices_equal, get_index, is_matrix_in_list, Precision
+from utils import PROJECT_PATH, are_matrices_equal, find_enum_object, get_index, is_matrix_in_list, Precision
 sys.path.append(os.getcwd()+"/..")
 
 from qstates import QuantumState
@@ -22,6 +22,8 @@ import numpy as np
 from math import pi   
 from enum import Enum
 from experiments_utils import ReadoutNoise
+import cProfile
+import pstats
 
 WITH_TERMALIZATION = False
 MAX_PRECISION = 10
@@ -235,7 +237,7 @@ class IBMBitFlipInstance:
 
         return self.bitflip_instance.is_target_qs((qs, None))
     
-    def ibm_execute_my_algo(self, alg, backend, is_simulated=True, log=None):
+    def ibm_execute_my_algo(self, alg, backend, log=None):
         accuracy = 0
         
         ibm_noise_model = get_ibm_noise_model(backend, thermal_relaxation=WITH_TERMALIZATION)
@@ -253,22 +255,11 @@ class IBMBitFlipInstance:
             IBMBitFlipInstance.prepare_bell_state(qc, bell_state_index)
             assert isinstance(alg, AlgorithmNode)
             execute_algorithm(alg, qc, cbits=cr)
-            if is_simulated:
-                qc.save_statevector('res', pershot=True)
-                state_vs = ibm_simulate_circuit(qc, ibm_noise_model, initial_layout)
-                for state in state_vs:
-                    if self.is_target_qs(state):
-                        accuracy += 1
-            else:
-                IBMQ.load_account()
-                # Get the available providers
-                providers = IBMQ.providers()
-                # Choose a provider
-                provider = providers[0]
-                assert log is not None
-                backend = provider.get_backend(real_hardware_name)
-                job = execute(qc, backend, shots=shots_per_initial_state, initial_layout=initial_layout, optimization_level=0)
-                log_file.write(f"{job.job}\n")
+            qc.save_statevector('res', pershot=True)
+            state_vs = ibm_simulate_circuit(qc, ibm_noise_model, initial_layout)
+            for state in state_vs:
+                if self.is_target_qs(state):
+                    accuracy += 1
         if log is not None:
             log_file.close()
         return round(accuracy/(1024*4), 3)
@@ -665,27 +656,98 @@ class Test:
         pomdp.print_graph()
         
     @staticmethod
-    def parse_lambdas_file(path):
+    def get_old_lambdas(target_hardware_specs: List[HardwareSpec], experiment_id: BitflipExperimentID):
+        """returns a dictionary that maps hardware_spec -> embedding_index -> horizon -> lambda
+
+        Args:
+            target_hardware_specs (List[HardwareSpec]): _description_
+            experiment_id (BitflipExperimentID): _description_
+        """        
+        translated_id = ""
+        if experiment_id ==BitflipExperimentID.CXH:
+            translated_id = "1"
         result = dict()
-        f = open(path)
-        lines = f.readlines()
-        assert lines[0] == "embedding,horizon,lambda,time\n" # first line is the heading
-        for line in lines[1:]:
-            elements = line.split(",")
-            embedding_index = int(elements[0])
-            horizon = int(elements[1])
-            lambda_ = float(elements[2])
-            if embedding_index not in result.keys():
-                result[embedding_index] = dict()
-            assert horizon not in result[embedding_index].keys()
-            result[embedding_index][horizon] = lambda_
-        f.close()
-    
+        for hardware_spec in target_hardware_specs:
+            assert hardware_spec not in result.keys()
+            result[hardware_spec] = dict()
+            
+            path = f"/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/algorithm_synthesis/qalgorithm_synthesis/lambdas{translated_id}/{hardware_spec.value}.txt"
+            f = open(path)
+            lines = f.readlines()
+            assert lines[0] == "embedding,horizon,lambda,time\n" # first line is the heading
+            
+            for line in lines[1:]:
+                elements = line.split(",")
+                embedding_index = int(elements[0])
+                horizon = int(elements[1])
+                lambda_ = float(elements[2])
+                if embedding_index not in result[hardware_spec].keys():
+                    result[hardware_spec][embedding_index] = dict()
+                assert horizon not in result[hardware_spec][embedding_index].keys()
+                result[hardware_spec][embedding_index][horizon] = lambda_
+            f.close()
+        return result
     
     @staticmethod
-    def compare_lambdas(hardware_spec):
-        # this is only for experiment IPMA
-        old_lambdas = Test.parse_lambdas_file(f"/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/algorithm_synthesis/qalgorithm_synthesis/lambdas/{hardware_spec.value}.txt")
+    def get_new_lambdas(batches: List[int], experiment_id: BitflipExperimentID):
+        result = dict()
+        
+        for num_qubits in batches:
+            path = f"/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/synthesis/bitflip/{experiment_id.value}/B{num_qubits}/lambdas.csv"
+            if not os.path.isfile(path):
+                continue
+            f = open(path)
+            lines = f.readlines()
+            assert lines[0] == "hardware,embedding,horizon,lambda,time\n" # first line is the heading
+            for line in lines[1:]:
+                elements = line.split(",")
+                hardware_spec = find_enum_object(elements[0], HardwareSpec)
+                assert hardware_spec is not None
+                if hardware_spec not in result.keys():
+                    result[hardware_spec] = dict()
+                embedding_index = int(elements[1])
+                horizon = int(elements[2])
+                lambda_ = float(elements[3])
+                if embedding_index not in result[hardware_spec].keys():
+                    result[hardware_spec][embedding_index] = dict()
+                assert horizon not in result[hardware_spec][embedding_index].keys()
+                result[hardware_spec][embedding_index][horizon] = lambda_
+            f.close()
+        return result
+            
+        
+    @staticmethod
+    def check_lambdas(new_lambdas, old_lambdas, experiment_id):
+        f = open(f"[{experiment_id.value}]new_old_lambdas_diff.csv", "w")
+        f.write("hardware_spec,embedding_index,horizon,diff\n")
+        for (hardware_spec, h_dic) in new_lambdas.items():
+            for (embedding_index, embedding_dic) in h_dic.items():
+                for (horizon, new_lambda) in embedding_dic.items():
+                    old_lambda = old_lambdas[hardware_spec][embedding_index][horizon]
+                    f.write(f"{hardware_spec.value},{embedding_index},{horizon},{abs(new_lambda-old_lambda)}\n")
+                    
+        f.close()
+                    
+    
+    @staticmethod
+    def compare_lambdas():
+        
+        # compute hardware selected for experiments
+        target_hardware_specs = []    
+        batches = set()
+        for hardware_spec in HardwareSpec:
+            nm = NoiseModel(hardware_specification=hardware_spec, thermal_relaxation=WITH_TERMALIZATION)
+            if is_hardware_selected(nm):
+                target_hardware_specs.append(hardware_spec)
+                batches.add(nm.num_qubits)
+                
+        
+        for experiment_id in BitflipExperimentID:
+            old_lambdas = Test.get_old_lambdas(target_hardware_specs, experiment_id)
+            new_lambdas = Test.get_new_lambdas(batches, experiment_id)
+            
+            Test.check_lambdas(new_lambdas, old_lambdas, experiment_id)
+            
         
     @staticmethod
     def ibm_run(config_path):
@@ -729,14 +791,13 @@ def gen_paper_configs():
     
     for (num_qubits, batch) in batches.items():
         # we create a config that will run experiments for all quantum computers that have the same number of qubits
-        
         # IPMA
         config_ipma = dict()
         config_ipma["name"] = f"B{num_qubits}"
         config_ipma["experiment_id"] = "ipma"
         config_ipma["min_horizon"] = 4
         config_ipma["max_horizon"] = 7
-        config_ipma["output_dir"] = f"/nfs/scistore16/tomgrp/smuroyal/im_time_evolution/synthesis/bitflip/ipma/B{num_qubits}/"
+        config_ipma["output_dir"] = f"{PROJECT_PATH}synthesis/bitflip/ipma/B{num_qubits}/"
         config_ipma["algorithms_file"] = ""
         config_ipma["hardware"] = batch
         
@@ -750,7 +811,7 @@ def gen_paper_configs():
         config_cxh["experiment_id"] = "cxh"
         config_cxh["min_horizon"] = 4
         config_cxh["max_horizon"] = 7
-        config_cxh["output_dir"] = f"/nfs/scistore16/tomgrp/smuroyal/im_time_evolution/synthesis/bitflip/cxh/B{num_qubits}/"
+        config_cxh["output_dir"] = f"{PROJECT_PATH}synthesis/bitflip/cxh/B{num_qubits}/"
         config_cxh["algorithms_file"] = ""
         config_cxh["hardware"] = batch
         cxh_file = open(f"../configs/cxh_b{num_qubits}.json", "w")
@@ -806,6 +867,7 @@ if __name__ == "__main__":
             generate_embeddings(f"../configs/ipma_b{num_qubits}.json")
             generate_embeddings(f"../configs/cxh_b{num_qubits}.json")
     elif arg_backend == "all_pomdps":
+        gen_paper_configs()
         # TODO: clean me up
         # step 2: generate all pomdps
         config_path = sys.argv[2]
@@ -815,7 +877,8 @@ if __name__ == "__main__":
         # batches = get_batches()
         
         # for num_qubits in batches.keys():
-            # generate_pomdps(f"../configs/ipma_b{num_qubits}.json")
+        #     generate_pomdps(f"../configs/ipma_b{num_qubits}.json")
+        
         generate_pomdps(f"../configs/cxh_b{config_path}.json")
         
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)
@@ -831,6 +894,10 @@ if __name__ == "__main__":
 
 
     elif arg_backend == "test" :
+        with cProfile.Profile() as pr:
+            generate_pomdps(f"../configs/tenerife_test.json")
+        stats = pstats.Stats(pr)
+        stats.sort_stats('cumulative').print_stats(10)
         pass     
         # generate_pomdp(BitflipExperimentID.CXH, HardwareSpec.ATHENS, {0: 0, 1: 1, 2: 2}, "", return_pomdp=True)
         # Test.check_selected_hardware()
@@ -847,8 +914,9 @@ if __name__ == "__main__":
         # config_path = sys.argv[2]
         # Test.ibm_run(config_path)
         # generate_server_sbatchs()
-        generate_server_synthesis_script()
-        generate_input_files_for_script()
+        # generate_server_synthesis_script()
+        # generate_input_files_for_script()
+        Test.compare_lambdas()
     else:
         raise Exception("argument does not run any procedure in this script")
         
