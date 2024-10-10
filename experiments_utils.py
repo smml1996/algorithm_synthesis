@@ -82,9 +82,9 @@ def generate_embeddings(**kwargs) -> Dict[Any, Any]:
     f.write(json.dumps(result))
     f.close()
     
-def get_num_qubits_to_hardware(hardware_str=True) -> Dict[int, HardwareSpec|str]:
+def get_num_qubits_to_hardware(hardware_str=True, allowed_hardware=HardwareSpec) -> Dict[int, HardwareSpec|str]:
     s = dict()
-    for hardware in HardwareSpec:
+    for hardware in allowed_hardware:
         nm = NoiseModel(hardware, thermal_relaxation=False)
         if nm.num_qubits not in s.keys():
             s[nm.num_qubits] = []
@@ -113,7 +113,7 @@ def get_output_path(experiment_name, experiment_id, batch_number):
     directory_exists(os.path.join(project_path, "synthesis", experiment_name, experiment_id.value))
     return os.path.join(project_path, "synthesis", experiment_name, experiment_id.value,f"B{batch_number}")
 
-def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max_horizon):
+def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max_horizon, allowed_hardware=HardwareSpec):
     configs_path = get_configs_path()
     if not os.path.exists(configs_path):
         print(f"{configs_path} does not exists. Creating it...")
@@ -124,22 +124,23 @@ def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max
         print(f"{experiment_path} does not exists. Creating it...")
         os.mkdir(experiment_path)
         
-    batches = get_num_qubits_to_hardware(hardware_str=True)
+    batches = get_num_qubits_to_hardware(hardware_str=True, allowed_hardware=allowed_hardware)
     
     
     for (num_qubits, hardware_specs_str) in batches.items():
-        config = dict()
-        config["name"] = f"B{num_qubits}"
-        config["experiment_id"] = f"{experiment_id.value}"
-        config["min_horizon"] = min_horizon
-        config["max_horizon"] = max_horizon
-        config["output_dir"] = get_output_path(experiment_name, experiment_id, num_qubits)
-        config["algorithms_file"] = ""
-        config["hardware"] = hardware_specs_str
-    
-        config_path = get_config_path(experiment_name, experiment_id, num_qubits)
-        f = open(config_path, "w")
-        json.dump(config, f, indent=4)
-        f.close()
+        if len(hardware_specs_str) > 0:
+            config = dict()
+            config["name"] = f"B{num_qubits}"
+            config["experiment_id"] = f"{experiment_id.value}"
+            config["min_horizon"] = min_horizon
+            config["max_horizon"] = max_horizon
+            config["output_dir"] = get_output_path(experiment_name, experiment_id, num_qubits)
+            config["algorithms_file"] = ""
+            config["hardware"] = hardware_specs_str
+        
+            config_path = get_config_path(experiment_name, experiment_id, num_qubits)
+            f = open(config_path, "w")
+            json.dump(config, f, indent=4)
+            f.close()
         
     

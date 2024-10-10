@@ -5,7 +5,7 @@ import json
 import os, sys
 sys.path.append(os.getcwd() + "/..")
 
-from experiments_utils import directory_exists, generate_configs, generate_embeddings, get_config_path, get_embeddings_path
+from experiments_utils import directory_exists, generate_configs, generate_embeddings, get_config_path, get_embeddings_path, get_project_settings
 from pomdp import POMDPAction
 import qmemory
 from qpu_utils import BasisGates, Op
@@ -163,20 +163,33 @@ def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id
 
 def get_hardware_embeddings(hardware: HardwareSpec, **kwargs) -> List[Dict[int, int]]:
     noise_model = NoiseModel(hardware, thermal_relaxation=WITH_THERMALIZATION)
+    assert hardware not in kwargs["statistics"].keys()
+    kwargs["statistics"][hardware] = []
     if kwargs["experiment_id"] == H2ExperimentID.P0_CliffordT:
         answer = []
         pivot_qubits = set()
 
         # get qubit with highest accumulated measurement error rate
-        pivot_qubits.add(noise_model.get_most_noisy_qubit(Op.MEAS)[0])
+        most_noisy_meas = noise_model.get_most_noisy_qubit(Op.MEAS)[0]
+        kwargs["statistics"][hardware].append((most_noisy_meas, Op.MEAS))
+        pivot_qubits.add(most_noisy_meas[1])
         if noise_model.basis_gates in [BasisGates.TYPE1, BasisGates.TYPE6]:
             # we get the most noisy qubits in terms of U1 and U2
-            pivot_qubits.add(noise_model.get_most_noisy_qubit(Op.U1)[0])
-            pivot_qubits.add(noise_model.get_most_noisy_qubit(Op.U2)[0])
+            most_noisy_U1 = noise_model.get_most_noisy_qubit(Op.U1)[0]
+            most_noisy_U2 = noise_model.get_most_noisy_qubit(Op.U2)[0]
+            kwargs["statistics"][hardware].append((most_noisy_U1, Op.U1))
+            kwargs["statistics"][hardware].append((most_noisy_U2, Op.U2))
+            pivot_qubits.add(most_noisy_U1[1])
+            pivot_qubits.add(most_noisy_U2[1])
+            
         else:
             # we get the most noisy qubits in terms of SX and RZ gates
-            pivot_qubits.add(noise_model.get_most_noisy_qubit(Op.SX)[0])
-            pivot_qubits.add(noise_model.get_most_noisy_qubit(Op.RZ)[0])
+            most_noisy_SX = noise_model.get_most_noisy_qubit(Op.SX)[0]
+            most_noisy_RZ = noise_model.get_most_noisy_qubit(Op.RZ)[0]
+            kwargs["statistics"][hardware].append((most_noisy_SX, Op.SX))
+            kwargs["statistics"][hardware].append((most_noisy_RZ, Op.RZ))
+            pivot_qubits.add(most_noisy_SX[1])
+            pivot_qubits.add(most_noisy_RZ[1])
             
         for p in pivot_qubits:
             answer.append({0: p})
@@ -192,13 +205,27 @@ if __name__ == "__main__":
     Precision.update_threshold()
     
     if arg_backend == "gen_configs":
-        generate_configs("H2", H2ExperimentID.P0_CliffordT, 4, 7)
+        generate_configs("H2", H2ExperimentID.P0_CliffordT, 4, 7, allowed_hardware=[HardwareSpec.AUCKLAND, HardwareSpec.WASHINGTON, HardwareSpec.ROCHESTER])
     if arg_backend == "embeddings":
-        batches = get_num_qubits_to_hardware(WITH_THERMALIZATION)
-        
+        batches = get_num_qubits_to_hardware(WITH_THERMALIZATION, allowed_hardware=[HardwareSpec.AUCKLAND, HardwareSpec.WASHINGTON, HardwareSpec.ROCHESTER])
+        statistics = dict()
         for num_qubits in batches.keys():
             config_path = get_config_path("H2", H2ExperimentID.P0_CliffordT, num_qubits)
-            generate_embeddings(config_path=config_path, experiment_enum=H2ExperimentID, experiment_id=H2ExperimentID.P0_CliffordT, get_hardware_embeddings=get_hardware_embeddings)
+            generate_embeddings(config_path=config_path, experiment_enum=H2ExperimentID, experiment_id=H2ExperimentID.P0_CliffordT, get_hardware_embeddings=get_hardware_embeddings, statistics=statistics)
+        project_settings = get_project_settings()
+        project_path = project_settings["PROJECT_PATH"]
+        statistics_path = os.path.join(project_path, "synthesis", "H2",H2ExperimentID.P0_CliffordT.value, "embedding_stats.csv")
+        f_statistics = open(statistics_path, "w")
+        f_statistics.write("hardware,qubit,prob,op\n")
+        sum_probs = 0
+        total_elements = 0
+        for (hardware_spec, stats) in statistics.items():
+            for ((prob, qubit), op) in stats:
+                total_elements+=1
+                sum_probs+=prob
+                f_statistics.write(f"{hardware_spec.value},{qubit},{prob},{op.name}\n")
+        f_statistics.close()
+        print(sum_probs/total_elements)
     if arg_backend == "test":
         Test.test_hamiltonian()
     

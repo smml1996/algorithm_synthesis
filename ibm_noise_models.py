@@ -705,11 +705,10 @@ class NoiseModel:
                         qubits_and_noises.append((channel.estimated_success_prob, instruction.target))
                 else:
                     assert isinstance(channel, MeasChannel)
-                    qubits_and_noises.append((channel.get_success_probability(), instruction.target))
+                    qubits_and_noises.append((channel.get_success_probability()/2.0, instruction.target))
                     
         qubits_and_noises = sorted(qubits_and_noises, key=lambda x : x[0])
-        answer = [x[1] for x in qubits_and_noises[:top]]
-        return answer
+        return qubits_and_noises
             
             
                     
@@ -751,9 +750,9 @@ def ibm_simulate_circuit(qc: QuantumCircuit, noise_model, initial_layout, seed=1
     
     return np.asarray(result.data()['res'])
 
-def get_num_qubits_to_hardware(with_thermalization: bool, hardware_str=True) -> Dict[int, HardwareSpec|str]:
+def get_num_qubits_to_hardware(with_thermalization: bool, hardware_str=True, allowed_hardware=HardwareSpec) -> Dict[int, HardwareSpec|str]:
     s = dict()
-    for hardware in HardwareSpec:
+    for hardware in allowed_hardware:
         nm = NoiseModel(hardware, thermal_relaxation=with_thermalization)
         if nm.num_qubits not in s.keys():
             s[nm.num_qubits] = []

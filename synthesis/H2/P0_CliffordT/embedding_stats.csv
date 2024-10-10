@@ -1,0 +1,10 @@
+hardware,qubit,prob,op
+fake_auckland,24,0.8645,MEAS
+fake_auckland,15,0.9598101228,SX
+fake_auckland,0,1.0,RZ
+fake_washington,109,0.6772,MEAS
+fake_washington,37,0.9602365665,SX
+fake_washington,0,1.0,RZ
+fake_rochester,30,0.5975,MEAS
+fake_rochester,0,1.0,U1
+fake_rochester,51,0.9872418114,U2

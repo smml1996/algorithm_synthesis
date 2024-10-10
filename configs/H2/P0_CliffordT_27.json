@@ -6,15 +6,6 @@
     "output_dir": "/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/synthesis/H2/P0_CliffordT/B27",
     "algorithms_file": "",
     "hardware": [
-        "fake_hanoi",
-        "fake_cairo",
-        "fake_mumbai",
-        "fake_kolkata",
-        "fake_auckland",
-        "fake_geneva",
-        "fake_montreal",
-        "fake_paris",
-        "fake_sydney",
-        "fake_toronto"
+        "fake_auckland"
     ]
 }
