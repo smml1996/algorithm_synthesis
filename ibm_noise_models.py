@@ -691,7 +691,7 @@ class NoiseModel:
         f.close()
         
     # functions that help to choose embeddings follow
-    def get_most_noisy_qubit(self, op: Op, top=1) -> List[int]:
+    def get_most_noisy_qubit(self, op: Op, top=1, reverse=False) -> List[int]:
         
         assert (op in self.basis_gates.value) or (op == Op.MEAS)
         
@@ -707,7 +707,7 @@ class NoiseModel:
                     assert isinstance(channel, MeasChannel)
                     qubits_and_noises.append((channel.get_success_probability()/2.0, instruction.target))
                     
-        qubits_and_noises = sorted(qubits_and_noises, key=lambda x : x[0])
+        qubits_and_noises = sorted(qubits_and_noises, key=lambda x : x[0], reverse=reverse)
         return qubits_and_noises
             
             
