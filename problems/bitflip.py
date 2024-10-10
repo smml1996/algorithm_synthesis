@@ -4,7 +4,7 @@ sys.path.append(os.getcwd()+"/..")
 from cmath import isclose
 from copy import deepcopy
 import time
-from typing import Dict, List
+from typing import Any, Dict, List
 import json
 
 from qiskit import ClassicalRegister, QuantumCircuit, QuantumRegister
@@ -13,15 +13,15 @@ from cmemory import ClassicalState
 from pomdp import POMDP, POMDPAction, POMDPVertex, build_pomdp
 import qmemory
 from qpu_utils import GateData, Op, BasisGates
-from utils import PROJECT_PATH, are_matrices_equal, find_enum_object, get_index, is_matrix_in_list, Precision
+from utils import are_matrices_equal, find_enum_object, get_index, is_matrix_in_list, Precision
 sys.path.append(os.getcwd()+"/..")
 
 from qstates import QuantumState
-from ibm_noise_models import Instruction, MeasChannel, NoiseModel, get_ibm_noise_model, HardwareSpec, ibm_simulate_circuit, load_config_file
+from ibm_noise_models import Instruction, MeasChannel, NoiseModel, get_ibm_noise_model, HardwareSpec, get_num_qubits_to_hardware, ibm_simulate_circuit, load_config_file
 import numpy as np
 from math import pi   
 from enum import Enum
-from experiments_utils import ReadoutNoise
+from experiments_utils import ReadoutNoise, directory_exists, generate_embeddings, get_embeddings_path, get_project_settings
 import cProfile
 import pstats
 
@@ -178,7 +178,7 @@ def does_result_contains_d(result, d):
             return True
     return False
 
-def get_backend_embeddings(backend: HardwareSpec):
+def get_hardware_embeddings(backend: HardwareSpec, **kwargs) -> List[Dict[int, int]]:
     result = []
     noise_model = NoiseModel(backend, thermal_relaxation=WITH_TERMALIZATION)
     if noise_model.num_qubits < 14:
@@ -266,33 +266,6 @@ class IBMBitFlipInstance:
     
 def is_hardware_selected(noise_model: NoiseModel):
     return (Op.CNOT in noise_model.basis_gates.value) and len(noise_model.instructions_to_channel.keys()) > 0
-        
-
-def generate_embeddings(config_path):
-    config = load_config_file(config_path, BitflipExperimentID)
-    
-    if not os.path.exists(config["output_dir"]):
-        os.mkdir(config["output_dir"]) 
-        
-    result = dict()
-    c_embeddings = 0
-    for hardware_spec in HardwareSpec:
-        noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_TERMALIZATION)
-        if is_hardware_selected(noise_model) and (hardware_spec.value in config["hardware"]):
-            assert hardware_spec not in result.keys()
-            result[hardware_spec.value] = dict()
-            embeddings = get_backend_embeddings(hardware_spec)
-            result[hardware_spec.value]["count"] = len(embeddings)
-            result[hardware_spec.value]["embeddings"] = embeddings
-            c_embeddings += len(embeddings)
-
-    result["count"] = c_embeddings
-    f = open(get_embeddings_path(config), "w")
-    f.write(json.dumps(result))
-    f.close()
-
-def get_embeddings_path(config):
-    return os.path.join(config["output_dir"], "embeddings.json")
 
 def load_embeddings(config=None, config_path=None):
     if config is None:
@@ -415,14 +388,12 @@ def generate_pomdps(config_path):
     assert isinstance(experiment_id, BitflipExperimentID)
     
     # the file that contains the time to generate the POMDP is in this folder
-    if not os.path.isdir(config["output_dir"]):
-        os.mkdir(config["output_dir"])
+    directory_exists(config["output_dir"])
         
      # all pomdps will be outputed in this folder:
     output_folder = os.path.join(config["output_dir"], "pomdps")
     # check that there is a folder with the experiment id inside pomdps path
-    if not os.path.isdir(output_folder):
-        os.mkdir(output_folder)
+    directory_exists(output_folder)
 
     all_embeddings = load_embeddings(config=config)
     
@@ -589,7 +560,7 @@ class Test:
         for hardware_spec in HardwareSpec:
             noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_TERMALIZATION)
             if is_hardware_selected(noise_model):
-                embeddings = get_backend_embeddings(hardware_spec)
+                embeddings = get_hardware_embeddings(hardware_spec)
                 Test.__check_embeddings(hardware_spec, embeddings)
                 
     
@@ -876,7 +847,7 @@ class Test:
             return True
         long_time_path = "/Users/stefaniemuroyalei/Downloads/bitflip/"
         
-        batches = get_batches()
+        batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
         for experiment_id in BitflipExperimentID:
             for n_qubits in batches.keys():
                 config = load_config_file(f"/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/configs/{experiment_id.value}_b{n_qubits}.json", BitflipExperimentID)
@@ -896,23 +867,12 @@ class Test:
                         print( _compare_pomdps(pomdp1, pomdp2))
                         pomdp1_file.close()
                         pomdp2_file.close()
-                
-                    
-                    
-
-def get_batches():
-    s = dict()
-    for hardware in HardwareSpec:
-        nm = NoiseModel(hardware, thermal_relaxation=WITH_TERMALIZATION)
-        if is_hardware_selected(nm):
-            if nm.num_qubits not in s.keys():
-                s[nm.num_qubits] = []
-            s[nm.num_qubits].append(hardware.value) 
-    return s
     
-def gen_paper_configs():
+def generate_configs():
+    settings = get_project_settings()
+    project_path = settings["PROJECT_PATH"]
     # divide experiments into batches
-    batches = get_batches()
+    batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
     
     for (num_qubits, batch) in batches.items():
         # we create a config that will run experiments for all quantum computers that have the same number of qubits
@@ -922,7 +882,7 @@ def gen_paper_configs():
         config_ipma["experiment_id"] = "ipma"
         config_ipma["min_horizon"] = 4
         config_ipma["max_horizon"] = 7
-        config_ipma["output_dir"] = f"{PROJECT_PATH}synthesis/bitflip/ipma/B{num_qubits}/"
+        config_ipma["output_dir"] = f"{project_path}synthesis/bitflip/ipma/B{num_qubits}/"
         config_ipma["algorithms_file"] = ""
         config_ipma["hardware"] = batch
         
@@ -936,7 +896,7 @@ def gen_paper_configs():
         config_cxh["experiment_id"] = "cxh"
         config_cxh["min_horizon"] = 4
         config_cxh["max_horizon"] = 7
-        config_cxh["output_dir"] = f"{PROJECT_PATH}synthesis/bitflip/cxh/B{num_qubits}/"
+        config_cxh["output_dir"] = f"{project_path}synthesis/bitflip/cxh/B{num_qubits}/"
         config_cxh["algorithms_file"] = ""
         config_cxh["hardware"] = batch
         cxh_file = open(f"../configs/cxh_b{num_qubits}.json", "w")
@@ -945,7 +905,7 @@ def gen_paper_configs():
     
 def generate_server_sbatchs():
     f = open("server_script.sh", "w")
-    batches = get_batches()
+    batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
     for num_qubits in batches.keys():
         f.write(f"sbatch sscript.sh {num_qubits}\n")
     f.close()
@@ -953,7 +913,7 @@ def generate_server_sbatchs():
 def generate_server_synthesis_script():
     f_ipma = open("../algorithm_synthesis/qalgorithm_synthesis/ipma_script.sh", "w")
     f_cxh = open("../algorithm_synthesis/qalgorithm_synthesis/cxh.sh", "w")
-    batches = get_batches()
+    batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
     for num_qubits in batches.keys():
         f_ipma.write(f"sbatch experiments_script.sh /nfs/scistore16/tomgrp/smuroyal/im_time_evolution/configs/ipma_b{num_qubits}.json\n")
         f_cxh.write(f"sbatch experiments_script.sh /nfs/scistore16/tomgrp/smuroyal/im_time_evolution/configs/cxh_b{num_qubits}.json\n")
@@ -963,7 +923,7 @@ def generate_server_synthesis_script():
     f_cxh.close()
     
 def generate_input_files_for_script():
-    batches = get_batches()
+    batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
     for num_qubits in batches.keys():
         f_ipma = open(f"../algorithm_synthesis/qalgorithm_synthesis/inputs/ipma_b{num_qubits}.input", "w")
         f_cxh = open(f"../algorithm_synthesis/qalgorithm_synthesis/inputs/cxh_b{num_qubits}.input", "w")
@@ -979,27 +939,27 @@ if __name__ == "__main__":
     Precision.update_threshold()
     if arg_backend == "gen_paper_configs":
         # step 0
-        gen_paper_configs()
+        generate_configs()
     elif arg_backend == "embeddings":
         # step 1
         # config_path = sys.argv[2]
         # generate_embeddings(config_path)   
 
         # generate paper embeddings
-        batches = get_batches()
+        batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
         
         for num_qubits in batches.keys():
-            generate_embeddings(f"../configs/ipma_b{num_qubits}.json")
-            generate_embeddings(f"../configs/cxh_b{num_qubits}.json")
+            generate_embeddings(config_path=f"../configs/ipma_b{num_qubits}.json", experiment_enum=BitflipExperimentID, get_hardware_embeddings=get_hardware_embeddings)
+            generate_embeddings(config_path=f"../configs/cxh_b{num_qubits}.json", experiment_enum=BitflipExperimentID, get_hardware_embeddings=get_hardware_embeddings)
     elif arg_backend == "all_pomdps":
-        gen_paper_configs()
+        generate_configs()
         # TODO: clean me up
         # step 2: generate all pomdps
         # config_path = sys.argv[2]
         # generate_pomdps(config_path)
         
         # generate paper embeddings
-        batches = get_batches()
+        batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
         
         for num_qubits in batches.keys():
             generate_pomdps(f"../configs/ipma_b{num_qubits}.json")
