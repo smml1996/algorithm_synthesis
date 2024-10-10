@@ -5,6 +5,7 @@ import signal
 from typing import Any, Dict
 
 from ibm_noise_models import HardwareSpec, load_config_file
+from utils import find_enum_object
 
 
 class TimeoutException(Exception): pass
@@ -66,7 +67,8 @@ def generate_embeddings(**kwargs) -> Dict[Any, Any]:
         
     result = dict()
     c_embeddings = 0
-    for hardware_spec in HardwareSpec:
+    for hardware_spec_str in config["hardware"]:
+        hardware_spec = find_enum_object(hardware_spec_str, HardwareSpec)
         assert hardware_spec not in result.keys()
         result[hardware_spec.value] = dict()
         embeddings = kwargs["get_hardware_embeddings"](hardware_spec, **kwargs)
