@@ -24,9 +24,9 @@ class HardwareSpec(Enum):
     CAIRO = "fake_cairo"
     MUMBAI = "fake_mumbai"
     KOLKATA = "fake_kolkata"
-    PRAGUE = "fake_prague"
+    # PRAGUE = "fake_prague"
     ALMADEN = "fake_almaden"
-    ARMONK = "fake_armonk"
+    # ARMONK = "fake_armonk"
     ATHENS = "fake_athens"
     AUCKLAND = "fake_auckland"
     BELEM = "fake_belem"
@@ -52,7 +52,7 @@ class HardwareSpec(Enum):
     POUGHKEEPSIE = "fake_poughkeepsie"
     ROCHESTER = "fake_rochester"
     ROME = "fake_rome"
-    RUESCHLIKON = "fake_rueschlikon"
+    # RUESCHLIKON = "fake_rueschlikon"
     SANTIAGO = "fake_santiago"
     SINGAPORE = "fake_singapore"
     SYDNEY = "fake_sydney"
@@ -109,12 +109,12 @@ def get_ibm_noise_model(hardware_spec: HardwareSpec, thermal_relaxation=True) ->
         backend = FakeMumbai()
     elif backend_ == HardwareSpec.KOLKATA:
         backend = FakeKolkata()
-    elif backend_ == HardwareSpec.PRAGUE:
-        backend = FakePrague()
+    # elif backend_ == HardwareSpec.PRAGUE:
+    #     backend = FakePrague()
     elif backend_ == HardwareSpec.ALMADEN:
         backend = FakeAlmaden()
-    elif backend_ == HardwareSpec.ARMONK:
-        backend = FakeArmonk()
+    # elif backend_ == HardwareSpec.ARMONK:
+    #     backend = FakeArmonk()
     elif backend_ == HardwareSpec.ATHENS:
         backend = FakeAthens()
     elif backend_ == HardwareSpec.AUCKLAND:
@@ -167,8 +167,8 @@ def get_ibm_noise_model(hardware_spec: HardwareSpec, thermal_relaxation=True) ->
         backend = FakeRochester()
     elif backend_ == HardwareSpec.ROME:
         backend = FakeRome()
-    elif backend_ == HardwareSpec.RUESCHLIKON:
-        backend = FakeRueschlikon()
+    # elif backend_ == HardwareSpec.RUESCHLIKON:
+    #     backend = FakeRueschlikon()
     elif backend_ == HardwareSpec.SANTIAGO:
         backend = FakeSantiago()
     elif backend_ == HardwareSpec.SINGAPORE:
@@ -552,6 +552,9 @@ class MeasChannel:
         self.meas_errors[1][0] = one_meas_err[0] # probability that measurement outcome is 0 given that the ideal outcome should have been 1
         self.meas_errors[1][1] = one_meas_err[1] # probability that measurement outcome is 1 given that the ideal outcome should have been 1
     
+    def get_success_probability(self):
+        return self.get_ind_probability(0,0) + self.get_ind_probability(1,1)
+        
     def get_ind_probability(self, ideal_outcome: int, noisy_outcome: int):
         assert ideal_outcome in [0, 1]
         assert noisy_outcome in [0, 1]
@@ -686,6 +689,32 @@ class NoiseModel:
         f = open(path, "w")
         f.write(json.dumps(self.serialize(), indent=4))
         f.close()
+        
+    # functions that help to choose embeddings follow
+    def get_most_noisy_qubit(self, op: Op, top=1) -> List[int]:
+        
+        assert (op in self.basis_gates.value) or (op == Op.MEAS)
+        
+        qubits_and_noises = []
+        for (instruction, channel) in self.instructions_to_channel.items():
+            if instruction.op == op:
+                if isinstance(channel, QuantumChannel):
+                    if is_multiqubit_gate(op):
+                        qubits_and_noises.append((channel.estimated_success_prob, (instruction.target, instruction.control)))
+                    else:
+                        qubits_and_noises.append((channel.estimated_success_prob, instruction.target))
+                else:
+                    assert isinstance(channel, MeasChannel)
+                    qubits_and_noises.append((channel.get_success_probability(), instruction.target))
+                    
+        qubits_and_noises = sorted(qubits_and_noises, key=lambda x : x[0])
+        answer = [x[1] for x in qubits_and_noises[:top]]
+        return answer
+            
+            
+                    
+                
+                
 
 def instruction_to_ibm(qc, instruction_sequence):
     for instruction in instruction_sequence:
@@ -722,5 +751,16 @@ def ibm_simulate_circuit(qc: QuantumCircuit, noise_model, initial_layout, seed=1
     
     return np.asarray(result.data()['res'])
 
+def get_num_qubits_to_hardware(with_thermalization: bool, hardware_str=True) -> Dict[int, HardwareSpec|str]:
+    s = dict()
+    for hardware in HardwareSpec:
+        nm = NoiseModel(hardware, thermal_relaxation=with_thermalization)
+        if nm.num_qubits not in s.keys():
+            s[nm.num_qubits] = []
+        if hardware_str:
+            s[nm.num_qubits].append(hardware.value) 
+        else:
+            s[nm.num_qubits].append(hardware) 
+    return s
 if __name__ == "__main__":
     pass

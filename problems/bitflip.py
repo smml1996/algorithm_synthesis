@@ -21,7 +21,7 @@ from ibm_noise_models import Instruction, MeasChannel, NoiseModel, get_ibm_noise
 import numpy as np
 from math import pi   
 from enum import Enum
-from experiments_utils import ReadoutNoise, directory_exists, generate_embeddings, get_embeddings_path, get_project_settings
+from experiments_utils import ReadoutNoise, directory_exists, generate_configs, generate_embeddings, get_config_path, get_embeddings_path, get_project_settings
 import cProfile
 import pstats
 
@@ -868,41 +868,6 @@ class Test:
                         pomdp1_file.close()
                         pomdp2_file.close()
     
-def generate_configs():
-    settings = get_project_settings()
-    project_path = settings["PROJECT_PATH"]
-    # divide experiments into batches
-    batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
-    
-    for (num_qubits, batch) in batches.items():
-        # we create a config that will run experiments for all quantum computers that have the same number of qubits
-        # IPMA
-        config_ipma = dict()
-        config_ipma["name"] = f"B{num_qubits}"
-        config_ipma["experiment_id"] = "ipma"
-        config_ipma["min_horizon"] = 4
-        config_ipma["max_horizon"] = 7
-        config_ipma["output_dir"] = f"{project_path}synthesis/bitflip/ipma/B{num_qubits}/"
-        config_ipma["algorithms_file"] = ""
-        config_ipma["hardware"] = batch
-        
-        ipma_file = open(f"../configs/ipma_b{num_qubits}.json", "w")
-        json.dump(config_ipma, ipma_file, indent=4)
-        ipma_file.close()
-    
-        # CX+H
-        config_cxh = dict()
-        config_cxh["name"] = f"B{num_qubits}"
-        config_cxh["experiment_id"] = "cxh"
-        config_cxh["min_horizon"] = 4
-        config_cxh["max_horizon"] = 7
-        config_cxh["output_dir"] = f"{project_path}synthesis/bitflip/cxh/B{num_qubits}/"
-        config_cxh["algorithms_file"] = ""
-        config_cxh["hardware"] = batch
-        cxh_file = open(f"../configs/cxh_b{num_qubits}.json", "w")
-        json.dump(config_cxh, cxh_file, indent=4)
-        cxh_file.close()
-    
 def generate_server_sbatchs():
     f = open("server_script.sh", "w")
     batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
@@ -937,22 +902,24 @@ if __name__ == "__main__":
     arg_backend = sys.argv[1]
     Precision.PRECISION = MAX_PRECISION
     Precision.update_threshold()
+    settings = get_project_settings()
+    project_path = settings["PROJECT_PATH"]
     if arg_backend == "gen_paper_configs":
         # step 0
-        generate_configs()
+        generate_configs(experiment_name="bitflip", experiment_id=BitflipExperimentID.IPMA, min_horizon=4, max_horizon=7)
+        generate_configs(experiment_name="bitflip", experiment_id=BitflipExperimentID.CXH, min_horizon=4, max_horizon=7)
     elif arg_backend == "embeddings":
-        # step 1
-        # config_path = sys.argv[2]
-        # generate_embeddings(config_path)   
-
+        
         # generate paper embeddings
         batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
         
         for num_qubits in batches.keys():
-            generate_embeddings(config_path=f"../configs/ipma_b{num_qubits}.json", experiment_enum=BitflipExperimentID, get_hardware_embeddings=get_hardware_embeddings)
-            generate_embeddings(config_path=f"../configs/cxh_b{num_qubits}.json", experiment_enum=BitflipExperimentID, get_hardware_embeddings=get_hardware_embeddings)
+            ipma_config_path = get_config_path("bitflip", BitflipExperimentID.IPMA, num_qubits)
+            generate_embeddings(config_path=ipma_config_path, experiment_enum=BitflipExperimentID, get_hardware_embeddings=get_hardware_embeddings)
+            
+            cxh_config_path = get_config_path("bitflip", BitflipExperimentID.CXH, num_qubits)
+            generate_embeddings(config_path=cxh_config_path, experiment_enum=BitflipExperimentID, get_hardware_embeddings=get_hardware_embeddings)
     elif arg_backend == "all_pomdps":
-        generate_configs()
         # TODO: clean me up
         # step 2: generate all pomdps
         # config_path = sys.argv[2]
@@ -962,8 +929,9 @@ if __name__ == "__main__":
         batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
         
         for num_qubits in batches.keys():
-            generate_pomdps(f"../configs/ipma_b{num_qubits}.json")
-            generate_pomdps(f"../configs/cxh_b{num_qubits}.json")
+            generate_pomdps(get_config_path("bitflip", BitflipExperimentID.IPMA, num_qubits))
+            
+            generate_pomdps(get_config_path("bitflip", BitflipExperimentID.CXH, num_qubits))
         
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)
     

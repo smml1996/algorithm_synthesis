@@ -20,11 +20,15 @@ class Op(Enum):
     SXD = "SXD"
     S = "S"
     SD = "SD"
-    U3 = "U3"
+    U1 = "U1"
+    U1D = "U1D"
     U2 = "U2"
+    U2D = "U2D"
+    U3 = "U3"
+    U3D = "U3D"
     TD = "TD"
     T = "T"
-    U1 = "U1"
+    
 
     # HADAMARD
     H = "H"

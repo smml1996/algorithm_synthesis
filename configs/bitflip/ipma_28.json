@@ -1,0 +1,11 @@
+{
+    "name": "B28",
+    "experiment_id": "ipma",
+    "min_horizon": 4,
+    "max_horizon": 7,
+    "output_dir": "/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/synthesis/bitflip/ipma/B28",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_cambridge"
+    ]
+}
