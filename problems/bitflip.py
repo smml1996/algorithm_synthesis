@@ -897,7 +897,6 @@ if __name__ == "__main__":
         # generate_input_files_for_script()
         # Test.compare_lambdas()
         Test.compare_pomdps()
-        
     else:
         raise Exception("argument does not run any procedure in this script")
         
