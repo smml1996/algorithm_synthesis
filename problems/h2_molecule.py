@@ -1,8 +1,10 @@
 from argparse import Action
-from cmath import pi
+from cmath import isclose, pi
 from enum import Enum
+import numpy as np
 import json
 import os, sys
+from scipy.linalg import expm
 sys.path.append(os.getcwd() + "/..")
 
 from experiments_utils import directory_exists, generate_configs, generate_embeddings, get_config_path, get_embeddings_path, get_project_settings
@@ -13,7 +15,7 @@ from qpu_utils import BasisGates, Op
 
 from ibm_noise_models import HardwareSpec, Instruction, NoiseModel, get_num_qubits_to_hardware
 from typing import Dict, List
-from utils import Precision
+from utils import Precision, np_get_ground_state
 from cmemory import ClassicalState
 from qstates import QuantumState
 from qiskit.quantum_info import SparsePauliOp
@@ -38,7 +40,7 @@ class H2ExperimentID(Enum):
 
 
 def get_hamiltonian(problem: H2ExperimentID) -> SparsePauliOp:
-    if problem == H2ExperimentID.P0:
+    if problem == H2ExperimentID.P0_CliffordT:
         # Define the hydrogen molecule at internuclear distance R = 0.75 angstroms
         molecule = MoleculeInfo(
             ["H", "H"], 
@@ -69,11 +71,44 @@ def get_hamiltonian(problem: H2ExperimentID) -> SparsePauliOp:
     else:
         raise Exception(f"hamiltonian for {problem} not implemented!")
     
-def get_ground_states(hamiltonian: SparsePauliOp) -> List[QuantumState]:
-    pass
+def schroedinger_equation(H: SparsePauliOp, t: complex, initial_state: np.array) -> np.array:
+    I = complex(0, 1)
+
+    # Compute the time evolution operator U = e^(iHt)
+    U = expm(-I * H * t) # planck constant is assumed to be 1
+
+    # Apply U to the initial state |q>
+    final_state = np.dot(U, initial_state)
+    
+    # since U might not be a non-unitary matrix (for imaginary time evolution)
+    final_state = normalize_np_array(final_state)
+    return final_state
+    
+def normalize_np_array(quantum_state):
+    # normalize quantum state
+    norm = np.dot(np.conjugate(quantum_state).T, quantum_state)
+    assert isclose(norm.imag, 0.0, abs_tol=Precision.isclose_abstol)
+    norm = norm.real
+    assert norm > 0
+    sq_norm = np.sqrt(norm)
+    return quantum_state/sq_norm
+    
+def get_energy(H: SparsePauliOp, quantum_state: np.array) -> float:
+    quantum_state = normalize_np_array(quantum_state)
+    # Compute the expectation value ⟨q|H|q⟩
+    q_dagger = np.conjugate(quantum_state).T  # Conjugate transpose of |q>
+    H_q = np.dot(H, quantum_state)            # Matrix multiplication H|q>
+    expectation_value = np.dot(q_dagger, H_q)  # Inner product ⟨q|H|q⟩
+    assert isclose(expectation_value.imag, 0.0, abs_tol=Precision.isclose_abstol)
+    return expectation_value.real
+
+def get_fidelity(state1: np.array, state2: np.array) -> float:
+    result = np.dot(np.conjugate(state1).T, state2 )
+    return result.real*np.conjugate(result.real)
+    
 
 class H2MoleculeInstance:
-    def __init__(self, embedding: Dict[int, int], experiment_id: H2ExperimentID) -> None:
+    def __init__(self, embedding: Dict[int, int], experiment_id: H2ExperimentID, t: int, is_imaginary=True) -> None:
         """_summary_
 
         Args:
@@ -82,7 +117,16 @@ class H2MoleculeInstance:
         self.embedding = embedding
         self.experiment_id = experiment_id
         self.initial_state = None # must be a hybrid quantum state
+        self.t = t
         self.get_initial_states()
+        
+        # compute target state
+        qs, _ = self.initial_state
+        assert isinstance(qs, QuantumState)
+        if is_imaginary:
+            self.target_state = schroedinger_equation(get_hamiltonian(self.experiment_id), complex(0, -self.t), qs)
+        else:
+            self.target_state = schroedinger_equation(get_hamiltonian(self.experiment_id), self.t, qs.to_np_array())
         
     def get_initial_states(self):
         """the initial state must have non zero overlap with the ground state
@@ -102,43 +146,13 @@ class H2MoleculeInstance:
         self.initial_state = (quantum_state, classical_state)
         
     def is_target_qs(self, hybrid_state) -> bool:
-        pass
+        qs, cs = hybrid_state
+        assert isinstance(qs, QuantumState)
+        if self.experiment_id == H2MoleculeInstance.P0_CliffordT:
+            state = qs.to_np_array()
+            fidelity = get_fidelity(self.target_state, state)
+            return isclose(fidelity, 1.0, abs_tol=Precision.isclose_abstol)
     
-class Test:
-    @staticmethod
-    def test_hamiltonian():
-        # Define the hydrogen molecule at internuclear distance R = 0.75 angstroms
-        molecule = MoleculeInfo(
-            ["H", "H"], 
-            [(0.0, 0.0, 0.0), (0.0, 0.0, 0.75)],
-            charge=0,
-            multiplicity=1,
-            units=DistanceUnit.ANGSTROM
-        )
-        
-        # Set up the PySCF driver to calculate molecular integrals
-        driver = PySCFDriver.from_molecule(molecule=molecule, basis="sto3g")
-
-        # Obtain the electronic structure problem
-        problem = driver.run()
-        
-        hamiltonian = problem.hamiltonian.second_q_op()
-        # converter = QubitConverter(ParityMapper(), two_qubit_reduction=True)
-
-        # qubit_op = converter.convert(hamiltonian, num_particles=es_problem.num_particles)
-        mapper = JordanWignerMapper()
-        converter = QubitConverter(mapper, z2symmetry_reduction="auto")
-        
-        qubit_op = converter.convert(
-            hamiltonian,
-            num_particles=problem.num_particles,
-            sector_locator=problem.symmetry_sector_locator,
-        )
-
-        assert isinstance(qubit_op, SparsePauliOp)
-        for pauli, coeff in sorted(qubit_op.label_iter()):
-            print(f"{coeff.real:+.8f} * {pauli}")
-            
 def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: H2ExperimentID) -> List[Action]:
     if experiment_id == H2ExperimentID.P0_CliffordT:
         if noise_model.basis_gates in [BasisGates.TYPE1, BasisGates.TYPE6]:
@@ -158,9 +172,6 @@ def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id
         return [H0, T0, T0D, MEAS0]
     else:
         raise Exception("Not implemented!")
-
-
-
 
 def get_hardware_embeddings(hardware: HardwareSpec, **kwargs) -> List[Dict[int, int]]:
     noise_model = NoiseModel(hardware, thermal_relaxation=WITH_THERMALIZATION)
@@ -202,7 +213,101 @@ def get_hardware_embeddings(hardware: HardwareSpec, **kwargs) -> List[Dict[int, 
     else:
         raise Exception("Not implemented!")
 
+class Test:
+    @staticmethod
+    def test_hamiltonian():
+        # Define the hydrogen molecule at internuclear distance R = 0.75 angstroms
+        molecule = MoleculeInfo(
+            ["H", "H"], 
+            [(0.0, 0.0, 0.0), (0.0, 0.0, 0.75)],
+            charge=0,
+            multiplicity=1,
+            units=DistanceUnit.ANGSTROM
+        )
+        
+        # Set up the PySCF driver to calculate molecular integrals
+        driver = PySCFDriver.from_molecule(molecule=molecule, basis="sto3g")
 
+        # Obtain the electronic structure problem
+        problem = driver.run()
+        
+        hamiltonian = problem.hamiltonian.second_q_op()
+        # converter = QubitConverter(ParityMapper(), two_qubit_reduction=True)
+
+        # qubit_op = converter.convert(hamiltonian, num_particles=es_problem.num_particles)
+        mapper = JordanWignerMapper()
+        converter = QubitConverter(mapper, z2symmetry_reduction="auto")
+        
+        qubit_op = converter.convert(
+            hamiltonian,
+            num_particles=problem.num_particles,
+            sector_locator=problem.symmetry_sector_locator,
+        )
+
+        assert isinstance(qubit_op, SparsePauliOp)
+        for pauli, coeff in sorted(qubit_op.label_iter()):
+            print(f"{coeff.real:+.8f} * {pauli}")
+    
+    @staticmethod
+    def check_ground(matrix, my_state, their_state, expected_energy=None):
+        my_energy = get_energy(matrix, my_state)
+        their_energy = get_energy(matrix, their_state)
+        if expected_energy is not None:
+            assert isclose(my_energy, expected_energy, rel_tol=Precision.rel_tol)
+        if not isclose(my_energy, their_energy, rel_tol=Precision.rel_tol):
+            raise Exception(f"Energies do not match: {my_energy} and {their_energy}")
+        fidelity = get_fidelity(my_state, their_state)
+        if not isclose(fidelity, 1.0, rel_tol=Precision.rel_tol):
+            raise Exception(f"Fidelity is not close:\n {my_state}\n {their_state}")
+        
+    @staticmethod
+    def pauli_test():
+        # pauli matrices
+        I = np.array([[1, 0], [0, 1]])
+
+        X = np.array([[0, 1], [1, 0]])
+
+        Z = np.array([[1,0], [0,-1]])
+
+        Y = np.array([[0, complex(0, -1)], [complex(0, 1), 0]])
+                
+        # testing identity matrix
+        my_ground_state = schroedinger_equation(I, complex(0,-14), np.array([1,0]))
+        Test.check_ground(I, my_ground_state, [1, 0], expected_energy=1)
+        
+        # testing pauli-X
+        eigenvalues, eigenvectors = np.linalg.eigh(X)
+        their_ground_energy, eigenstates = np_get_ground_state(eigenvalues, eigenvectors)
+        assert isclose(their_ground_energy, -1, rel_tol=Precision.rel_tol)
+        assert len(eigenstates) == 1
+        my_ground_state = schroedinger_equation(X, complex(0,-14), np.array([1,0]))
+        Test.check_ground(X, my_ground_state, eigenstates[0], expected_energy=-1)
+        
+        # testing pauli-Z
+        my_ground_state = schroedinger_equation(Z, complex(0,-14), np.array([1,0]))
+        Test.check_ground(Z, my_ground_state, [1,0], expected_energy=1)
+        
+        my_ground_state = schroedinger_equation(Z, complex(0,-14), np.array([0,1]))
+        Test.check_ground(Z, my_ground_state, [0,1], expected_energy=-1)
+        
+        my_ground_state = schroedinger_equation(Z, complex(0,-14), np.array([1/np.sqrt(2),1/np.sqrt(2)]))
+        Test.check_ground(Z, my_ground_state, [0,1], expected_energy=-1)
+        
+        # testing pauli-Y
+        eigenvalues, eigenvectors = np.linalg.eig(Y)
+        their_ground_energy, eigenstates = np_get_ground_state(eigenvalues, eigenvectors)
+        assert isclose(their_ground_energy, -1, rel_tol=Precision.rel_tol)
+        assert len(eigenstates) == 1
+        my_ground_state = schroedinger_equation(Y, complex(0,-14), np.array([1,0]))
+        Test.check_ground(Y, my_ground_state, eigenstates[0], expected_energy=-1)
+        
+        
+        
+        
+        
+            
+
+            
 
 if __name__ == "__main__":
     arg_backend = sys.argv[1]
@@ -231,8 +336,15 @@ if __name__ == "__main__":
                 f_statistics.write(f"{hardware_spec.value},{qubit},{prob},{op.name},{reverse}\n")
         f_statistics.close()
         print(sum_probs/total_elements)
+    if arg_backend == "all_pomdps":
+        batches = get_num_qubits_to_hardware(WITH_THERMALIZATION, allowed_hardware=P0_ALLOWED_HARDWARE)
+        
+        for num_qubits in batches.keys():
+            config_path = get_config_path("H2", H2ExperimentID.P0_CliffordT, num_qubits)
+            
     if arg_backend == "test":
-        Test.test_hamiltonian()
+        # Test.test_hamiltonian()
+        Test.pauli_test()
     
     
     
