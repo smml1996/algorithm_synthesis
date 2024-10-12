@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
         ofstream output_file(accuracies_file_path);
         output_file << "horizon,diff_index,real_hardware,acc\n";
 
-        for (int horizon = min_horizon; horizon < max_horizon; horizon++) {
+        for (int horizon = min_horizon; horizon < max_horizon+1; horizon++) {
             // getting the algorithms for a given horizon and experiment index
             std::ifstream f(algorithms_path);
             json algorithms_data = json::parse(f);
