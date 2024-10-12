@@ -67,7 +67,7 @@ class BitflipExperimentID(Enum):
 
 
 class BitFlipInstance:
-    def __init__(self,embedding: Dict[int, int]):
+    def __init__(self,**kwargs):
         """_summary_
 
         Args:
@@ -75,7 +75,7 @@ class BitFlipInstance:
             instruction_set (List[Instruction]): _description_
             embedding (Dict[int, int]): a mapping from logical qubits to physical qubits
         """
-        self.embedding = embedding
+        self.embedding = kwargs["embedding"]
         self.initial_state = None
         self.get_initial_states()
         # check embedding
@@ -853,11 +853,12 @@ if __name__ == "__main__":
         batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
         
         for num_qubits in batches.keys():
+            kwargs = dict()
             ipma_config_path = get_config_path("bitflip", BitflipExperimentID.IPMA, num_qubits)
-            generate_pomdps(ipma_config_path, BitflipExperimentID, BitflipExperimentID, get_experiments_actions, guard, load_embeddings, thermal_relaxation=WITH_TERMALIZATION)
+            generate_pomdps(ipma_config_path, BitFlipInstance, BitflipExperimentID, get_experiments_actions, guard, load_embeddings, thermal_relaxation=WITH_TERMALIZATION, kwargs=kwargs)
             
             cxh_config_path = get_config_path("bitflip", BitflipExperimentID.CXH, num_qubits)
-            generate_pomdps(cxh_config_path, BitflipExperimentID, BitflipExperimentID, get_experiments_actions, guard, load_embeddings, thermal_relaxation=WITH_TERMALIZATION)
+            generate_pomdps(cxh_config_path, BitFlipInstance, BitflipExperimentID, get_experiments_actions, guard, load_embeddings, thermal_relaxation=WITH_TERMALIZATION, kwargs=kwargs)
         
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)
     

@@ -7,8 +7,8 @@ import os, sys
 from scipy.linalg import expm
 sys.path.append(os.getcwd() + "/..")
 
-from experiments_utils import directory_exists, generate_configs, generate_embeddings, get_config_path, get_embeddings_path, get_project_settings
-from pomdp import POMDPAction
+from experiments_utils import directory_exists, generate_configs, generate_embeddings, generate_pomdps, get_config_path, get_embeddings_path, get_project_settings
+from pomdp import POMDPAction, default_guard
 import qmemory
 from qpu_utils import BasisGates, Op
 
@@ -108,22 +108,22 @@ def get_fidelity(state1: np.array, state2: np.array) -> float:
     
 
 class H2MoleculeInstance:
-    def __init__(self, embedding: Dict[int, int], experiment_id: H2ExperimentID, t: int, is_imaginary=True) -> None:
+    def __init__(self, **kwargs) -> None:
         """_summary_
 
         Args:
             embedding (Dict[int, int]): mapping from logical qubits to physical qubits
         """        
-        self.embedding = embedding
-        self.experiment_id = experiment_id
+        self.embedding = kwargs["embedding"]
+        self.experiment_id = kwargs["experiment_id"]
         self.initial_state = None # must be a hybrid quantum state
-        self.t = t
+        self.t = kwargs["t"]
         self.get_initial_states()
         
         # compute target state
         qs, _ = self.initial_state
         assert isinstance(qs, QuantumState)
-        if is_imaginary:
+        if kwargs["is_imaginary"]:
             self.target_state = schroedinger_equation(get_hamiltonian(self.experiment_id), complex(0, -self.t), qs)
         else:
             self.target_state = schroedinger_equation(get_hamiltonian(self.experiment_id), self.t, qs.to_np_array())
@@ -300,13 +300,6 @@ class Test:
         assert len(eigenstates) == 1
         my_ground_state = schroedinger_equation(Y, complex(0,-14), np.array([1,0]))
         Test.check_ground(Y, my_ground_state, eigenstates[0], expected_energy=-1)
-        
-        
-        
-        
-        
-            
-
             
 
 if __name__ == "__main__":
@@ -341,6 +334,11 @@ if __name__ == "__main__":
         
         for num_qubits in batches.keys():
             config_path = get_config_path("H2", H2ExperimentID.P0_CliffordT, num_qubits)
+            kwargs = dict()
+            kwargs["experiment_id"] = H2ExperimentID.P0_CliffordT
+            kwargs["t"] = 14
+            kwargs["is_imaginary"] = True
+            generate_pomdps(config_path, H2MoleculeInstance, H2ExperimentID, get_actions, default_guard, thermal_relaxation=WITH_THERMALIZATION, kwargs=kwargs)
             
     if arg_backend == "test":
         # Test.test_hamiltonian()

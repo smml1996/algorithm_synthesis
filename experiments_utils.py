@@ -149,9 +149,9 @@ def generate_pomdp(experiment_id: Any, ProblemInstance,  hardware_spec: Hardware
                 embedding: Dict[int, int], get_experiments_actions:Callable[[NoiseModel, Dict[int, int], Enum], List[POMDPAction]], 
                 guard: Callable[[POMDPVertex, Dict[int, int], POMDPAction], bool], 
                 max_horizon: int, thermal_relaxation: bool, 
-                pomdp_write_path: str, return_pomdp=False):
+                pomdp_write_path: str, return_pomdp=False, **kwargs):
     noise_model = NoiseModel(hardware_spec, thermal_relaxation=thermal_relaxation)
-    problem_instance = ProblemInstance(embedding)
+    problem_instance = ProblemInstance(kwargs)
     actions = get_experiments_actions(noise_model, embedding, experiment_id)
     initial_distribution = []
     for s in problem_instance.initial_state:
@@ -203,7 +203,7 @@ def generate_pomdps(config_path: str, ProblemInstance: Any, ExperimentIdObj: Enu
                     get_experiments_actions:Callable[[NoiseModel, Dict[int, int], Enum], List[POMDPAction]], 
                     guard: Callable[[POMDPVertex, Dict[int, int], POMDPAction], bool],
                     load_embeddings: Callable[[str, Enum], List[Dict[int, int]]]=default_load_embeddings, 
-                    thermal_relaxation=False):
+                    thermal_relaxation=False, **kwargs):
     config = load_config_file(config_path, ExperimentIdObj)
     experiment_id = config["experiment_id"]
     assert isinstance(experiment_id, ExperimentIdObj)
@@ -229,8 +229,9 @@ def generate_pomdps(config_path: str, ProblemInstance: Any, ExperimentIdObj: Enu
             try:
                 embeddings = all_embeddings[backend]["embeddings"]
                 for (index, m) in enumerate(embeddings):
+                    kwargs["embedding"] = m
                     print(backend, index, m)
-                    time_taken = generate_pomdp(experiment_id, backend, m, f"{output_folder}/{backend.value}_{index}.txt")
+                    time_taken = generate_pomdp(experiment_id, backend, m, f"{output_folder}/{backend.value}_{index}.txt", kwargs)
                     generate_pomdp(experiment_id, ProblemInstance, backend, m, get_experiments_actions, guard, max_horizon, thermal_relaxation, f"{output_folder}/{backend.value}_{index}.txt")
                     if time_taken is not None:
                         times_file.write(f"{backend.name},{index},{time_taken}\n")
