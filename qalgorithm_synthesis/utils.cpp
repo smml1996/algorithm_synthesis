@@ -55,6 +55,7 @@ public:
     }
 
     [[nodiscard]] MyFloat get_vertices_probs(const unordered_set<int> &target_vertices) const {
+    // returns the probability of being in the target set       
         MyFloat val;
 
         for(const auto & prob : this->probs) {
