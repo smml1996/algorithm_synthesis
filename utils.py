@@ -61,7 +61,7 @@ class Precision:
     is_lowerbound = True
     @staticmethod
     def update_threshold():
-        Precision.isclose_abstol = 0.00000000001
+        Precision.isclose_abstol = 1/(10**(Precision.PRECISION-1))  
         Precision.rel_tol = 1/(10**(Precision.PRECISION-1))  
         
 
@@ -135,4 +135,20 @@ def get_index(value, values):
             return index
     raise Exception("no value in values")
 
-        
+def np_get_ground_state(eigenvalues, eigenvectors):
+    """
+
+    Args:
+        eigenvalues (_type_): _description_
+        eigenvectors (_type_): _description_
+
+    Returns:
+        _type_: return a pair (ground_energy, [eigenvectors_with_ground_energy])
+    """    
+    r_eigenvalue = min(eigenvalues)
+    result = []
+    for (eigenvalue, eigenvector) in zip(eigenvalues, eigenvectors):
+        if isclose(r_eigenvalue, eigenvalue, rel_tol=Precision.rel_tol):
+            result.append(eigenvector)
+    return r_eigenvalue, result
+            

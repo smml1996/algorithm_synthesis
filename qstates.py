@@ -1,7 +1,7 @@
 from cmath import isclose, sqrt
 from copy import deepcopy
 from typing import Any, List, Optional, Dict, Tuple
-
+import numpy as np
 from numpy import conjugate
 from qpu_utils import Precision, get_complex, int_to_bin, bin_to_int
 
@@ -106,6 +106,7 @@ class QuantumState:
         answer = ""
         for index in range(max(self.qubits_used)+1):
             if index == self.qubits_used[vb_index]:
+                # if the current id(index) is being used then we set it to the value of virtual basis in that position (virtual_basis[index])
                 if virtual_basis % 2 == 1:
                     answer += "1"
                 else:
@@ -113,13 +114,14 @@ class QuantumState:
                 vb_index += 1    
                 virtual_basis //= 2
             else:
+                # otherwise we pad with zero
                 answer += "0"
         return bin_to_int(answer)
 
     def get_density_matrix(self) -> List[List[int]]:
         result = []
         
-        # initialize in zeros
+        # initialize with zeros
         for _ in range(2**len(self.qubits_used)):
             temp = []
             for _ in range(2**len(self.qubits_used)):
@@ -217,6 +219,19 @@ class QuantumState:
         for i in range(len(rho)):
             result += rho[i][i]
         return result
+    
+    def to_np_array(self) -> np.array:
+        result = []
+        
+        # initialize with zeros
+        for _ in range(2**len(self.qubits_used)):
+            result.append(0)
+            
+        for virtual_row in range(2**len(self.qubits_used)):
+            physical_row = self._get_physical_basis(virtual_row)
+            result[virtual_row] = self.get_amplitude(physical_row)
+            
+        return np.array(result)
 
 
 def are_states_lists_equal(qsl1: List[QuantumState], qsl2: List[QuantumState]) -> bool:    

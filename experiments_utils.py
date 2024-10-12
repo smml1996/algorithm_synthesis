@@ -3,9 +3,11 @@ from enum import Enum
 import json
 import os
 import signal
-from typing import Any, Dict
+import time
+from typing import Any, Callable, Dict, List
 
 from ibm_noise_models import HardwareSpec, NoiseModel, load_config_file
+from pomdp import POMDPAction, POMDPVertex, build_pomdp
 from utils import find_enum_object
 
 
@@ -142,5 +144,99 @@ def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max
             f = open(config_path, "w")
             json.dump(config, f, indent=4)
             f.close()
+            
+def generate_pomdp(experiment_id: Any, ProblemInstance,  hardware_spec: HardwareSpec, 
+                embedding: Dict[int, int], get_experiments_actions:Callable[[NoiseModel, Dict[int, int], Enum], List[POMDPAction]], 
+                guard: Callable[[POMDPVertex, Dict[int, int], POMDPAction], bool], 
+                max_horizon: int, thermal_relaxation: bool, 
+                pomdp_write_path: str, return_pomdp=False):
+    noise_model = NoiseModel(hardware_spec, thermal_relaxation=thermal_relaxation)
+    problem_instance = ProblemInstance(embedding)
+    actions = get_experiments_actions(noise_model, embedding, experiment_id)
+    initial_distribution = []
+    for s in problem_instance.initial_state:
+        initial_distribution.append((s, 1/len(problem_instance.initial_state)))
+
+    start_time = time.time()
+    pomdp = build_pomdp(actions, noise_model, max_horizon, embedding, initial_distribution=initial_distribution, guard=guard)
+    end_time = time.time()
+    if return_pomdp:
+        return pomdp
+    pomdp.serialize(problem_instance, pomdp_write_path)
+    return end_time-start_time
+
+def default_load_embeddings(config, ExperimentIDObj: Enum):
+    
+    if isinstance(config, str):
+        config = load_config_file(config, ExperimentIDObj)
+        
+    
+    embeddings_path = get_embeddings_path(config)
+    
+    experiment_id = config["experiment_id"]
+    assert isinstance(experiment_id, ExperimentIDObj)
+    
+    with open(embeddings_path, 'r') as file:
+        result = dict()
+        data = json.load(file)
+        result["count"] = data["count"]
+
+        for hardware_spec in HardwareSpec:
+            if (hardware_spec.value in config["hardware"]):
+                result[hardware_spec] = dict()
+                result[hardware_spec]["count"] = data[hardware_spec.value]["count"]
+                result[hardware_spec]["embeddings"] = []
+
+                for embedding in data[hardware_spec.value]["embeddings"]:
+                    d = dict()
+                    for (key, value) in embedding.items():
+                        d[int(key)] = int(value)
+                    result[hardware_spec]["embeddings"].append(d)
+            else:
+                assert hardware_spec.value not in data.keys()
+        
+        return result
+    raise Exception(f"could not load embeddings file {embeddings_path}")
+
+
+def generate_pomdps(config_path: str, ProblemInstance: Any, ExperimentIdObj: Enum, 
+                    get_experiments_actions:Callable[[NoiseModel, Dict[int, int], Enum], List[POMDPAction]], 
+                    guard: Callable[[POMDPVertex, Dict[int, int], POMDPAction], bool],
+                    load_embeddings: Callable[[str, Enum], List[Dict[int, int]]]=default_load_embeddings, 
+                    thermal_relaxation=False):
+    config = load_config_file(config_path, ExperimentIdObj)
+    experiment_id = config["experiment_id"]
+    assert isinstance(experiment_id, ExperimentIdObj)
+    
+    max_horizon = config["max_horizon"]
+    assert isinstance(max_horizon, int)
+    
+    # the file that contains the time to generate the POMDP is in this folder
+    directory_exists(config["output_dir"])
+        
+     # all pomdps will be outputed in this folder:
+    output_folder = os.path.join(config["output_dir"], "pomdps")
+    # check that there is a folder with the experiment id inside pomdps path
+    directory_exists(output_folder)
+
+    all_embeddings = load_embeddings(config, ExperimentIdObj)
+    
+    times_file_path = os.path.join(config["output_dir"], 'pomdp_times.csv')
+    times_file = open(times_file_path, "w")
+    times_file.write("backend,embedding,time\n")
+    for backend in HardwareSpec:
+        if backend.value in config["hardware"]:
+            try:
+                embeddings = all_embeddings[backend]["embeddings"]
+                for (index, m) in enumerate(embeddings):
+                    print(backend, index, m)
+                    time_taken = generate_pomdp(experiment_id, backend, m, f"{output_folder}/{backend.value}_{index}.txt")
+                    generate_pomdp(experiment_id, ProblemInstance, backend, m, get_experiments_actions, guard, max_horizon, thermal_relaxation, f"{output_folder}/{backend.value}_{index}.txt")
+                    if time_taken is not None:
+                        times_file.write(f"{backend.name},{index},{time_taken}\n")
+                    times_file.flush()
+            except Exception as err:
+                print(f"Unexpected {err=}, {type(err)=}")
+    times_file.close()
         
     
