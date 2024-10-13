@@ -37,6 +37,7 @@ class Op(Enum):
     CNOT = "CNOT"
     RZ = "RZ"
     RX = "RX"
+    RY = "RY"
     CZ = "CZ"
     SWAP= "SWAP"
 

@@ -231,7 +231,7 @@ class POMDP:
         if self.initial_state not in new_states:
             self.transition_matrix = dict()
             self.states = []
-            self.actions = []
+            # self.actions = []
             return False
         
         

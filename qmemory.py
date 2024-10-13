@@ -91,6 +91,11 @@ def evaluate_op(op: Op, qubit: QuantumState, name: str, params=None, is_inverse:
         assert not is_inverse
         assert len(params) == 1
         return evaluate_op(Op.U3, qubit, name, params=[params[0], 3*pi/2, pi/2], is_inverse=is_inverse)
+    elif op == Op.RY:
+        assert params is not None
+        assert not is_inverse
+        assert len(params) == 1
+        return evaluate_op(Op.U3, qubit, name, params=[params[0], 0, 0], is_inverse=is_inverse)
     elif op == Op.RZ:
         assert params is not None
         assert not is_inverse
