@@ -21,7 +21,7 @@ from ibm_noise_models import Instruction, MeasChannel, NoiseModel, get_ibm_noise
 import numpy as np
 from math import pi   
 from enum import Enum
-from experiments_utils import ReadoutNoise, default_load_embeddings, directory_exists, generate_configs, generate_embeddings, generate_pomdp, generate_pomdps, get_config_path, get_embeddings_path, get_project_settings
+from experiments_utils import ReadoutNoise, default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_config_path, get_embeddings_path, get_project_settings
 import cProfile
 import pstats
 
@@ -67,7 +67,7 @@ class BitflipExperimentID(Enum):
 
 
 class BitFlipInstance:
-    def __init__(self,**kwargs):
+    def __init__(self, embedding):
         """_summary_
 
         Args:
@@ -75,7 +75,7 @@ class BitFlipInstance:
             instruction_set (List[Instruction]): _description_
             embedding (Dict[int, int]): a mapping from logical qubits to physical qubits
         """
-        self.embedding = kwargs["embedding"]
+        self.embedding = embedding
         self.initial_state = None
         self.get_initial_states()
         # check embedding
@@ -264,28 +264,41 @@ class IBMBitFlipInstance:
             log_file.close()
         return round(accuracy/(1024*4), 3)
 
-def load_embeddings(config):
-    if isinstance(config, str):
-        result_ = default_load_embeddings(config, BitflipExperimentID)
+def load_embeddings(config=None, config_path=None):
+    if config is None:
+        assert config_path is not None
+        config = load_config_file(config_path, BitflipExperimentID)
     
-    if experiment_id == BitflipExperimentID.IPMA:
-        return result_
-    assert experiment_id == BitflipExperimentID.CXH
-    result = dict()
-    for (hardware_spec, embeddings) in result_.items():
-        assert hardware_spec not in result.keys()
-        result[hardware_spec] = dict()
-        result[hardware_spec]["count"] = result_[hardware_spec]["count"]
-        result[hardware_spec]["embeddings"] = []
-        for embedding in embeddings:
-            d = dict()
-            for (key, value) in embedding.items():
-                d[int(key)] = int(value)
-                temp = d[2]
-                d[2] = d[1]
-                d[1] = temp
-            result[hardware_spec]["embeddings"].append(d)
-    return result
+    embeddings_path = get_embeddings_path(config)
+    
+    experiment_id = config["experiment_id"]
+    assert isinstance(experiment_id, BitflipExperimentID)
+    
+    with open(embeddings_path, 'r') as file:
+        result = dict()
+        data = json.load(file)
+        result["count"] = data["count"]
+
+        for hardware_spec in HardwareSpec:
+            if (hardware_spec.value in config["hardware"]):
+                result[hardware_spec] = dict()
+                result[hardware_spec]["count"] = data[hardware_spec.value]["count"]
+                result[hardware_spec]["embeddings"] = []
+
+                for embedding in data[hardware_spec.value]["embeddings"]:
+                    d = dict()
+                    for (key, value) in embedding.items():
+                        d[int(key)] = int(value)
+                    if experiment_id == BitflipExperimentID.CXH:
+                        temp = d[2]
+                        d[2] = d[1]
+                        d[1] = temp
+                    result[hardware_spec]["embeddings"].append(d)
+            else:
+                assert hardware_spec.value not in data.keys()
+        
+        return result
+    raise Exception(f"could not load embeddings file {POMDP_OUTPUT_DIR}{EMBEDDINGS_FILE}")
 
 
 def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: BitflipExperimentID):
@@ -366,6 +379,56 @@ def parse_lambdas_file(config):
         result[hardware][embedding_index][horizon] = lambda_
     f.close()
     return result
+
+def generate_pomdp(experiment_id: BitflipExperimentID, hardware_spec: HardwareSpec, 
+                embedding: Dict[int, int], pomdp_write_path: str, return_pomdp=False):
+    noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_TERMALIZATION)
+    bitflip_instance = BitFlipInstance(embedding)
+    actions = get_experiments_actions(noise_model, embedding, experiment_id)
+    initial_distribution = []
+    for s in bitflip_instance.initial_state:
+        initial_distribution.append((s, 0.25))
+
+    start_time = time.time()
+    pomdp = build_pomdp(actions, noise_model, 7, embedding, initial_distribution=initial_distribution, guard=guard) # WARNING: 7 is the horizon for which we are interested in this particular experiment for the bitflip problem
+    pomdp.optimize_graph(bitflip_instance)
+    end_time = time.time()
+    if return_pomdp:
+        return pomdp
+    pomdp.serialize(bitflip_instance, pomdp_write_path)
+    return end_time-start_time
+    
+def generate_pomdps(config_path):
+    config = load_config_file(config_path, BitflipExperimentID)
+    experiment_id = config["experiment_id"]
+    assert isinstance(experiment_id, BitflipExperimentID)
+    
+    # the file that contains the time to generate the POMDP is in this folder
+    directory_exists(config["output_dir"])
+        
+     # all pomdps will be outputed in this folder:
+    output_folder = os.path.join(config["output_dir"], "pomdps")
+    # check that there is a folder with the experiment id inside pomdps path
+    directory_exists(output_folder)
+
+    all_embeddings = load_embeddings(config=config)
+    
+    times_file_path = os.path.join(config["output_dir"], 'pomdp_times.csv')
+    times_file = open(times_file_path, "w")
+    times_file.write("backend,embedding,time\n")
+    for backend in HardwareSpec:
+        if backend.value in config["hardware"]:
+            # try:
+            embeddings = all_embeddings[backend]["embeddings"]
+            for (index, m) in enumerate(embeddings):
+                print(backend, index, m)
+                time_taken = generate_pomdp(experiment_id, backend, m, f"{output_folder}/{backend.value}_{index}.txt")
+                if time_taken is not None:
+                    times_file.write(f"{backend.name},{index},{time_taken}\n")
+                times_file.flush()
+            # except Exception as err:
+            #     print(f"Unexpected {err=}, {type(err)=}")
+    times_file.close()
 
 def test_programs(config_path, shots=2000, factor=1):
     config = load_config_file(config_path, BitflipExperimentID)
@@ -853,12 +916,9 @@ if __name__ == "__main__":
         batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
         
         for num_qubits in batches.keys():
-            kwargs = dict()
-            ipma_config_path = get_config_path("bitflip", BitflipExperimentID.IPMA, num_qubits)
-            generate_pomdps(ipma_config_path, BitFlipInstance, BitflipExperimentID, get_experiments_actions, guard, load_embeddings, thermal_relaxation=WITH_TERMALIZATION, kwargs=kwargs)
+            # generate_pomdps(get_config_path("bitflip", BitflipExperimentID.IPMA, num_qubits))
             
-            cxh_config_path = get_config_path("bitflip", BitflipExperimentID.CXH, num_qubits)
-            generate_pomdps(cxh_config_path, BitFlipInstance, BitflipExperimentID, get_experiments_actions, guard, load_embeddings, thermal_relaxation=WITH_TERMALIZATION, kwargs=kwargs)
+            generate_pomdps(get_config_path("bitflip", BitflipExperimentID.CXH, num_qubits))
         
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)
     

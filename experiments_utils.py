@@ -151,6 +151,7 @@ def generate_pomdp(experiment_id: Any, ProblemInstance,  hardware_spec: Hardware
                 max_horizon: int, thermal_relaxation: bool, 
                 pomdp_write_path: str, return_pomdp=False, **kwargs):
     noise_model = NoiseModel(hardware_spec, thermal_relaxation=thermal_relaxation)
+    print(kwargs)
     problem_instance = ProblemInstance(kwargs)
     actions = get_experiments_actions(noise_model, embedding, experiment_id)
     initial_distribution = []
@@ -159,6 +160,7 @@ def generate_pomdp(experiment_id: Any, ProblemInstance,  hardware_spec: Hardware
 
     start_time = time.time()
     pomdp = build_pomdp(actions, noise_model, max_horizon, embedding, initial_distribution=initial_distribution, guard=guard)
+    pomdp.optimize_graph(problem_instance)
     end_time = time.time()
     if return_pomdp:
         return pomdp
@@ -226,18 +228,19 @@ def generate_pomdps(config_path: str, ProblemInstance: Any, ExperimentIdObj: Enu
     times_file.write("backend,embedding,time\n")
     for backend in HardwareSpec:
         if backend.value in config["hardware"]:
-            try:
-                embeddings = all_embeddings[backend]["embeddings"]
-                for (index, m) in enumerate(embeddings):
-                    kwargs["embedding"] = m
-                    print(backend, index, m)
-                    time_taken = generate_pomdp(experiment_id, backend, m, f"{output_folder}/{backend.value}_{index}.txt", kwargs)
-                    generate_pomdp(experiment_id, ProblemInstance, backend, m, get_experiments_actions, guard, max_horizon, thermal_relaxation, f"{output_folder}/{backend.value}_{index}.txt")
-                    if time_taken is not None:
-                        times_file.write(f"{backend.name},{index},{time_taken}\n")
-                    times_file.flush()
-            except Exception as err:
-                print(f"Unexpected {err=}, {type(err)=}")
+            # try:
+            embeddings = all_embeddings[backend]["embeddings"]
+            for (index, m) in enumerate(embeddings):
+                print(kwargs)
+                kwargs['kwargs']["embedding"] = m
+                print(backend, index, m)
+                print("after",kwargs)
+                time_taken = generate_pomdp(experiment_id, ProblemInstance, backend, m, get_experiments_actions, guard, max_horizon, thermal_relaxation, f"{output_folder}/{backend.value}_{index}.txt", kwargs)
+                if time_taken is not None:
+                    times_file.write(f"{backend.name},{index},{time_taken}\n")
+                times_file.flush()
+            # except Exception as err:
+            #     print(f"Unexpected {err=}, {type(err)=}")
     times_file.close()
         
     

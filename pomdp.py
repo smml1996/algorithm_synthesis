@@ -192,6 +192,72 @@ class POMDP:
 
         f.write("ENDPOMDP\n")
         f.close()
+        
+    def get_reversed_digraph(self):
+        digraph = dict()
+        for (fromv, fromv_dict) in self.transition_matrix.items():
+            for (channel, channel_dict) in fromv_dict.items():
+                for (tov, prob_) in channel_dict.items():
+                    if tov not in digraph.keys():
+                        digraph[tov] = dict()  
+                    if channel not in digraph[tov].keys():
+                        digraph[tov][channel] = []
+                    digraph[tov][channel].append(fromv)
+        return digraph
+        
+    def optimize_graph(self, problem_instance) -> bool:
+        
+        new_states = set() # this also contains the set of visited states
+        
+        # identify target states
+        q = Queue()
+        for v in self.states:
+            if problem_instance.is_target_qs((v.quantum_state, v.classical_state)):
+                q.push(v)
+                new_states.add(v)
+        
+        rev_digraph = self.get_reversed_digraph()
+        while not q.is_empty():
+            current_v = q.pop()
+            assert current_v in new_states
+            if current_v in rev_digraph.keys():
+                for (channel_, from_vertices) in rev_digraph[current_v].items():
+                    for from_v in from_vertices:
+                        if from_v not in new_states:
+                            # we push all states that have non-zero probability of reaching the target set, or a state that have non-zero probability of reaching the target set
+                            q.push(from_v)
+                            new_states.add(from_v)
+        
+        if self.initial_state not in new_states:
+            self.transition_matrix = dict()
+            self.states = []
+            self.actions = []
+            return False
+        
+        
+        new_transition_matrix = dict()
+        
+        for (fromv, fromv_dict) in self.transition_matrix.items():
+            if fromv in new_states:
+                # determine if channel leads to some vertex we are interested
+                assert fromv not in new_transition_matrix.keys()
+                for (channel, channel_dict) in fromv_dict.items():
+                    for (tov, prob) in channel_dict.items():
+                        if tov in new_states:
+                            if fromv not in new_transition_matrix.keys():
+                                new_transition_matrix[fromv] = dict()
+
+                            if channel not in new_transition_matrix[fromv].keys():
+                                new_transition_matrix[fromv][channel] = dict()
+                                
+                            new_transition_matrix[fromv][channel][tov] = prob
+                    
+        self.states = new_states
+        self.transition_matrix = new_transition_matrix
+        return True
+            
+            
+            
 
 def create_new_vertex(all_vertices, quantum_state, classical_state):
     for v in all_vertices:
@@ -246,13 +312,13 @@ def build_pomdp(actions: List[POMDPAction],
             graph[initial_v][INIT_CHANNEL][v] = prob
             q.push((v, 0)) # second element denotes that this vertex is at horizon 0
 
-    visited = []
+    visited = set()
     while not q.is_empty():
         current_v, current_horizon = q.pop()
         if (current_horizon == horizon) or (current_v in visited):
             continue
-        visited.append(current_v)
-        assert current_v not in graph.keys()
+        visited.add(current_v)
+        # assert current_v not in graph.keys()
         if current_v not in graph.keys():
             graph[current_v] = dict()
 

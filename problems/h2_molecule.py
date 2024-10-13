@@ -1,19 +1,20 @@
 from argparse import Action
 from cmath import isclose, pi
 from enum import Enum
+import time
 import numpy as np
 import json
 import os, sys
 from scipy.linalg import expm
 sys.path.append(os.getcwd() + "/..")
 
-from experiments_utils import directory_exists, generate_configs, generate_embeddings, generate_pomdps, get_config_path, get_embeddings_path, get_project_settings
-from pomdp import POMDPAction, default_guard
+from experiments_utils import default_load_embeddings, directory_exists, generate_configs, get_config_path, get_embeddings_path, get_project_settings
+from pomdp import POMDPAction, build_pomdp, default_guard
 import qmemory
 from qpu_utils import BasisGates, Op
 
 
-from ibm_noise_models import HardwareSpec, Instruction, NoiseModel, get_num_qubits_to_hardware
+from ibm_noise_models import HardwareSpec, Instruction, NoiseModel, get_num_qubits_to_hardware, load_config_file
 from typing import Dict, List
 from utils import Precision, np_get_ground_state
 from cmemory import ClassicalState
@@ -108,25 +109,26 @@ def get_fidelity(state1: np.array, state2: np.array) -> float:
     
 
 class H2MoleculeInstance:
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, embedding, experiment_id: H2ExperimentID, t: int, is_imaginary=True) -> None:
         """_summary_
 
         Args:
             embedding (Dict[int, int]): mapping from logical qubits to physical qubits
         """        
-        self.embedding = kwargs["embedding"]
-        self.experiment_id = kwargs["experiment_id"]
+        self.embedding = embedding
+        self.experiment_id = experiment_id
         self.initial_state = None # must be a hybrid quantum state
-        self.t = kwargs["t"]
+        self.t = t
         self.get_initial_states()
         
         # compute target state
         qs, _ = self.initial_state
         assert isinstance(qs, QuantumState)
-        if kwargs["is_imaginary"]:
-            self.target_state = schroedinger_equation(get_hamiltonian(self.experiment_id), complex(0, -self.t), qs)
+        if is_imaginary:
+            self.target_state = schroedinger_equation(get_hamiltonian(self.experiment_id), complex(0, -self.t), qs.to_np_array())
         else:
             self.target_state = schroedinger_equation(get_hamiltonian(self.experiment_id), self.t, qs.to_np_array())
+        print(self.target_state)
         
     def get_initial_states(self):
         """the initial state must have non zero overlap with the ground state
@@ -148,10 +150,11 @@ class H2MoleculeInstance:
     def is_target_qs(self, hybrid_state) -> bool:
         qs, cs = hybrid_state
         assert isinstance(qs, QuantumState)
-        if self.experiment_id == H2MoleculeInstance.P0_CliffordT:
+        if self.experiment_id == H2ExperimentID.P0_CliffordT:
             state = qs.to_np_array()
             fidelity = get_fidelity(self.target_state, state)
-            return isclose(fidelity, 1.0, abs_tol=Precision.isclose_abstol)
+            return fidelity > 0.999
+            # return isclose(fidelity, 1.00, abs_tol=Precision.isclose_abstol)
     
 def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: H2ExperimentID) -> List[Action]:
     if experiment_id == H2ExperimentID.P0_CliffordT:
@@ -168,8 +171,8 @@ def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id
             ])
             T0 = POMDPAction("T0", [Instruction(embedding[0], Op.RZ, params=[pi/4])])
             T0D = POMDPAction("T0D", [Instruction(embedding[0], Op.RZ, params=[-pi/4])])
-        MEAS0 = POMDPAction("P0", [Instruction(embedding[0], Op.MEAS)])
-        return [H0, T0, T0D, MEAS0]
+        # MEAS0 = POMDPAction("P0", [Instruction(embedding[0], Op.MEAS)])
+        return [H0, T0, T0D]
     else:
         raise Exception("Not implemented!")
 
@@ -301,6 +304,55 @@ class Test:
         my_ground_state = schroedinger_equation(Y, complex(0,-14), np.array([1,0]))
         Test.check_ground(Y, my_ground_state, eigenstates[0], expected_energy=-1)
             
+def generate_pomdp(experiment_id, hardware_spec: HardwareSpec, 
+                embedding: Dict[int, int], pomdp_write_path: str, t: int, max_horizon:int, return_pomdp=False):
+    noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_THERMALIZATION)
+    h2_molecule_instance = H2MoleculeInstance(embedding, experiment_id, t)
+    actions = get_actions(noise_model, embedding, experiment_id)
+    initial_distribution = []
+    initial_distribution.append((h2_molecule_instance.initial_state, 1.00))
+
+    start_time = time.time()
+    pomdp = build_pomdp(actions, noise_model, max_horizon, embedding, initial_distribution=initial_distribution)
+    pomdp.optimize_graph(h2_molecule_instance)
+    end_time = time.time()
+    if return_pomdp:
+        return pomdp
+    pomdp.serialize(h2_molecule_instance, pomdp_write_path)
+    return end_time-start_time
+    
+def generate_pomdps(config_path, t:int):
+    assert isinstance(t, int)
+    config = load_config_file(config_path, H2ExperimentID)
+    experiment_id = config["experiment_id"]
+    assert isinstance(experiment_id, H2ExperimentID)
+    
+    # the file that contains the time to generate the POMDP is in this folder
+    directory_exists(config["output_dir"])
+        
+     # all pomdps will be outputed in this folder:
+    output_folder = os.path.join(config["output_dir"], "pomdps")
+    # check that there is a folder with the experiment id inside pomdps path
+    directory_exists(output_folder)
+
+    all_embeddings = default_load_embeddings(config, H2ExperimentID)
+    
+    times_file_path = os.path.join(config["output_dir"], 'pomdp_times.csv')
+    times_file = open(times_file_path, "w")
+    times_file.write("backend,embedding,time\n")
+    for backend in HardwareSpec:
+        if backend.value in config["hardware"]:
+            # try:
+            embeddings = all_embeddings[backend]["embeddings"]
+            for (index, m) in enumerate(embeddings):
+                print(backend, index, m)
+                time_taken = generate_pomdp(experiment_id, backend, m, f"{output_folder}/{backend.value}_{index}.txt", t, config["max_horizon"])
+                if time_taken is not None:
+                    times_file.write(f"{backend.name},{index},{time_taken}\n")
+                times_file.flush()
+            # except Exception as err:
+            #     print(f"Unexpected {err=}, {type(err)=}")
+    times_file.close()
 
 if __name__ == "__main__":
     arg_backend = sys.argv[1]
@@ -317,7 +369,7 @@ if __name__ == "__main__":
             generate_embeddings(config_path=config_path, experiment_enum=H2ExperimentID, experiment_id=H2ExperimentID.P0_CliffordT, get_hardware_embeddings=get_hardware_embeddings, statistics=statistics)
         project_settings = get_project_settings()
         project_path = project_settings["PROJECT_PATH"]
-        statistics_path = os.path.join(project_path, "synthesis", "H2",H2ExperimentID.P0_CliffordT.value, "embedding_stats.csv")
+        statistics_path = os.path.join(project_path, "synthesis", "H2", H2ExperimentID.P0_CliffordT.value, "embedding_stats.csv")
         f_statistics = open(statistics_path, "w")
         f_statistics.write("hardware,qubit,prob,op,most_noisy\n")
         sum_probs = 0
@@ -334,11 +386,7 @@ if __name__ == "__main__":
         
         for num_qubits in batches.keys():
             config_path = get_config_path("H2", H2ExperimentID.P0_CliffordT, num_qubits)
-            kwargs = dict()
-            kwargs["experiment_id"] = H2ExperimentID.P0_CliffordT
-            kwargs["t"] = 14
-            kwargs["is_imaginary"] = True
-            generate_pomdps(config_path, H2MoleculeInstance, H2ExperimentID, get_actions, default_guard, thermal_relaxation=WITH_THERMALIZATION, kwargs=kwargs)
+            generate_pomdps(config_path, 14)
             
     if arg_backend == "test":
         # Test.test_hamiltonian()
