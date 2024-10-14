@@ -1,3 +1,0 @@
-/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/synthesis/cmake-build-debug/CMakeFiles/synthesis.dir
-/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/synthesis/cmake-build-debug/CMakeFiles/edit_cache.dir
-/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/synthesis/cmake-build-debug/CMakeFiles/rebuild_cache.dir
