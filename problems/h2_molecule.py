@@ -36,6 +36,7 @@ P0_ALLOWED_HARDWARE = [HardwareSpec.AUCKLAND, HardwareSpec.WASHINGTON, HardwareS
     
 class H2ExperimentID(Enum):
     P0_CliffordT = "P0_CliffordT" # This consists of finding the ground state of an hydrogen molecule using Z2Symmetries -- "Clifford+T" instruction set
+    P0_Rotation = "P0_Rotation" # using Rx(pi/2), Rz(pi/2), Ry(pi/2)
     P1 = "P1" # https://static-content.springer.com/esm/art%3A10.1038%2Fs41534-019-0187-2/MediaObjects/41534_2019_187_MOESM1_ESM.pdf
     P2 = "P2" # https://learning.quantum.ibm.com/course/variational-algorithm-design/examples-and-applications#quantum-chemistry-ground-state-and-excited-energy-solver
 
@@ -157,59 +158,18 @@ class H2MoleculeInstance:
             return isclose(energy, self.target_energy, abs_tol=1/1e3)
     
 def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: H2ExperimentID) -> List[Action]:
+   
     if experiment_id == H2ExperimentID.P0_CliffordT:
-        if noise_model.basis_gates in [BasisGates.TYPE1, BasisGates.TYPE6]:
-            # H0 = POMDPAction("H0", [Instruction(embedding[0], Op.U2, params=[0.0, pi])])
-            # T0 = POMDPAction("T0", [Instruction(embedding[0], Op.U1, params=[pi/4])])
-            # T0D = POMDPAction("T0D", [Instruction(embedding[0], Op.U1, params=[-pi/4])])
-            # S0 = POMDPAction("S0", [Instruction(embedding[0], Op.U1, params=[pi/2])])
-            
-            RX0 = POMDPAction("RX0", [Instruction(embedding[0], Op.U3, params=[pi/2, -pi/2, pi/2])])
-            RY0 = POMDPAction("RY0", [Instruction(embedding[0], Op.U3, params=[pi/2, 0.0, 0.0])])
-            RZ0 = POMDPAction("RZ0", [Instruction(embedding[0], Op.U1, params=[pi/2])])
-        else:
-            assert noise_model.basis_gates in [BasisGates.TYPE2, BasisGates.TYPE3, BasisGates.TYPE7]
-            # H0 = POMDPAction("H0", [
-            #     Instruction(embedding[0], Op.RZ, params=[pi/2]),
-            #     Instruction(embedding[0], Op.SX),
-            #     Instruction(embedding[0], Op.RZ, params=[pi/2])
-            # ])
-            # T0 = POMDPAction("T0", [Instruction(embedding[0], Op.RZ, params=[pi/4])])
-            # T0D = POMDPAction("T0D", [Instruction(embedding[0], Op.RZ, params=[-pi/4])])
-            # S0 = POMDPAction("S0", [Instruction(embedding[0], Op.RZ, params=[-pi/4]),Instruction(embedding[0], Op.RZ, params=[-pi/4])])
-            RX0 = POMDPAction("RX0", [
-                # hadamard gate
-                Instruction(embedding[0], Op.RZ, params=[pi/2]),
-                Instruction(embedding[0], Op.SX),
-                Instruction(embedding[0], Op.RZ, params=[pi/2]),
-                # ---
-                Instruction(embedding[0], Op.RZ, params=[pi/2]),
-                # hadamard gate
-                Instruction(embedding[0], Op.RZ, params=[pi/2]),
-                Instruction(embedding[0], Op.SX),
-                Instruction(embedding[0], Op.RZ, params=[pi/2])
-                
-                ])
-            RY0 = POMDPAction("RY0", [
-                # S gate
-                Instruction(embedding[0], Op.RZ, params=[-pi/2]),
-                # hadamard gate
-                Instruction(embedding[0], Op.RZ, params=[pi/2]),
-                Instruction(embedding[0], Op.SX),
-                Instruction(embedding[0], Op.RZ, params=[pi/2]),
-                # ---
-                Instruction(embedding[0], Op.RZ, params=[pi/2]),
-                # hadamard gate
-                Instruction(embedding[0], Op.RZ, params=[pi/2]),
-                Instruction(embedding[0], Op.SX),
-                Instruction(embedding[0], Op.RZ, params=[pi/2]),
-                # S^+ gate
-                Instruction(embedding[0], Op.RZ, params=[pi/2]),
-                ])
-            RZ0 = POMDPAction("RZ0", [Instruction(embedding[0], Op.RZ, params=[pi/2])])
-        # MEAS0 = POMDPAction("P0", [Instruction(embedding[0], Op.MEAS)])
-        # return [H0, T0, T0D, S0]
-        return [RZ0, RX0, RY0]
+        t_gate = Instruction(embedding[0], Op.T).to_basis_gate_impl(noise_model.basis_gates)
+        h_gate = Instruction(embedding[0], Op.H).to_basis_gate_impl(noise_model.basis_gates) 
+        s_gate = Instruction(embedding[0], Op.S).to_basis_gate_impl(noise_model.basis_gates)
+        return [POMDPAction("T0", t_gate), POMDPAction("H0", h_gate), POMDPAction("S0", s_gate)]
+        
+    elif experiment_id == H2ExperimentID.P0_Rotation:
+        rx_gate = Instruction(0, Op.RX, params=[pi/2]).to_basis_gate_impl(noise_model.basis_gates)
+        ry_gate = Instruction(0, Op.RY, params=[pi/2]).to_basis_gate_impl(noise_model.basis_gates)
+        rz_gate = Instruction(0, Op.RZ, params=[pi/2]).to_basis_gate_impl(noise_model.basis_gates)
+        return [POMDPAction("RZ0", rz_gate), POMDPAction("RX0", rx_gate), POMDPAction("RY0", ry_gate)]
     else:
         raise Exception("Not implemented!")
 
@@ -362,75 +322,22 @@ class Test:
     
     @staticmethod
     def test_used_1Q_gates():
-        embedding = {0:0}
-        # T gate test
-        actual_instruction = Instruction(0, Op.T)
-        implementation1 = [Instruction(0, Op.U1, params=[pi/4])]
-        implementation2 = [Instruction(0, Op.RZ, params=[pi/4])]
-        print("running test T Gate")
-        Test.test_1Q_implementations(actual_instruction, [implementation1, implementation2])
+        test_instructions = [
+            Instruction(0, Op.T),
+            Instruction(0, Op.H),
+            Instruction(0, Op.S),
+            Instruction(0, Op.RX, params=[pi/2]),
+            Instruction(0, Op.RY, params=[pi/2]),
+            Instruction(0, Op.RZ, params=[pi/2])
+        ] 
+       
+        for instruction in test_instructions:
+            implementation1 = instruction.to_basis_gate_impl(BasisGates.TYPE1)
+            implementation2 = instruction.to_basis_gate_impl(BasisGates.TYPE2)
+            assert implementation1 != implementation2
+            Test.test_1Q_implementations(instruction, [implementation1, implementation2])
         
-        # H gate test
-        actual_instruction = Instruction(0, Op.H)
-        implementation1 = [Instruction(embedding[0], Op.U2, params=[0.0, pi])]
-        implementation2 = [Instruction(embedding[0], Op.RZ, params=[pi/2]),
-                Instruction(embedding[0], Op.SX),
-                Instruction(embedding[0], Op.RZ, params=[pi/2])]
-        print("running test H Gate")
-        Test.test_1Q_implementations(actual_instruction, [implementation1, implementation2])
-        
-        # S gate test
-        actual_instruction = Instruction(0, Op.S)
-        implementation1 = [Instruction(embedding[0], Op.U1, params=[pi/2])]
-        implementation2 = [Instruction(embedding[0], Op.RZ, params=[-pi/4]),Instruction(embedding[0], Op.RZ, params=[-pi/4])]
-        print("running test S Gate")
-        Test.test_1Q_implementations(actual_instruction, [implementation1, implementation2])
-        
-        # test Rx(pi/2) test
-        actual_instruction = Instruction(0, Op.RX, params=[pi/2])
-        implementation1 = [
-                # hadamard gate
-                Instruction(embedding[0], Op.RZ, params=[pi/2]),
-                Instruction(embedding[0], Op.SX),
-                Instruction(embedding[0], Op.RZ, params=[pi/2]),
-                # ---
-                Instruction(embedding[0], Op.RZ, params=[pi/2]),
-                # hadamard gate
-                Instruction(embedding[0], Op.RZ, params=[pi/2]),
-                Instruction(embedding[0], Op.SX),
-                Instruction(embedding[0], Op.RZ, params=[pi/2])
-                
-                ]
-        implementation2 = [Instruction(embedding[0], Op.U3, params=[pi/2, -pi/2, pi/2])]
-        print("running test Rx(pi/2) Gate")
-        Test.test_1Q_implementations(actual_instruction, [implementation1, implementation2])
-        
-        # Ry(pi/2) test
-        actual_instruction = Instruction(0, Op.RY, params=[pi/2])
-        implementation1 = [Instruction(embedding[0], Op.U3, params=[pi/2, 0.0, 0.0])]
-        implementation2 = [
-                # S gate
-                Instruction(embedding[0], Op.RZ, params=[-pi/2]),
-                # hadamard gate
-                Instruction(embedding[0], Op.RZ, params=[pi/2]),
-                Instruction(embedding[0], Op.SX),
-                Instruction(embedding[0], Op.RZ, params=[pi/2]),
-                # ---
-                Instruction(embedding[0], Op.RZ, params=[pi/2]),
-                # hadamard gate
-                Instruction(embedding[0], Op.RZ, params=[pi/2]),
-                Instruction(embedding[0], Op.SX),
-                Instruction(embedding[0], Op.RZ, params=[pi/2]),
-                # S^+ gate
-                Instruction(embedding[0], Op.RZ, params=[pi/2]),
-                ]
-        print("running test Ry(pi/2) Gate")
-        Test.test_1Q_implementations(actual_instruction, [implementation1, implementation2])
-        
-        # test Rz(pi/2)
-        actual_instruction = Instruction(0, Op.RZ, params=[pi/2])
-        implementation1 = [Instruction(embedding[0], Op.U1, params=[pi/2])]
-        Test.test_1Q_implementations(actual_instruction, [implementation1])
+       
         
                 
     

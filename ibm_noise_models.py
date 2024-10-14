@@ -288,6 +288,59 @@ class Instruction:
     
     def __repr__(self) -> str:
         return self.__str__()
+    
+    def to_basis_gate_impl(self, basis_gates: BasisGates) -> List[Any]:
+        """_summary_
+
+        Args:
+            basis_gates (BasisGates): _description_
+
+        Raises:
+            Exception: _description_
+
+        Returns:
+            List[Instruction]:  returns a list of instructions corresponding to the native gate sequence implementation using basis_gates
+        """        
+        if (self.op in basis_gates.value) or (self.op == Op.MEAS):
+            return [self]
+        
+        if basis_gates in [BasisGates.TYPE1, BasisGates.TYPE6]:
+            if self.op == Op.H:
+                return [Instruction(self.target, Op.U2, params=[0.0, pi])]
+            if self.op == Op.T:
+                return [Instruction(self.target, Op.U1, params=[pi/4])]
+            if self.op == Op.S:
+                return [Instruction(self.target, Op.U1, params=[pi/2])]
+            if self.op == Op.RX:
+                return [Instruction(self.target, Op.U3, params=[self.params[0], -pi/2, pi/2])]
+            if self.op == Op.RY:
+                return [Instruction(self.target, Op.U3, params=[pi/2, 0.0, 0.0])]
+            if self.op == Op.RZ:
+                return [Instruction(self.target, Op.U1, params=[pi/2])]
+        else:
+            assert basis_gates in [BasisGates.TYPE2, BasisGates.TYPE3, BasisGates.TYPE7]
+            if self.op == Op.H:
+                return [Instruction(self.target, Op.RZ, params=[pi/2]),
+                Instruction(self.target, Op.SX),
+                Instruction(self.target, Op.RZ, params=[pi/2])]
+            if self.op == Op.T:
+                return [Instruction(self.target, Op.RZ, params=[pi/4])]
+            if self.op == Op.S:
+                return [Instruction(self.target, Op.RZ, params=[-pi/2])]
+            if self.op == Op.SD:
+                return [Instruction(self.target, Op.RZ, params=[pi/2])]
+            else:
+                h_gate = Instruction(self.target, Op.H).to_basis_gate_impl(basis_gates)
+                rz = Instruction(self.target, Op.RZ, params=self.params).to_basis_gate_impl(basis_gates)
+                if self.op == Op.RX:
+                    return h_gate + rz + h_gate
+                if self.op == Op.RY:
+                    s_gate = Instruction(self.target, Op.S).to_basis_gate_impl(basis_gates)
+                    s_inverse = Instruction(self.target, Op.SD).to_basis_gate_impl(basis_gates)
+                    answer = s_gate + h_gate + rz + h_gate + s_inverse
+                    return answer
+                
+        raise Exception(f"Cannot translate {self.op} to basis gates {basis_gates}")
         
 class KrausOperator:
     def __init__(self, operators, qubit) -> None:
@@ -761,5 +814,7 @@ def get_num_qubits_to_hardware(with_thermalization: bool, hardware_str=True, all
         else:
             s[nm.num_qubits].append(hardware) 
     return s
+
+
 if __name__ == "__main__":
     pass
