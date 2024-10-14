@@ -141,8 +141,10 @@ class H2MoleculeInstance:
         quantum_state = None
         if self.experiment_id in [H2ExperimentID.P0_CliffordT, H2ExperimentID.P0_Rotation]:
             quantum_state = QuantumState(0, qubits_used=list(self.embedding.values()))
-            X0 = Instruction(self.embedding[0], Op.X).get_gate_data()
-            quantum_state = qmemory.handle_write(quantum_state, X0)
+            Z0 = Instruction(self.embedding[0], Op.X).get_gate_data()
+            H0 = Instruction(self.embedding[0], Op.H).get_gate_data()
+            quantum_state = qmemory.handle_write(quantum_state, Z0)
+            quantum_state = qmemory.handle_write(quantum_state, H0)
         else:
             raise Exception("Not implemented")
         assert quantum_state is not None
@@ -154,7 +156,7 @@ class H2MoleculeInstance:
         if self.experiment_id in [H2ExperimentID.P0_CliffordT, H2ExperimentID.P0_Rotation]:
             state = qs.to_np_array()
             energy = get_energy(self.H, state)
-            return isclose(energy, self.target_energy, abs_tol=1/1e3)
+            return isclose(energy, self.target_energy, abs_tol=1/1e5)
     
 def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: H2ExperimentID) -> List[Action]:
    
