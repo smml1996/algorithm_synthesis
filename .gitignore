@@ -7,7 +7,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 _deps/
-qalgorithm_synthesis
+qalgorithm_synthesis/qalgorithm_synthesis
 qalgorithm_synthesis/cxh_script.sh
 
 
@@ -33,6 +33,18 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+
+cmake-build-debug
+CMakeFiles
+qprogram_synthesis
+.idea/*
+*.log
+CMakeLists.txt
+Makefile
+CMakeCache.txt
+cmake_install.cmake
+algorithms/__pycache__/
+algorithms1/__pycache__/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
