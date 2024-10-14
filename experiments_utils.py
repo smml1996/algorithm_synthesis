@@ -41,7 +41,7 @@ class ReadoutNoise:
 def get_project_settings():
     path = "../.settings"
     if not os.path.isfile(path):
-        raise Exception("settings file does not exists")
+        raise Exception("settings file does not exists (are you in /problems directory?)")
 
     f = open(path, "r")
     answer = dict()
@@ -50,7 +50,8 @@ def get_project_settings():
         elements = line.split(" ")
         assert len(elements) == 3
         answer[elements[0]] = elements[2]
-        
+    if elements[2] == "None":
+        raise Exception("please set properly a project path in .settings file.")
     return answer
 
 def get_embeddings_path(config):
