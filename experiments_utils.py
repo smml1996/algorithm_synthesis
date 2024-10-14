@@ -110,10 +110,10 @@ def get_config_path(experiment_name, experiment_id, batch_number):
 def get_output_path(experiment_name, experiment_id, batch_number):
     project_settings = get_project_settings()
     project_path = project_settings["PROJECT_PATH"]
-    directory_exists(os.path.join(project_path, "synthesis"))
-    directory_exists(os.path.join(project_path, "synthesis", experiment_name))
-    directory_exists(os.path.join(project_path, "synthesis", experiment_name, experiment_id.value))
-    return os.path.join(project_path, "synthesis", experiment_name, experiment_id.value,f"B{batch_number}")
+    directory_exists(os.path.join(project_path, "results"))
+    directory_exists(os.path.join(project_path, "results", experiment_name))
+    directory_exists(os.path.join(project_path, "results", experiment_name, experiment_id.value))
+    return os.path.join(project_path, "results", experiment_name, experiment_id.value,f"B{batch_number}")
 
 def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max_horizon, allowed_hardware=HardwareSpec):
     configs_path = get_configs_path()
