@@ -1,0 +1,12 @@
+{
+    "name": "B65",
+    "experiment_id": "cxh",
+    "min_horizon": 4,
+    "max_horizon": 7,
+    "output_dir": "/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/results/bitflip/cxh/B65",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_brooklyn",
+        "fake_manhattan"
+    ]
+}

@@ -1,0 +1,11 @@
+{
+    "name": "B53",
+    "experiment_id": "P0_CliffordT",
+    "min_horizon": 4,
+    "max_horizon": 10,
+    "output_dir": "/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/results/H2/P0_CliffordT/B53",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_rochester"
+    ]
+}
