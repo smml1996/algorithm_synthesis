@@ -652,7 +652,7 @@ class Test:
         result = dict()
         
         for num_qubits in batches:
-            path = f"/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/synthesis/bitflip/{experiment_id.value}/B{num_qubits}/lambdas.csv"
+            path = f"/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/results/bitflip/{experiment_id.value}/B{num_qubits}/lambdas.csv"
             if not os.path.isfile(path):
                 continue
             f = open(path)
