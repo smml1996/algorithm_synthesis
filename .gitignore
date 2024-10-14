@@ -1,23 +1,15 @@
-qalgorithm_synthesis/qalgorithm_synthesis
-cmake-build-debug
-CMakeFiles
-qprogram_synthesis
-.idea/*
-*.log
-Makefile
-CMakeCache.txt
-cmake_install.cmake
-.DS_Store
-algorithms/__pycache__/
-.vscode
-_deps/
 problems/sscript.sh
 problems/server_script.sh
 .settings
+.DS_Store
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+_deps/
+qalgorithm_synthesis
+qalgorithm_synthesis/cxh_script.sh
+
 
 # C extensions
 *.so

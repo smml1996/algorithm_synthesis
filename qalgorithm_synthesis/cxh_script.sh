@@ -8,3 +8,4 @@ sbatch experiments_script.sh ./input/cxh_b16.input
 sbatch experiments_script.sh ./input/cxh_b15.input
 sbatch experiments_script.sh ./input/cxh_b53.input
 sbatch experiments_script.sh ./input/cxh_b127.input
+
