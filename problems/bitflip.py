@@ -891,7 +891,7 @@ if __name__ == "__main__":
     Precision.update_threshold()
     settings = get_project_settings()
     project_path = settings["PROJECT_PATH"]
-    if arg_backend == "gen_paper_configs":
+    if arg_backend == "gen_configs":
         # step 0
         generate_configs(experiment_name="bitflip", experiment_id=BitflipExperimentID.IPMA, min_horizon=4, max_horizon=7)
         generate_configs(experiment_name="bitflip", experiment_id=BitflipExperimentID.CXH, min_horizon=4, max_horizon=7)
@@ -916,7 +916,7 @@ if __name__ == "__main__":
         batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
         
         for num_qubits in batches.keys():
-            # generate_pomdps(get_config_path("bitflip", BitflipExperimentID.IPMA, num_qubits))
+            generate_pomdps(get_config_path("bitflip", BitflipExperimentID.IPMA, num_qubits))
             
             generate_pomdps(get_config_path("bitflip", BitflipExperimentID.CXH, num_qubits))
         
