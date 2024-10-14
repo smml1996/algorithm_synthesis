@@ -9,7 +9,8 @@ cmake_install.cmake
 .DS_Store
 algorithms/__pycache__/
 .vscode
-
+_deps/
+qalgorithm_synthesis
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
