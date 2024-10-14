@@ -1,0 +1,11 @@
+{
+    "name": "B127",
+    "experiment_id": "P0_Rotation",
+    "min_horizon": 4,
+    "max_horizon": 10,
+    "output_dir": "/Users/stefaniemuroyalei/Documents/ist/im_time_evolution/synthesis/H2/P0_Rotation/B127",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_washington"
+    ]
+}

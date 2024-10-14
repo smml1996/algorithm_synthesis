@@ -102,9 +102,9 @@ def get_configs_path():
     return os.path.join(project_path, "configs")
 
 def get_config_path(experiment_name, experiment_id, batch_number):
+    
     configs_path = get_configs_path()
     experiment_path = os.path.join(configs_path, f"{experiment_name}")
-    
     return os.path.join(experiment_path, f"{experiment_id.value}_{batch_number}.json")
 
 def get_output_path(experiment_name, experiment_id, batch_number):

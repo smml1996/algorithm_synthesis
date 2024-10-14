@@ -8,7 +8,7 @@ import os, sys
 from scipy.linalg import expm
 sys.path.append(os.getcwd() + "/..")
 
-from experiments_utils import default_load_embeddings, directory_exists, generate_configs, get_config_path, get_embeddings_path, get_project_settings
+from experiments_utils import default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_config_path, get_embeddings_path, get_project_settings
 from pomdp import POMDPAction, build_pomdp, default_guard
 import qmemory
 from qpu_utils import BasisGates, Op
@@ -37,12 +37,12 @@ P0_ALLOWED_HARDWARE = [HardwareSpec.AUCKLAND, HardwareSpec.WASHINGTON, HardwareS
 class H2ExperimentID(Enum):
     P0_CliffordT = "P0_CliffordT" # This consists of finding the ground state of an hydrogen molecule using Z2Symmetries -- "Clifford+T" instruction set
     P0_Rotation = "P0_Rotation" # using Rx(pi/2), Rz(pi/2), Ry(pi/2)
-    P1 = "P1" # https://static-content.springer.com/esm/art%3A10.1038%2Fs41534-019-0187-2/MediaObjects/41534_2019_187_MOESM1_ESM.pdf
-    P2 = "P2" # https://learning.quantum.ibm.com/course/variational-algorithm-design/examples-and-applications#quantum-chemistry-ground-state-and-excited-energy-solver
+    # P1 = "P1" # https://static-content.springer.com/esm/art%3A10.1038%2Fs41534-019-0187-2/MediaObjects/41534_2019_187_MOESM1_ESM.pdf
+    # P2 = "P2" # https://learning.quantum.ibm.com/course/variational-algorithm-design/examples-and-applications#quantum-chemistry-ground-state-and-excited-energy-solver
 
 
 def get_hamiltonian(problem: H2ExperimentID) -> SparsePauliOp:
-    if problem == H2ExperimentID.P0_CliffordT:
+    if problem in [H2ExperimentID.P0_CliffordT, H2ExperimentID.P0_Rotation]:
         # Define the hydrogen molecule at internuclear distance R = 0.75 angstroms
         molecule = MoleculeInfo(
             ["H", "H"], 
@@ -139,11 +139,10 @@ class H2MoleculeInstance:
         """        
         classical_state = ClassicalState()
         quantum_state = None
-        if self.experiment_id == H2ExperimentID.P0_CliffordT:
+        if self.experiment_id in [H2ExperimentID.P0_CliffordT, H2ExperimentID.P0_Rotation]:
             quantum_state = QuantumState(0, qubits_used=list(self.embedding.values()))
-            # X0 = Instruction(self.embedding[0], Op.X).get_gate_data()
-            
-            # quantum_state = qmemory.handle_write(quantum_state, X0)
+            X0 = Instruction(self.embedding[0], Op.X).get_gate_data()
+            quantum_state = qmemory.handle_write(quantum_state, X0)
         else:
             raise Exception("Not implemented")
         assert quantum_state is not None
@@ -152,7 +151,7 @@ class H2MoleculeInstance:
     def is_target_qs(self, hybrid_state) -> bool:
         qs, cs = hybrid_state
         assert isinstance(qs, QuantumState)
-        if self.experiment_id == H2ExperimentID.P0_CliffordT:
+        if self.experiment_id in [H2ExperimentID.P0_CliffordT, H2ExperimentID.P0_Rotation]:
             state = qs.to_np_array()
             energy = get_energy(self.H, state)
             return isclose(energy, self.target_energy, abs_tol=1/1e3)
@@ -166,18 +165,18 @@ def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id
         return [POMDPAction("T0", t_gate), POMDPAction("H0", h_gate), POMDPAction("S0", s_gate)]
         
     elif experiment_id == H2ExperimentID.P0_Rotation:
-        rx_gate = Instruction(0, Op.RX, params=[pi/2]).to_basis_gate_impl(noise_model.basis_gates)
-        ry_gate = Instruction(0, Op.RY, params=[pi/2]).to_basis_gate_impl(noise_model.basis_gates)
-        rz_gate = Instruction(0, Op.RZ, params=[pi/2]).to_basis_gate_impl(noise_model.basis_gates)
+        rx_gate = Instruction(embedding[0], Op.RX, params=[pi/2]).to_basis_gate_impl(noise_model.basis_gates)
+        ry_gate = Instruction(embedding[0], Op.RY, params=[pi/2]).to_basis_gate_impl(noise_model.basis_gates)
+        rz_gate = Instruction(embedding[0], Op.RZ, params=[pi/2]).to_basis_gate_impl(noise_model.basis_gates)
         return [POMDPAction("RZ0", rz_gate), POMDPAction("RX0", rx_gate), POMDPAction("RY0", ry_gate)]
     else:
         raise Exception("Not implemented!")
 
 def get_hardware_embeddings(hardware: HardwareSpec, **kwargs) -> List[Dict[int, int]]:
     noise_model = NoiseModel(hardware, thermal_relaxation=WITH_THERMALIZATION)
-    assert hardware not in kwargs["statistics"].keys()
+    # assert hardware not in kwargs["statistics"].keys()
     kwargs["statistics"][hardware] = []
-    if kwargs["experiment_id"] == H2ExperimentID.P0_CliffordT:
+    if kwargs["experiment_id"] in [H2ExperimentID.P0_CliffordT, H2ExperimentID.P0_Rotation]:
         answer = []
         pivot_qubits = set()
 
@@ -401,32 +400,24 @@ if __name__ == "__main__":
     
     if arg_backend == "gen_configs":
         generate_configs("H2", H2ExperimentID.P0_CliffordT, 4, 10, allowed_hardware=P0_ALLOWED_HARDWARE)
+        
+        generate_configs("H2", H2ExperimentID.P0_Rotation, 4, 10, allowed_hardware=P0_ALLOWED_HARDWARE)
     if arg_backend == "embeddings":
         batches = get_num_qubits_to_hardware(WITH_THERMALIZATION, allowed_hardware=P0_ALLOWED_HARDWARE)
         statistics = dict()
         for num_qubits in batches.keys():
-            config_path = get_config_path("H2", H2ExperimentID.P0_CliffordT, num_qubits)
-            generate_embeddings(config_path=config_path, experiment_enum=H2ExperimentID, experiment_id=H2ExperimentID.P0_CliffordT, get_hardware_embeddings=get_hardware_embeddings, statistics=statistics)
-        project_settings = get_project_settings()
-        project_path = project_settings["PROJECT_PATH"]
-        statistics_path = os.path.join(project_path, "synthesis", "H2", H2ExperimentID.P0_CliffordT.value, "embedding_stats.csv")
-        f_statistics = open(statistics_path, "w")
-        f_statistics.write("hardware,qubit,prob,op,most_noisy\n")
-        sum_probs = 0
-        total_elements = 0
-        for (hardware_spec, stats) in statistics.items():
-            for ((prob, qubit), op, reverse) in stats:
-                total_elements+=1
-                sum_probs+=prob
-                f_statistics.write(f"{hardware_spec.value},{qubit},{prob},{op.name},{reverse}\n")
-        f_statistics.close()
-        print(sum_probs/total_elements)
+            for experiment_id in H2ExperimentID:
+                config_path = get_config_path("H2", experiment_id, num_qubits)
+                print(config_path)
+                generate_embeddings(config_path=config_path, experiment_enum=H2ExperimentID, experiment_id=experiment_id, get_hardware_embeddings=get_hardware_embeddings, statistics=statistics)
+
     if arg_backend == "all_pomdps":
         batches = get_num_qubits_to_hardware(WITH_THERMALIZATION, allowed_hardware=P0_ALLOWED_HARDWARE)
         
         for num_qubits in batches.keys():
-            config_path = get_config_path("H2", H2ExperimentID.P0_CliffordT, num_qubits)
-            generate_pomdps(config_path, 14)
+            for experiment_id in H2ExperimentID:
+                config_path = get_config_path("H2", experiment_id, num_qubits)
+                generate_pomdps(config_path, 14)
             
     if arg_backend == "test":
         # Test.test_hamiltonian()
