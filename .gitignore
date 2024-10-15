@@ -1,5 +1,6 @@
 problems/sscript.sh
 problems/server_script.sh
+.vscode
 .settings
 .DS_Store
 # Byte-compiled / optimized / DLL files
