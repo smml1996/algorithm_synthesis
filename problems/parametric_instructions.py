@@ -102,7 +102,8 @@ def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id
 def get_hardware_embeddings(hardware: HardwareSpec, **kwargs) -> List[Dict[int, int]]:
     noise_model = NoiseModel(hardware, thermal_relaxation=WITH_THERMALIZATION)
     # assert hardware not in kwargs["statistics"].keys()
-    kwargs["statistics"][hardware] = []
+    if "statistics" in kwargs.keys():
+        kwargs["statistics"][hardware] = []
     if kwargs["experiment_id"] in [ParamInsExperimentId.H2Mol_Q1]:
         answer = []
         pivot_qubits = set()
@@ -110,15 +111,17 @@ def get_hardware_embeddings(hardware: HardwareSpec, **kwargs) -> List[Dict[int, 
         # get qubit with highest accumulated measurement error rate
         for reverse in [False, True]:
             most_noisy_meas = noise_model.get_most_noisy_qubit(Op.MEAS, reverse=reverse)[0]
-            kwargs["statistics"][hardware].append((most_noisy_meas, Op.MEAS, not reverse))
+            if "statistics" in kwargs.keys():
+                kwargs["statistics"][hardware].append((most_noisy_meas, Op.MEAS, not reverse))
             pivot_qubits.add(most_noisy_meas[1])
         if noise_model.basis_gates in [BasisGates.TYPE1, BasisGates.TYPE6]:
             # we get the most noisy qubits in terms of U1 and U2
             for reverse in [False, True]:
                 most_noisy_U1 = noise_model.get_most_noisy_qubit(Op.U1, reverse=reverse)[0]
                 most_noisy_U2 = noise_model.get_most_noisy_qubit(Op.U2, reverse=reverse)[0]
-                kwargs["statistics"][hardware].append((most_noisy_U1, Op.U1, not reverse))
-                kwargs["statistics"][hardware].append((most_noisy_U2, Op.U2, not reverse))
+                if "statistics" in kwargs.keys():
+                    kwargs["statistics"][hardware].append((most_noisy_U1, Op.U1, not reverse))
+                    kwargs["statistics"][hardware].append((most_noisy_U2, Op.U2, not reverse))
                 pivot_qubits.add(most_noisy_U1[1])
                 pivot_qubits.add(most_noisy_U2[1])
             
@@ -128,7 +131,8 @@ def get_hardware_embeddings(hardware: HardwareSpec, **kwargs) -> List[Dict[int, 
                 # we get the most noisy qubits in terms of SX and RZ gates
                 most_noisy_SX = noise_model.get_most_noisy_qubit(Op.SX, reverse=reverse)[0]
                 # most_noisy_RZ = noise_model.get_most_noisy_qubit(Op.RZ)[0]
-                kwargs["statistics"][hardware].append((most_noisy_SX, Op.SX, not reverse))
+                if "statistics" in kwargs.keys():
+                    kwargs["statistics"][hardware].append((most_noisy_SX, Op.SX, not reverse))
                 # kwargs["statistics"][hardware].append((most_noisy_RZ, Op.RZ))
                 pivot_qubits.add(most_noisy_SX[1])
                 # pivot_qubits.add(most_noisy_RZ[1])
@@ -139,6 +143,11 @@ def get_hardware_embeddings(hardware: HardwareSpec, **kwargs) -> List[Dict[int, 
     else:
         raise Exception("Not implemented!")
 
+def get_experiment_batches():
+    batches = dict()
+    for hardware in P0_ALLOWED_HARDWARE:
+        batches[hardware.value] = [hardware.value]
+    return batches
 
 if __name__ == "__main__":
     arg_backend = sys.argv[1]
@@ -146,6 +155,13 @@ if __name__ == "__main__":
     Precision.update_threshold()
     
     if arg_backend == "gen_configs":
-        generate_configs("param_ins", ParamInsExperimentId.H2Mol_Q1, 1, 2, allowed_hardware=P0_ALLOWED_HARDWARE)
+        generate_configs("param_ins", ParamInsExperimentId.H2Mol_Q1, 1, 2, allowed_hardware=P0_ALLOWED_HARDWARE, batches=get_experiment_batches())
+        
+    if arg_backend == "embeddings":
+        batches = get_experiment_batches()
+        for batch_name in batches.keys():
+            config_path = get_config_path("param_ins", ParamInsExperimentId.H2Mol_Q1, batch_name)
+            generate_embeddings(config_path=config_path, experiment_enum=ParamInsExperimentId, experiment_id=ParamInsExperimentId.H2Mol_Q1, get_hardware_embeddings=get_hardware_embeddings)
+        
         
        
