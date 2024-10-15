@@ -10,7 +10,7 @@ _deps/
 qalgorithm_synthesis/qalgorithm_synthesis
 qalgorithm_synthesis/cxh_script.sh
 
-
+*.sh
 # C extensions
 *.so
 
