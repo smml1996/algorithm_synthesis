@@ -7,8 +7,8 @@ import json
 import os, sys
 sys.path.append(os.getcwd() + "/..")
 
-from experiments_utils import default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_config_path, get_embeddings_path, get_project_settings
-from pomdp import POMDPAction, build_pomdp, default_guard
+from experiments_utils import default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_config_path
+from pomdp import POMDPAction, build_pomdp
 import qmemory
 from qpu_utils import BasisGates, Op
 
@@ -26,8 +26,7 @@ settings.use_pauli_sum_op = False
 from qiskit_nature.second_q.drivers import PySCFDriver
 from qiskit_nature.units import DistanceUnit
 from qiskit_nature.second_q.formats.molecule_info import MoleculeInfo
-from qiskit_nature.second_q.mappers import JordanWignerMapper, QubitConverter, ParityMapper
-from qiskit_nature.second_q.transformers import ActiveSpaceTransformer
+from qiskit_nature.second_q.mappers import JordanWignerMapper, QubitConverter
 
 MAX_PRECISION = 10
 WITH_THERMALIZATION = False
