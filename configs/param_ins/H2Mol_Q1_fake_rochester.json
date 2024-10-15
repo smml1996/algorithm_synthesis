@@ -7,5 +7,6 @@
     "algorithms_file": "",
     "hardware": [
         "fake_rochester"
-    ]
+    ],
+    "opt_tecnique": "max"
 }

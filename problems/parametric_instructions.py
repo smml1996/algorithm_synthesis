@@ -162,6 +162,11 @@ if __name__ == "__main__":
         for batch_name in batches.keys():
             config_path = get_config_path("param_ins", ParamInsExperimentId.H2Mol_Q1, batch_name)
             generate_embeddings(config_path=config_path, experiment_enum=ParamInsExperimentId, experiment_id=ParamInsExperimentId.H2Mol_Q1, get_hardware_embeddings=get_hardware_embeddings)
+            
+    if arg_backend == "run_config":
+        config = load_config_file(sys.argv[1], ParamInsExperimentId)
+        initial_parameters = get_initial_parameters(config)
+        result = minimize(cost_func_vqe, initial_parameters, args=(ansatz, observable, estimator), method="SLSQP")
         
         
        

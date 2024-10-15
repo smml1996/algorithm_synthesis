@@ -7,5 +7,6 @@
     "algorithms_file": "",
     "hardware": [
         "fake_washington"
-    ]
+    ],
+    "opt_tecnique": "max"
 }

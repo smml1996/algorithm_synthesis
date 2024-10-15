@@ -168,7 +168,7 @@ POMDP parse_pomdp_file (const string& fname) {
 
 // TODO: change POMDP to const
 
-pair<Algorithm*, MyFloat> get_bellman_value(POMDP &pomdp, Belief &current_belief, const int &horizon) {
+pair<Algorithm*, MyFloat> get_bellman_value(POMDP &pomdp, Belief &current_belief, const int &horizon, const string &opt_technique) {
     MyFloat curr_belief_val = current_belief.get_vertices_probs(pomdp.target_vertices);
 
 
@@ -207,7 +207,7 @@ pair<Algorithm*, MyFloat> get_bellman_value(POMDP &pomdp, Belief &current_belief
             MyFloat bellman_val;
 
             for(auto & obs_to_next_belief : obs_to_next_beliefs) {
-                auto temp = get_bellman_value(pomdp, obs_to_next_belief.second, horizon-1);
+                auto temp = get_bellman_value(pomdp, obs_to_next_belief.second, horizon-1, opt_technique);
                 next_algorithms.push_back(temp.first);
                 bellman_val = bellman_val + temp.second;
             }
@@ -232,7 +232,13 @@ pair<Algorithm*, MyFloat> get_bellman_value(POMDP &pomdp, Belief &current_belief
 
     MyFloat max_val; // this is initialized as zero
     for(auto & bellman_value : bellman_values) {
-        max_val = max(max_val, bellman_value.second);
+        if (opt_technique == "max") {
+            max_val = max(max_val, bellman_value.second);
+        } else {
+            assert(opt_technique == "min");
+            max_val = min(max_val, bellman_value.second);
+        }
+        
     }
 
     int shortest_alg_with_max_val = -1;

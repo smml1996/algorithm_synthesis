@@ -116,7 +116,7 @@ def get_output_path(experiment_name, experiment_id, batch_name):
     directory_exists(os.path.join(project_path, "results", experiment_name, experiment_id.value))
     return os.path.join(project_path, "results", experiment_name, experiment_id.value,f"{batch_name}")
 
-def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max_horizon, allowed_hardware=HardwareSpec, batches: Dict[str, List[HardwareSpec]]=None):
+def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max_horizon, allowed_hardware=HardwareSpec, batches: Dict[str, List[HardwareSpec]]=None, opt_technique: str="max"):
     """_summary_
 
     Args:
@@ -126,6 +126,7 @@ def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max
         max_horizon (_type_): _description_
         allowed_hardware (_type_, optional): _description_. Defaults to HardwareSpec.
         batches (Dict[str, List[HardwareSpec]], optional): mapping between batch name and a list of hardware specification for which we perform experiments
+        opt_technique (str, optional): possible values are "max" or "min"
     """    
     configs_path = get_configs_path()
     if not os.path.exists(configs_path):
@@ -151,6 +152,7 @@ def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max
             config["output_dir"] = get_output_path(experiment_name, experiment_id, batch_name)
             config["algorithms_file"] = ""
             config["hardware"] = hardware_specs_str
+            config["opt_tecnique"] = opt_technique
         
             config_path = get_config_path(experiment_name, experiment_id, batch_name)
             f = open(config_path, "w")

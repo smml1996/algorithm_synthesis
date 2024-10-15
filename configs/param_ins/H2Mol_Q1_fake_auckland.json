@@ -7,5 +7,6 @@
     "algorithms_file": "",
     "hardware": [
         "fake_auckland"
-    ]
+    ],
+    "opt_tecnique": "max"
 }
