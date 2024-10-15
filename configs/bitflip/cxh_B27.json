@@ -1,0 +1,11 @@
+{
+    "name": "B27",
+    "experiment_id": "cxh",
+    "min_horizon": 4,
+    "max_horizon": 7,
+    "output_dir": "/Users/stefaniemuroyalei/Documents/algorithm_synthesis/results/bitflip/cxh/B27",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_toronto"
+    ]
+}

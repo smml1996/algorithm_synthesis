@@ -90,11 +90,11 @@ def get_num_qubits_to_hardware(hardware_str=True, allowed_hardware=HardwareSpec)
     for hardware in allowed_hardware:
         nm = NoiseModel(hardware, thermal_relaxation=False)
         if nm.num_qubits not in s.keys():
-            s[nm.num_qubits] = []
+            s[f"B{nm.num_qubits}"] = []
         if hardware_str:
-            s[nm.num_qubits].append(hardware.value) 
+            s[f"B{nm.num_qubits}"].append(hardware.value) 
         else:
-            s[nm.num_qubits].append(hardware) 
+            s[f"B{nm.num_qubits}"].append(hardware) 
     return s
 
 def get_configs_path():
@@ -102,21 +102,31 @@ def get_configs_path():
     project_path = project_settings["PROJECT_PATH"]
     return os.path.join(project_path, "configs")
 
-def get_config_path(experiment_name, experiment_id, batch_number):
+def get_config_path(experiment_name, experiment_id, batch_name):
     
     configs_path = get_configs_path()
     experiment_path = os.path.join(configs_path, f"{experiment_name}")
-    return os.path.join(experiment_path, f"{experiment_id.value}_{batch_number}.json")
+    return os.path.join(experiment_path, f"{experiment_id.value}_{batch_name}.json")
 
-def get_output_path(experiment_name, experiment_id, batch_number):
+def get_output_path(experiment_name, experiment_id, batch_name):
     project_settings = get_project_settings()
     project_path = project_settings["PROJECT_PATH"]
     directory_exists(os.path.join(project_path, "results"))
     directory_exists(os.path.join(project_path, "results", experiment_name))
     directory_exists(os.path.join(project_path, "results", experiment_name, experiment_id.value))
-    return os.path.join(project_path, "results", experiment_name, experiment_id.value,f"B{batch_number}")
+    return os.path.join(project_path, "results", experiment_name, experiment_id.value,f"{batch_name}")
 
-def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max_horizon, allowed_hardware=HardwareSpec):
+def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max_horizon, allowed_hardware=HardwareSpec, batches: Dict[str, List[HardwareSpec]]=None):
+    """_summary_
+
+    Args:
+        experiment_name (str): _description_
+        experiment_id (Enum): _description_
+        min_horizon (_type_): _description_
+        max_horizon (_type_): _description_
+        allowed_hardware (_type_, optional): _description_. Defaults to HardwareSpec.
+        batches (Dict[str, List[HardwareSpec]], optional): mapping between batch name and a list of hardware specification for which we perform experiments
+    """    
     configs_path = get_configs_path()
     if not os.path.exists(configs_path):
         print(f"{configs_path} does not exists. Creating it...")
@@ -127,21 +137,22 @@ def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max
         print(f"{experiment_path} does not exists. Creating it...")
         os.mkdir(experiment_path)
         
-    batches = get_num_qubits_to_hardware(hardware_str=True, allowed_hardware=allowed_hardware)
+    if batches is None:
+        batches = get_num_qubits_to_hardware(hardware_str=True, allowed_hardware=allowed_hardware)
     
     
-    for (num_qubits, hardware_specs_str) in batches.items():
+    for (batch_name, hardware_specs_str) in batches.items():
         if len(hardware_specs_str) > 0:
             config = dict()
-            config["name"] = f"B{num_qubits}"
+            config["name"] = batch_name
             config["experiment_id"] = f"{experiment_id.value}"
             config["min_horizon"] = min_horizon
             config["max_horizon"] = max_horizon
-            config["output_dir"] = get_output_path(experiment_name, experiment_id, num_qubits)
+            config["output_dir"] = get_output_path(experiment_name, experiment_id, batch_name)
             config["algorithms_file"] = ""
             config["hardware"] = hardware_specs_str
         
-            config_path = get_config_path(experiment_name, experiment_id, num_qubits)
+            config_path = get_config_path(experiment_name, experiment_id, batch_name)
             f = open(config_path, "w")
             json.dump(config, f, indent=4)
             f.close()
@@ -152,7 +163,6 @@ def generate_pomdp(experiment_id: Any, ProblemInstance,  hardware_spec: Hardware
                 max_horizon: int, thermal_relaxation: bool, 
                 pomdp_write_path: str, return_pomdp=False, **kwargs):
     noise_model = NoiseModel(hardware_spec, thermal_relaxation=thermal_relaxation)
-    print(kwargs)
     problem_instance = ProblemInstance(kwargs)
     actions = get_experiments_actions(noise_model, embedding, experiment_id)
     initial_distribution = []
