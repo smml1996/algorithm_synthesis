@@ -5,7 +5,6 @@ import time
 import numpy as np
 import json
 import os, sys
-from scipy.linalg import expm
 sys.path.append(os.getcwd() + "/..")
 
 from experiments_utils import default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_config_path, get_embeddings_path, get_project_settings
@@ -18,7 +17,7 @@ from ibm_noise_models import HardwareSpec, Instruction, NoiseModel, get_num_qubi
 from typing import Dict, List
 from utils import Precision, np_get_ground_state
 from cmemory import ClassicalState
-from qstates import QuantumState
+from qstates import QuantumState, np_get_energy, np_get_fidelity, np_schroedinger_equation
 from qiskit.quantum_info import SparsePauliOp
 from qiskit_nature import settings
 
@@ -72,42 +71,6 @@ def get_hamiltonian(problem: H2ExperimentID) -> SparsePauliOp:
         return qubit_op
     else:
         raise Exception(f"hamiltonian for {problem} not implemented!")
-    
-def schroedinger_equation(H: SparsePauliOp, t: complex, initial_state: np.array) -> np.array:
-    I = complex(0, 1)
-
-    # Compute the time evolution operator U = e^(iHt)
-    U = expm(-I * H * t) # planck constant is assumed to be 1
-
-    # Apply U to the initial state |q>
-    final_state = np.dot(U, initial_state)
-    
-    # since U might not be a non-unitary matrix (for imaginary time evolution)
-    final_state = normalize_np_array(final_state)
-    return final_state
-    
-def normalize_np_array(quantum_state):
-    # normalize quantum state
-    norm = np.dot(np.conjugate(quantum_state).T, quantum_state)
-    assert isclose(norm.imag, 0.0, abs_tol=Precision.isclose_abstol)
-    norm = norm.real
-    assert norm > 0
-    sq_norm = np.sqrt(norm)
-    return quantum_state/sq_norm
-    
-def get_energy(H: SparsePauliOp, quantum_state: np.array) -> float:
-    quantum_state = normalize_np_array(quantum_state)
-    # Compute the expectation value ⟨q|H|q⟩
-    q_dagger = np.conjugate(quantum_state).T  # Conjugate transpose of |q>
-    H_q = np.dot(H, quantum_state)            # Matrix multiplication H|q>
-    expectation_value = np.dot(q_dagger, H_q)  # Inner product ⟨q|H|q⟩
-    assert isclose(expectation_value.imag, 0.0, abs_tol=Precision.isclose_abstol)
-    return expectation_value.real
-
-def get_fidelity(state1: np.array, state2: np.array) -> float:
-    result = np.dot(np.conjugate(state1).T, state2 )
-    return result.real*np.conjugate(result.real)
-    
 
 class H2MoleculeInstance:
     def __init__(self, embedding, experiment_id: H2ExperimentID, t: int, is_imaginary=True) -> None:
@@ -127,10 +90,10 @@ class H2MoleculeInstance:
         qs, _ = self.initial_state
         assert isinstance(qs, QuantumState)
         if is_imaginary:
-            self.target_state = schroedinger_equation(get_hamiltonian(self.experiment_id), complex(0, -self.t), qs.to_np_array())
+            self.target_state = np_schroedinger_equation(get_hamiltonian(self.experiment_id), complex(0, -self.t), qs.to_np_array())
         else:
-            self.target_state = schroedinger_equation(get_hamiltonian(self.experiment_id), self.t, qs.to_np_array())
-        self.target_energy = get_energy(self.H, self.target_state)
+            self.target_state = np_schroedinger_equation(get_hamiltonian(self.experiment_id), self.t, qs.to_np_array())
+        self.target_energy = np_get_energy(self.H, self.target_state)
         
     def get_initial_states(self):
         """the initial state must have non zero overlap with the ground state
@@ -251,13 +214,13 @@ class Test:
     
     @staticmethod
     def check_ground(matrix, my_state, their_state, expected_energy=None):
-        my_energy = get_energy(matrix, my_state)
-        their_energy = get_energy(matrix, their_state)
+        my_energy = np_get_energy(matrix, my_state)
+        their_energy = np_get_energy(matrix, their_state)
         if expected_energy is not None:
             assert isclose(my_energy, expected_energy, rel_tol=Precision.rel_tol)
         if not isclose(my_energy, their_energy, rel_tol=Precision.rel_tol):
             raise Exception(f"Energies do not match: {my_energy} and {their_energy}")
-        fidelity = get_fidelity(my_state, their_state)
+        fidelity = np_get_fidelity(my_state, their_state)
         if not isclose(fidelity, 1.0, rel_tol=Precision.rel_tol):
             raise Exception(f"Fidelity is not close:\n {my_state}\n {their_state}")
         
@@ -319,7 +282,7 @@ class Test:
                 for instruction in implementation:
                     current_state = qmemory.handle_write(current_state, instruction.get_gate_data())
                 if current_state != target_state:
-                    raise Exception(f"Mismatch with implementation {index}.\n {target_state}\n {current_state}\n basis_state={basis_state}\nfidelity={get_fidelity(current_state.to_np_array(), target_state.to_np_array())}")
+                    raise Exception(f"Mismatch with implementation {index}.\n {target_state}\n {current_state}\n basis_state={basis_state}\nfidelity={np_get_fidelity(current_state.to_np_array(), target_state.to_np_array())}")
     
     @staticmethod
     def test_used_1Q_gates():

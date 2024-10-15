@@ -4,6 +4,8 @@ from typing import Any, List, Optional, Dict, Tuple
 import numpy as np
 from numpy import conjugate
 from qpu_utils import Precision, get_complex, int_to_bin, bin_to_int
+from scipy.linalg import expm
+from qiskit.quantum_info import SparsePauliOp
 
 class QuantumState:
     sparse_vector : Dict # map basis states to sympy-Symbolic
@@ -283,5 +285,39 @@ def get_fidelity(qstate1: QuantumState, qstate2: QuantumState) -> float:
 
 
     
+# np.array utils
 
+def np_get_energy(H: SparsePauliOp, quantum_state: np.array) -> float:
+    quantum_state = normalize_np_array(quantum_state)
+    # Compute the expectation value ⟨q|H|q⟩
+    q_dagger = np.conjugate(quantum_state).T  # Conjugate transpose of |q>
+    H_q = np.dot(H, quantum_state)            # Matrix multiplication H|q>
+    expectation_value = np.dot(q_dagger, H_q)  # Inner product ⟨q|H|q⟩
+    assert isclose(expectation_value.imag, 0.0, abs_tol=Precision.isclose_abstol)
+    return expectation_value.real
 
+def np_schroedinger_equation(H: SparsePauliOp, t: complex, initial_state: np.array) -> np.array:
+    I = complex(0, 1)
+
+    # Compute the time evolution operator U = e^(iHt)
+    U = expm(-I * H * t) # planck constant is assumed to be 1
+
+    # Apply U to the initial state |q>
+    final_state = np.dot(U, initial_state)
+    
+    # since U might not be a non-unitary matrix (for imaginary time evolution)
+    final_state = normalize_np_array(final_state)
+    return final_state
+
+def np_get_fidelity(state1: np.array, state2: np.array) -> float:
+    result = np.dot(np.conjugate(state1).T, state2 )
+    return result.real*np.conjugate(result.real)
+
+def normalize_np_array(quantum_state):
+    # normalize quantum state
+    norm = np.dot(np.conjugate(quantum_state).T, quantum_state)
+    assert isclose(norm.imag, 0.0, abs_tol=Precision.isclose_abstol)
+    norm = norm.real
+    assert norm > 0
+    sq_norm = np.sqrt(norm)
+    return quantum_state/sq_norm
