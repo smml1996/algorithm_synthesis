@@ -8,7 +8,6 @@ __pycache__/
 *$py.class
 _deps/
 qalgorithm_synthesis/qalgorithm_synthesis
-qalgorithm_synthesis/cxh_script.sh
 
 *.sh
 # C extensions
