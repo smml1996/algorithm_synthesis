@@ -1,0 +1,11 @@
+{
+    "name": "B127",
+    "experiment_id": "H2Mol_Q1",
+    "min_horizon": 1,
+    "max_horizon": 2,
+    "output_dir": "/Users/stefaniemuroyalei/Documents/algorithm_synthesis/results/param_ins/H2Mol_Q1/B127",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_washington"
+    ]
+}

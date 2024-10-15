@@ -117,7 +117,7 @@ class H2MoleculeInstance:
         assert isinstance(qs, QuantumState)
         if self.experiment_id in [H2ExperimentID.P0_CliffordT, H2ExperimentID.P0_Rotation]:
             state = qs.to_np_array()
-            energy = get_energy(self.H, state)
+            energy = np_get_energy(self.H, state)
             return isclose(energy, self.target_energy, abs_tol=1/1e5)
     
 def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: H2ExperimentID) -> List[Action]:
@@ -235,7 +235,7 @@ class Test:
         Y = np.array([[0, complex(0, -1)], [complex(0, 1), 0]])
                 
         # testing identity matrix
-        my_ground_state = schroedinger_equation(I, complex(0,-14), np.array([1,0]))
+        my_ground_state = np_schroedinger_equation(I, complex(0,-14), np.array([1,0]))
         Test.check_ground(I, my_ground_state, [1, 0], expected_energy=1)
         
         # testing pauli-X
@@ -243,17 +243,17 @@ class Test:
         their_ground_energy, eigenstates = np_get_ground_state(eigenvalues, eigenvectors)
         assert isclose(their_ground_energy, -1, rel_tol=Precision.rel_tol)
         assert len(eigenstates) == 1
-        my_ground_state = schroedinger_equation(X, complex(0,-14), np.array([1,0]))
+        my_ground_state = np_schroedinger_equation(X, complex(0,-14), np.array([1,0]))
         Test.check_ground(X, my_ground_state, eigenstates[0], expected_energy=-1)
         
         # testing pauli-Z
-        my_ground_state = schroedinger_equation(Z, complex(0,-14), np.array([1,0]))
+        my_ground_state = np_schroedinger_equation(Z, complex(0,-14), np.array([1,0]))
         Test.check_ground(Z, my_ground_state, [1,0], expected_energy=1)
         
-        my_ground_state = schroedinger_equation(Z, complex(0,-14), np.array([0,1]))
+        my_ground_state = np_schroedinger_equation(Z, complex(0,-14), np.array([0,1]))
         Test.check_ground(Z, my_ground_state, [0,1], expected_energy=-1)
         
-        my_ground_state = schroedinger_equation(Z, complex(0,-14), np.array([1/np.sqrt(2),1/np.sqrt(2)]))
+        my_ground_state = np_schroedinger_equation(Z, complex(0,-14), np.array([1/np.sqrt(2),1/np.sqrt(2)]))
         Test.check_ground(Z, my_ground_state, [0,1], expected_energy=-1)
         
         # testing pauli-Y
@@ -261,7 +261,7 @@ class Test:
         their_ground_energy, eigenstates = np_get_ground_state(eigenvalues, eigenvectors)
         assert isclose(their_ground_energy, -1, rel_tol=Precision.rel_tol)
         assert len(eigenstates) == 1
-        my_ground_state = schroedinger_equation(Y, complex(0,-14), np.array([1,0]))
+        my_ground_state = np_schroedinger_equation(Y, complex(0,-14), np.array([1,0]))
         Test.check_ground(Y, my_ground_state, eigenstates[0], expected_energy=-1)
         
     @staticmethod

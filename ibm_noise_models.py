@@ -323,6 +323,11 @@ class Instruction:
                 return [Instruction(self.target, Op.RZ, params=[pi/2]),
                 Instruction(self.target, Op.SX),
                 Instruction(self.target, Op.RZ, params=[pi/2])]
+            if self.op == Op.U3:
+                rz_lambda = [Instruction(self.target, Op.RZ, params=[self.params[2]])]
+                ry_theta = Instruction(self.target, Op.RY, params=[self.params[0]]).to_basis_gate_impl(basis_gates)
+                rz_phi = [Instruction(self.target, Op.RZ, params=[self.params[1]])]
+                return rz_lambda + ry_theta + rz_phi
             if self.op == Op.T:
                 return [Instruction(self.target, Op.RZ, params=[pi/4])]
             if self.op == Op.S:
