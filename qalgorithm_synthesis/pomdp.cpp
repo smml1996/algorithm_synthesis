@@ -7,8 +7,12 @@
 #include <string>
 #include "utils.cpp"
 #include <fstream>
+#include <cassert>
 
 using namespace  std;
+
+static auto HALT_ACTION = "halt";
+static auto HALT = new Algorithm(HALT_ACTION, nullptr, nullptr, nullptr, 0);
 
 class POMDP {
 public:
@@ -165,16 +169,16 @@ POMDP parse_pomdp_file (const string& fname) {
 // TODO: change POMDP to const
 
 pair<Algorithm*, MyFloat> get_bellman_value(POMDP &pomdp, Belief &current_belief, const int &horizon) {
-
     MyFloat curr_belief_val = current_belief.get_vertices_probs(pomdp.target_vertices);
 
+
     if (horizon == 0) {
-        return make_pair((Algorithm *) nullptr, curr_belief_val);
+        return make_pair(HALT, curr_belief_val);
     }
 
     vector< pair< Algorithm*, MyFloat > > bellman_values;
 
-    bellman_values.emplace_back((Algorithm *) nullptr, curr_belief_val);
+    bellman_values.emplace_back(HALT, curr_belief_val);
 
     for(auto it = pomdp.actions.begin(); it != pomdp.actions.end(); it++) {
         string action = *it;
@@ -214,10 +218,12 @@ pair<Algorithm*, MyFloat> get_bellman_value(POMDP &pomdp, Belief &current_belief
             Algorithm *new_alg_node = new Algorithm(*it, nullptr, nullptr, nullptr);
             if (next_algorithms.size() == 1) {
                 new_alg_node->next_ins = next_algorithms[0];
+                new_alg_node->depth = next_algorithms[0]->depth + 1;
             } else {
                 // since maps are ordered by values:
                 new_alg_node->case0 = next_algorithms[0]; // this should be a measure to 0
                 new_alg_node->case1 = next_algorithms[1]; // This should be a measure to 1
+                new_alg_node->depth = max(next_algorithms[0]->depth, next_algorithms[1]->depth) +1;
             }
 
             bellman_values.emplace_back(new_alg_node, bellman_val);
@@ -229,8 +235,19 @@ pair<Algorithm*, MyFloat> get_bellman_value(POMDP &pomdp, Belief &current_belief
         max_val = max(max_val, bellman_value.second);
     }
 
+    int shortest_alg_with_max_val = -1;
     for(auto & bellman_value : bellman_values) {
         if (bellman_value.second == max_val) {
+            if (shortest_alg_with_max_val == -1) {
+                shortest_alg_with_max_val = bellman_value.first->depth;
+            } else {
+                shortest_alg_with_max_val = min(shortest_alg_with_max_val, bellman_value.first->depth);
+            }
+        }
+    }
+
+    for(auto & bellman_value : bellman_values) {
+        if (bellman_value.second == max_val and bellman_value.first->depth == shortest_alg_with_max_val) {
             return bellman_value;
         }
     }
@@ -252,11 +269,12 @@ Belief get_initial_belief(POMDP &pomdp) {
 
 MyFloat get_algorithm_acc(POMDP &pomdp, Algorithm*& algorithm, Belief &current_belief) {
     MyFloat curr_belief_val = current_belief.get_vertices_probs(pomdp.target_vertices);
-    if (algorithm == nullptr) {
-        return curr_belief_val;
-    }
+    
 
     string action = algorithm->action;
+    if ((action == HALT_ACTION) or (algorithm == nullptr)) {
+        return curr_belief_val;
+    }
 
     // build next_beliefs, separate them by different observables
     map<int, Belief> obs_to_next_beliefs;

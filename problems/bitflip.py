@@ -461,7 +461,7 @@ def test_programs(config_path, shots=2000, factor=1):
             actions = get_experiments_actions(noise_model, {0:0, 1:1, 2:2}, experiment_id)
             for action in actions:
                 actions_to_instructions[action.name] = action.instruction_sequence
-                    
+            actions_to_instructions["halt"] = []
             for (index, embedding) in enumerate(embeddings):
                 lambdas_d = all_lambdas[backend.value][index]
                 m = embedding

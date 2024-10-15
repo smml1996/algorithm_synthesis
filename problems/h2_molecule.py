@@ -363,9 +363,9 @@ if __name__ == "__main__":
     Precision.update_threshold()
     
     if arg_backend == "gen_configs":
-        generate_configs("H2", H2ExperimentID.P0_CliffordT, 4, 10, allowed_hardware=P0_ALLOWED_HARDWARE)
+        generate_configs("H2", H2ExperimentID.P0_CliffordT, 4, 5, allowed_hardware=P0_ALLOWED_HARDWARE)
         
-        generate_configs("H2", H2ExperimentID.P0_Rotation, 4, 10, allowed_hardware=P0_ALLOWED_HARDWARE)
+        generate_configs("H2", H2ExperimentID.P0_Rotation, 4, 5, allowed_hardware=P0_ALLOWED_HARDWARE)
     if arg_backend == "embeddings":
         batches = get_num_qubits_to_hardware(WITH_THERMALIZATION, allowed_hardware=P0_ALLOWED_HARDWARE)
         statistics = dict()

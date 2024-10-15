@@ -77,15 +77,17 @@ public:
 class Algorithm {
 public:
     string action;
+    int depth;
     Algorithm *next_ins;
     Algorithm *case0; // We assume that single-qubit measurements are possible only, therefore only two cases
     Algorithm *case1;
 
-    Algorithm(string action, Algorithm *next_ins, Algorithm *case0, Algorithm *case1){
+    Algorithm(string action, Algorithm *next_ins, Algorithm *case0, Algorithm *case1, int depth=-1){
         this->action = std::move(action);
         this->next_ins = next_ins;
         this->case0 = case0;
         this->case1 = case1;
+        this->depth = depth;
     }
 
     Algorithm(json data){
