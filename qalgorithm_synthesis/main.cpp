@@ -11,7 +11,7 @@ using json = nlohmann::json;
 
 using namespace  std;
 
-auto all_keys_required = {"name", "min_horizon", "max_horizon", "output_dir", "opt_technique"};
+auto all_keys_required = {"name", "min_horizon", "max_horizon", "output_dir", "opt_technique", "verbose"};
 
 /// @brief 
 /// @param argc 
@@ -20,7 +20,7 @@ auto all_keys_required = {"name", "min_horizon", "max_horizon", "output_dir", "o
 int main(int argc, char **argv) {
     string arg1 = argv[1];
 
-    cout << "opening config file: " << argv[2] << endl; 
+    cerr << "opening config file: " << argv[2] << endl; 
 
     std::ifstream f(argv[2]); // parse configuration file
     json config_json = json::parse(f);
@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 
     // print config file
     for (auto& el : config_json.items()) {
-        std::cout << el.key() << " : " << el.value() << "\n\n";
+        std::cerr << el.key() << " : " << el.value() << "\n\n";
     }
 
     string experiment_name = config_json["name"];
@@ -61,14 +61,14 @@ int main(int argc, char **argv) {
 
     // checking output dir exists (or create)
     if (!std::filesystem::exists(output_dir)) {
-        std::cout << "Output dir does not exists. Creating directory..." << std::endl;
+        std::cerr << "Output dir does not exists. Creating directory..." << std::endl;
         if (std::filesystem::create_directory(output_dir)) {
-            std::cout << "Directory created successfully." << std::endl;
+            std::cerr << "Directory created successfully." << std::endl;
         } else {
-            std::cout << "Failed to create directory or it already exists.\n" << std::endl;
+            std::cerr << "Failed to create directory or it already exists.\n" << std::endl;
         }
     } else {
-        cout << "output directory exists" << endl;
+        cerr << "output directory exists" << endl;
     }
     
     if ( arg1.compare("bellmaneq") == 0) {
@@ -76,14 +76,14 @@ int main(int argc, char **argv) {
         filesystem::path algorithms_path = output_dir / "algorithms";
         // create directory where algorithms should be stored (if it does not already exists)
         if (!std::filesystem::exists(algorithms_path)) {
-            std::cout << "algorithms dir does not exists. Creating directory..." << std::endl;
+            std::cerr << "algorithms dir does not exists. Creating directory..." << std::endl;
             if (std::filesystem::create_directory(algorithms_path)) {
-                std::cout << "algorithms directory created successfully." << std::endl;
+                std::cerr << "algorithms directory created successfully." << std::endl;
             } else {
-                std::cout << "Failed to create algorithms directory or it already exists.\n" << std::endl;
+                std::cerr << "Failed to create algorithms directory or it already exists.\n" << std::endl;
             }
         } else {
-            cout << "algorithms directory exists" << endl;
+            cerr << "algorithms directory exists" << endl;
         }
 
         // we output the computed lambdas in the following file:
@@ -101,13 +101,15 @@ int main(int argc, char **argv) {
             for (int embedding_index = 0; embedding_index < count; embedding_index ++) {
                 filesystem::path instance_pomdp_path = pomdps_path / (hardware+"_"+ to_string(embedding_index) + ".txt");
                 auto pomdp = parse_pomdp_file(instance_pomdp_path);
+
                 Belief initial_belief = get_initial_belief(pomdp);
                 for (int horizon = min_horizon; horizon < max_horizon+1; horizon++) {
-                    cout << "Running experiment: " << hardware << embedding_index << " h="<< horizon << endl;
+                    cerr << "Running experiment: " << hardware << embedding_index << " h="<< horizon << endl;
                     long time_before = time(nullptr);
                     auto result = get_bellman_value(pomdp, initial_belief, horizon, opt_technique);
                     long time_after = time(nullptr);
                     auto lambda = result.second;
+                    cout << lambda << endl;
                     lambdas_file << hardware << "," << embedding_index << "," << horizon << "," << lambda << ","
                                 << (time_after-time_before) << "\n";
                     lambdas_file.flush();
@@ -158,7 +160,7 @@ int main(int argc, char **argv) {
 
         output_file.close();
     } else {
-        cout << "nothing matches" << endl;
+        cerr << "nothing matches" << endl;
     }
 
     return 0;

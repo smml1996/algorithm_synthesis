@@ -21,7 +21,7 @@ public:
     int initial_state{};
     unordered_set<string> actions{};
     unordered_map<int, int> gamma{};
-    unordered_set<int> target_vertices{};
+    unordered_map<int, MyFloat> rewards{}; // maps a vertex to its reward
 
     void insert_probability(const int &from,const string &action, const int &to, const MyFloat &prob) {
         this->probabilities[from][action][to] = prob;
@@ -53,17 +53,17 @@ public:
         this->gamma[v] = obs;
     }
 
-    bool is_target_vertex(const int &id) {
-        return this->target_vertices.find(id) != this->target_vertices.end();
+    MyFloat get_vertex_reward(const int &id) {
+        return this->rewards[id];
     }
 
-    bool insert_target_v(const int &id) {
-        if (this->is_target_vertex(id)) {
+    bool insert_reward(const int &id, const MyFloat&reward ) {
+        if (this->rewards.find(id) == this->rewards.end()) {
+            this->rewards.insert({id, reward});
+            return true;
+        } else {
             return false;
         }
-
-        this->target_vertices.insert(id);
-        return true;
     }
 };
 
@@ -87,18 +87,23 @@ void fill_pomdp_gamma(POMDP &pomdp, const string &line){
     }
 }
 
-void fill_target_vertices(POMDP &pomdp, const string &line) {
+void fill_rewards(POMDP &pomdp, const string &line) {
     vector<string> elements;
     split_str(line, ' ', elements);
 
     assert(elements.size() ==  2);
-    assert(elements[0] == "TARGETV:");
+    assert(elements[0] == "REWARDS:");
 
-    vector<string> vertices;
-    split_str(elements[1], ',', vertices);
+    vector<string> vertices_to_rewards;
+    split_str(elements[1], ',', vertices_to_rewards);
 
-    for (const auto & vertice : vertices) {
-        assert(pomdp.insert_target_v(stoi(vertice)));
+    for (const auto & vertex_to_reward : vertices_to_rewards) {
+        vector<string> elements;
+        split_str(vertex_to_reward, ':', elements);
+        assert(elements.size() == 2);
+        int v = stoi(elements[0]);
+        MyFloat r(elements[1]);
+        assert(pomdp.insert_reward(v, r));
     }
 
 }
@@ -129,7 +134,7 @@ POMDP parse_pomdp_file (const string& fname) {
 
     // target vertices
     getline(f, line);
-    fill_target_vertices(pomdp, line);
+    fill_rewards(pomdp, line);
 
     // GAMMA:
     getline(f, line);
@@ -169,7 +174,7 @@ POMDP parse_pomdp_file (const string& fname) {
 // TODO: change POMDP to const
 
 pair<Algorithm*, MyFloat> get_bellman_value(POMDP &pomdp, Belief &current_belief, const int &horizon, const string &opt_technique) {
-    MyFloat curr_belief_val = current_belief.get_vertices_probs(pomdp.target_vertices);
+    MyFloat curr_belief_val = current_belief.get_belief_reward(pomdp.rewards);
 
 
     if (horizon == 0) {
@@ -274,7 +279,7 @@ Belief get_initial_belief(POMDP &pomdp) {
 }
 
 MyFloat get_algorithm_acc(POMDP &pomdp, Algorithm*& algorithm, Belief &current_belief) {
-    MyFloat curr_belief_val = current_belief.get_vertices_probs(pomdp.target_vertices);
+    MyFloat curr_belief_val = current_belief.get_belief_reward(pomdp.rewards);
     
 
     string action = algorithm->action;

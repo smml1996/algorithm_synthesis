@@ -54,14 +54,13 @@ public:
         this->probs[v] = this->get(v) + val;
     }
 
-    [[nodiscard]] MyFloat get_vertices_probs(const unordered_set<int> &target_vertices) const {
-    // returns the probability of being in the target set       
+    [[nodiscard]] MyFloat get_belief_reward(const unordered_map<int, MyFloat> &rewards) const {
+        // returns expected reward
         MyFloat val;
 
         for(const auto & prob : this->probs) {
-            if (target_vertices.find(prob.first) != target_vertices.end()) {
-                val = val + prob.second;
-            }
+            MyFloat r = rewards.find(prob.first)->second;
+            val = val + (r * prob.second);
         }
 
         return val;
