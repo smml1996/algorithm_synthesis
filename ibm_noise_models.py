@@ -197,7 +197,7 @@ class Instruction:
     control: int
     op: Op
     params: Any
-    def __init__(self, target: int, op: Op, control: Optional[int] = None, params: Any = None, name=None) -> None:
+    def __init__(self, target: int, op: Op, control: Optional[int] = None, params: Any = None, name=None, symbols=None) -> None:
         assert isinstance(op, Op)
         assert isinstance(target, int)
         assert isinstance(control, int) or (control is None)
@@ -212,9 +212,44 @@ class Instruction:
         self.control = control
         if params is not None:
             for pa in params:
-                assert isinstance(pa, float)
+                assert isinstance(pa, float) or isinstance(pa, str)
         self.params = params
+        self.symbols = symbols
+        if symbols is not None:
+            temp_set = set(symbols)
+            if len(self.symbols) != len(temp_set):
+                assert len(temp_set) < len(self.symbols)
+                raise Exception(f"There are repeated symbols: {symbols}")
         self.name = name
+        
+    def bind_symbols_from_lst(self, values: List[float]) -> Any:
+        """_summary_
+
+        Args:
+            values (List[float]): _description_
+
+        Returns:
+            Any: returns an instruction with the parameters binded
+        """
+        
+        assert len(values) == len(self.symbols)
+        d = zip(self.symbols, values)
+        
+        return self.bind_symbols_from_dict(d)
+    
+    def bind_symbols_from_dict(self, d: Dict[str, float]) -> Any:
+        if self.params is None:
+            return self
+        
+        new_params = []
+        
+        for p in self.params:
+            if isinstance(p, str):
+                new_params.append(d[p])
+            else:
+                new_params.append(p)
+        return Instruction(self.target, self.op, self.control, params=new_params)
+        
 
     def name(self, embedding):
         if self.name is not None:
@@ -228,6 +263,9 @@ class Instruction:
             return f"{self.op.name}-{inverse_embedding[self.target]}"
         else:
             return f"{self.op.name}-{inverse_embedding[self.control]}-{inverse_embedding[self.target]}"
+    
+    def get_num_parameters(self) -> int:
+        return len(self.symbols)
         
     def get_control(self, embedding)->str:
         inverse_embedding = invert_dict(embedding)
@@ -312,11 +350,11 @@ class Instruction:
             if self.op == Op.S:
                 return [Instruction(self.target, Op.U1, params=[pi/2])]
             if self.op == Op.RX:
-                return [Instruction(self.target, Op.U3, params=[self.params[0], -pi/2, pi/2])]
+                return [Instruction(self.target, Op.U3, params=[self.params[0], -pi/2, pi/2], symbols=self.symbols)]
             if self.op == Op.RY:
-                return [Instruction(self.target, Op.U3, params=[pi/2, 0.0, 0.0])]
+                return [Instruction(self.target, Op.U3, params=[self.params[0], 0.0, 0.0], symbols=self.symbols)]
             if self.op == Op.RZ:
-                return [Instruction(self.target, Op.U1, params=[pi/2])]
+                return [Instruction(self.target, Op.U1, params=[self.params[0]], symbols=self.symbols)]
         else:
             assert basis_gates in [BasisGates.TYPE2, BasisGates.TYPE3, BasisGates.TYPE7]
             if self.op == Op.H:
@@ -324,9 +362,22 @@ class Instruction:
                 Instruction(self.target, Op.SX),
                 Instruction(self.target, Op.RZ, params=[pi/2])]
             if self.op == Op.U3:
-                rz_lambda = [Instruction(self.target, Op.RZ, params=[self.params[2]])]
-                ry_theta = Instruction(self.target, Op.RY, params=[self.params[0]]).to_basis_gate_impl(basis_gates)
-                rz_phi = [Instruction(self.target, Op.RZ, params=[self.params[1]])]
+                print("params", self.params)
+                ry_symbols = None
+                rz_symbols2 = None
+                rz_symbols1 = None
+
+                if isinstance(self.params[0], str):
+                    ry_symbols = [self.params[0]]
+                    assert self.params[0] in self.symbols
+                if isinstance(self.params[1], str):
+                    rz_symbols1 = [self.params[1]]
+                if isinstance(self.params[2], str):
+                    rz_symbols2 = [self.params[2]]
+                    
+                rz_lambda = [Instruction(self.target, Op.RZ, params=[self.params[2]], symbols=rz_symbols2)]
+                ry_theta = Instruction(self.target, Op.RY, params=[self.params[0]], symbols=ry_symbols).to_basis_gate_impl(basis_gates)
+                rz_phi = [Instruction(self.target, Op.RZ, params=[self.params[1]], symbols=rz_symbols1)]
                 return rz_lambda + ry_theta + rz_phi
             if self.op == Op.T:
                 return [Instruction(self.target, Op.RZ, params=[pi/4])]
@@ -336,7 +387,7 @@ class Instruction:
                 return [Instruction(self.target, Op.RZ, params=[pi/2])]
             else:
                 h_gate = Instruction(self.target, Op.H).to_basis_gate_impl(basis_gates)
-                rz = Instruction(self.target, Op.RZ, params=self.params).to_basis_gate_impl(basis_gates)
+                rz = Instruction(self.target, Op.RZ, params=self.params, symbols=self.symbols).to_basis_gate_impl(basis_gates)
                 if self.op == Op.RX:
                     return h_gate + rz + h_gate
                 if self.op == Op.RY:

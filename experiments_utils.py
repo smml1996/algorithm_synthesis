@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, List
 from ibm_noise_models import HardwareSpec, NoiseModel, load_config_file
 from pomdp import POMDPAction, POMDPVertex, build_pomdp
 from utils import find_enum_object
+import subprocess
 
 
 class TimeoutException(Exception): pass
@@ -49,9 +50,9 @@ def get_project_settings():
     for line in f.readlines():
         elements = line.split(" ")
         assert len(elements) == 3
-        answer[elements[0]] = elements[2]
-    if elements[2] == "None":
-        raise Exception("please set properly a project path in .settings file.")
+        answer[elements[0]] = elements[2].rstrip()
+        if elements[2] == "None":
+            raise Exception("please set properly a project path in .settings file.")
     return answer
 
 def get_embeddings_path(config):
@@ -86,10 +87,11 @@ def generate_embeddings(**kwargs) -> Dict[Any, Any]:
     f.close()
     
 def get_num_qubits_to_hardware(hardware_str=True, allowed_hardware=HardwareSpec) -> Dict[int, HardwareSpec|str]:
+   
     s = dict()
     for hardware in allowed_hardware:
         nm = NoiseModel(hardware, thermal_relaxation=False)
-        if nm.num_qubits not in s.keys():
+        if f"B{nm.num_qubits}" not in s.keys():
             s[f"B{nm.num_qubits}"] = []
         if hardware_str:
             s[f"B{nm.num_qubits}"].append(hardware.value) 
@@ -116,7 +118,7 @@ def get_output_path(experiment_name, experiment_id, batch_name):
     directory_exists(os.path.join(project_path, "results", experiment_name, experiment_id.value))
     return os.path.join(project_path, "results", experiment_name, experiment_id.value,f"{batch_name}")
 
-def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max_horizon, allowed_hardware=HardwareSpec, batches: Dict[str, List[HardwareSpec]]=None, opt_technique: str="max"):
+def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max_horizon, allowed_hardware=HardwareSpec, batches: Dict[str, List[HardwareSpec]]=None, opt_technique: str="max", verbose=1):
     """_summary_
 
     Args:
@@ -127,6 +129,7 @@ def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max
         allowed_hardware (_type_, optional): _description_. Defaults to HardwareSpec.
         batches (Dict[str, List[HardwareSpec]], optional): mapping between batch name and a list of hardware specification for which we perform experiments
         opt_technique (str, optional): possible values are "max" or "min"
+        verebose (int, optional): possible values are 1 or 0, meaning verbose equal true and false respectively.
     """    
     configs_path = get_configs_path()
     if not os.path.exists(configs_path):
@@ -141,7 +144,6 @@ def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max
     if batches is None:
         batches = get_num_qubits_to_hardware(hardware_str=True, allowed_hardware=allowed_hardware)
     
-    
     for (batch_name, hardware_specs_str) in batches.items():
         if len(hardware_specs_str) > 0:
             config = dict()
@@ -152,7 +154,8 @@ def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max
             config["output_dir"] = get_output_path(experiment_name, experiment_id, batch_name)
             config["algorithms_file"] = ""
             config["hardware"] = hardware_specs_str
-            config["opt_tecnique"] = opt_technique
+            config["opt_technique"] = opt_technique
+            config["verbose"] = verbose
         
             config_path = get_config_path(experiment_name, experiment_id, batch_name)
             f = open(config_path, "w")
@@ -256,4 +259,18 @@ def generate_pomdps(config_path: str, ProblemInstance: Any, ExperimentIdObj: Enu
             #     print(f"Unexpected {err=}, {type(err)=}")
     times_file.close()
         
+    
+    
+def get_bellman_value(project_settings, config_path) -> float:
+    # # Path to your executable and optional arguments
+    executable_path = project_settings["CPP_EXEC_PATH"]
+    args = ["bellmaneq", config_path]  # Optional arguments for the executable
+
+    # # Running the executable
+    result = subprocess.run([executable_path] + args, capture_output=True, text=True)
+    try:
+        return float(result.stdout)
+    except:
+        print(result.stderr)
+        raise Exception("Could not convert executable to float")
     

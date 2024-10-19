@@ -34,6 +34,48 @@ class POMDPAction:
     def __init__(self, name: str, instruction_sequence: List[Instruction]) -> None:
         self.name = name
         self.instruction_sequence = instruction_sequence
+        self.symbols = []
+        
+        # define order of symbols as they appear in the instruction sequence
+        used_symbols = set()
+        for instruction in instruction_sequence:
+            if instruction.symbols is not None:
+                for symbol in instruction.symbols:
+                    if symbol not in used_symbols:
+                        self.symbols.append(symbol)
+                        used_symbols.add(symbol)
+                    
+    def bind_symbols_from_lst(self, lst: List[float]) -> Any:
+        """_summary_
+
+        Args:
+            lst (List[float]): _description_
+
+        Returns:
+            Any: returns a POMDP action with symbols binded
+        """ 
+        assert len(lst) == len(self.symbols)
+        d = zip(self.symbols, lst)
+        return self.bind_symbols_from_dict(d)
+        
+    def bind_symbols_from_dict(self, d: Dict[str, float]) -> Any:
+        """_summary_
+
+        Args:
+            d (Dict[str, float]): _description_
+
+        Returns:
+            Any: returns a POMDP action with symbols binded
+        """        
+        
+        new_instruction_seq = []
+        
+        for instruction in self.instruction_sequence:
+            new_instruction_seq.append(instruction.bind_symbols_from_dict(d))
+        return POMDPAction(self.name, new_instruction_seq)
+            
+    def get_num_parameters(self):
+        return len(self.symbols)
 
     def __handle_measure_instruction(self, instruction: Instruction, channel: MeasChannel, vertex: POMDPVertex, is_meas1: bool =True, result: Dict[POMDPVertex, float]=None) :
         """applies a measurement instruction to a given hybrid state (POMDP vertex)
@@ -172,10 +214,10 @@ class POMDP:
         # computing target vertices
         target_vertices = []
         for v in self.states:
-            if problem_instance.is_target_qs((v.quantum_state, v.classical_state)):
-                target_vertices.append(v.id)
-        target_v_line = ",".join([str(v) for v in target_vertices])
-        f.write(f"TARGETV: {target_v_line}\n")
+            r = problem_instance.get_reward((v.quantum_state, v.classical_state))
+            target_vertices.append(f"{v.id}:{r}")
+        target_v_line = ",".join(target_vertices)
+        f.write(f"REWARDS: {target_v_line}\n")
 
         # gamma: vertex -> observable
         gamma_line = ",".join([str(s.id)+":" + str(s.classical_state) for s in self.states])
@@ -212,7 +254,7 @@ class POMDP:
         # identify target states
         q = Queue()
         for v in self.states:
-            if problem_instance.is_target_qs((v.quantum_state, v.classical_state)):
+            if problem_instance.get_reward((v.quantum_state, v.classical_state)) != 0:
                 q.push(v)
                 new_states.add(v)
         
@@ -291,8 +333,6 @@ def build_pomdp(actions: List[POMDPAction],
     """
     if initial_state is None:
         initial_state = (QuantumState(0, qubits_used=list(embedding.values())), ClassicalState())
-    if not isclose(sum([x for (_, x) in initial_distribution]), 1.0, rel_tol=Precision.rel_tol):
-        raise Exception("Initial distribution must sum to 1")
     
     # graph is a dictionary that maps an origin vertex, a channel (str), to another target vertex  and a float which is the probability of transition from the origin vertex to the target vertex
     graph: Dict[POMDPVertex, Dict[str, Dict[POMDPVertex, float]]] = dict()
@@ -304,6 +344,8 @@ def build_pomdp(actions: List[POMDPAction],
     if initial_distribution is None:
         q.push((initial_v, 0)) # second element denotes that this vertex is at horizon 0
     else:
+        if not isclose(sum([x for (_, x) in initial_distribution]), 1.0, rel_tol=Precision.rel_tol):
+            raise Exception("Initial distribution must sum to 1")
         graph[initial_v] = dict()
         graph[initial_v][INIT_CHANNEL] = dict()
         for (hybrid_state, prob) in initial_distribution:

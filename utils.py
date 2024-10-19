@@ -152,17 +152,4 @@ def np_get_ground_state(eigenvalues, eigenvectors):
             result.append(eigenvector)
     return r_eigenvalue, result
 
-# how to run an executable
-# import subprocess
-
-# # Path to your executable and optional arguments
-# executable_path = "./your_executable"
-# args = ["arg1", "arg2"]  # Optional arguments for the executable
-
-# # Running the executable
-# result = subprocess.run([executable_path] + args, capture_output=True, text=True)
-
-# # Output of the executable
-# print("stdout:", result.stdout)
-# print("stderr:", result.stderr)
             
