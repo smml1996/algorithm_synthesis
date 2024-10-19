@@ -112,13 +112,16 @@ class H2MoleculeInstance:
         assert quantum_state is not None
         self.initial_state = (quantum_state, classical_state)
         
-    def is_target_qs(self, hybrid_state) -> bool:
+    def get_reward(self, hybrid_state) -> float:
         qs, cs = hybrid_state
         assert isinstance(qs, QuantumState)
         if self.experiment_id in [H2ExperimentID.P0_CliffordT, H2ExperimentID.P0_Rotation]:
             state = qs.to_np_array()
             energy = np_get_energy(self.H, state)
-            return isclose(energy, self.target_energy, abs_tol=1/1e5)
+            if isclose(energy, self.target_energy, abs_tol=1/1e5):
+                return 1.0
+            return 0.0
+        raise Exception("get reward not implemented")
     
 def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: H2ExperimentID) -> List[Action]:
    

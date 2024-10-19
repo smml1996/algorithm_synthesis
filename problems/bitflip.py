@@ -17,11 +17,11 @@ from utils import are_matrices_equal, find_enum_object, get_index, is_matrix_in_
 sys.path.append(os.getcwd()+"/..")
 
 from qstates import QuantumState
-from ibm_noise_models import Instruction, MeasChannel, NoiseModel, get_ibm_noise_model, HardwareSpec, get_num_qubits_to_hardware, ibm_simulate_circuit, load_config_file
+from ibm_noise_models import Instruction, MeasChannel, NoiseModel, get_ibm_noise_model, HardwareSpec, ibm_simulate_circuit, load_config_file
 import numpy as np
 from math import pi   
 from enum import Enum
-from experiments_utils import ReadoutNoise, default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_config_path, get_embeddings_path, get_project_settings
+from experiments_utils import ReadoutNoise, default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_config_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_settings
 import cProfile
 import pstats
 
@@ -115,7 +115,7 @@ class BitFlipInstance:
         self.initial_state.append((bell3, initial_cs))
 
 
-    def is_target_qs(self, hybrid_state) -> bool:
+    def get_reward(self, hybrid_state) -> float:
         qs , _ = hybrid_state
         current_rho = qs.single_partial_trace(index=self.embedding[2])
         initial_qs, _ = self.initial_state[0]
@@ -124,7 +124,10 @@ class BitFlipInstance:
         bell1_rho = initial_qs.single_partial_trace(index=self.embedding[2])
         assert len(bell0_rho) == 4
         assert len(bell1_rho) == 4
-        return are_matrices_equal(current_rho, bell0_rho) or are_matrices_equal(current_rho, bell1_rho)
+        if are_matrices_equal(current_rho, bell0_rho) or are_matrices_equal(current_rho, bell1_rho):
+            return 1.00
+        else:
+            return 0.00
     
 
 # choosing embeddings
@@ -295,6 +298,7 @@ def load_embeddings(config=None, config_path=None):
                         d[1] = temp
                     result[hardware_spec]["embeddings"].append(d)
             else:
+                print(data)
                 assert hardware_spec.value not in data.keys()
         
         return result
@@ -893,8 +897,8 @@ if __name__ == "__main__":
     project_path = settings["PROJECT_PATH"]
     if arg_backend == "gen_configs":
         # step 0
-        generate_configs(experiment_name="bitflip", experiment_id=BitflipExperimentID.IPMA, min_horizon=4, max_horizon=7)
-        generate_configs(experiment_name="bitflip", experiment_id=BitflipExperimentID.CXH, min_horizon=4, max_horizon=7)
+        generate_configs(experiment_name="bitflip", experiment_id=BitflipExperimentID.IPMA, min_horizon=4, max_horizon=5)
+        generate_configs(experiment_name="bitflip", experiment_id=BitflipExperimentID.CXH, min_horizon=4, max_horizon=5)
     elif arg_backend == "embeddings":
         
         # generate paper embeddings
@@ -914,11 +918,10 @@ if __name__ == "__main__":
         
         # generate paper embeddings
         batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
-        
         for num_qubits in batches.keys():
             generate_pomdps(get_config_path("bitflip", BitflipExperimentID.IPMA, num_qubits))
             
-            generate_pomdps(get_config_path("bitflip", BitflipExperimentID.CXH, num_qubits))
+            # generate_pomdps(get_config_path("bitflip", BitflipExperimentID.CXH, num_qubits))
         
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)
     

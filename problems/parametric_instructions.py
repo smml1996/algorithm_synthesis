@@ -8,15 +8,15 @@ import json
 import os, sys
 sys.path.append(os.getcwd() + "/..")
 
-from experiments_utils import default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_config_path
+from experiments_utils import default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_bellman_value, get_config_path, get_project_settings
 from pomdp import POMDPAction, build_pomdp
 import qmemory
 from qpu_utils import BasisGates, Op
 
 
 from ibm_noise_models import HardwareSpec, Instruction, NoiseModel, get_num_qubits_to_hardware, load_config_file
-from typing import Dict, List
-from utils import Precision, np_get_ground_state
+from typing import Any, Dict, List
+from utils import Precision, find_enum_object, np_get_ground_state
 from cmemory import ClassicalState
 from qstates import QuantumState, np_get_energy, np_get_fidelity, np_schroedinger_equation
 from qiskit.quantum_info import SparsePauliOp
@@ -28,6 +28,8 @@ from qiskit_nature.second_q.drivers import PySCFDriver
 from qiskit_nature.units import DistanceUnit
 from qiskit_nature.second_q.formats.molecule_info import MoleculeInfo
 from qiskit_nature.second_q.mappers import JordanWignerMapper, QubitConverter
+
+from scipy.optimize import minimize
 
 MAX_PRECISION = 10
 WITH_THERMALIZATION = False
@@ -85,7 +87,7 @@ class ParamInsInstance:
         assert quantum_state is not None
         self.initial_state = (quantum_state, ClassicalState())
         
-    def get_halting_reward(self, hybrid_state) -> bool:
+    def get_reward(self, hybrid_state) -> bool:
         qs, cs = hybrid_state
         assert isinstance(qs, QuantumState)
         if self.experiment_id in [ParamInsExperimentId.H2Mol_Q1]:
@@ -94,11 +96,11 @@ class ParamInsInstance:
 def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: ParamInsExperimentId) -> List[Action]:
    
     if experiment_id == ParamInsExperimentId.H2Mol_Q1:
-        U3_gate = Instruction(embedding[0], Op.T).to_basis_gate_impl(noise_model.basis_gates)
+        U3_gate = Instruction(embedding[0], Op.U3, params=['a', 'b', 'c'], symbols=['a', 'b', 'c']).to_basis_gate_impl(noise_model.basis_gates)
         return [POMDPAction("U3", U3_gate)]
     else:
         raise Exception("Not implemented!")
-    
+
 def get_hardware_embeddings(hardware: HardwareSpec, **kwargs) -> List[Dict[int, int]]:
     noise_model = NoiseModel(hardware, thermal_relaxation=WITH_THERMALIZATION)
     # assert hardware not in kwargs["statistics"].keys()
@@ -109,24 +111,16 @@ def get_hardware_embeddings(hardware: HardwareSpec, **kwargs) -> List[Dict[int, 
         pivot_qubits = set()
 
         # get qubit with highest accumulated measurement error rate
-        for reverse in [False, True]:
-            most_noisy_meas = noise_model.get_most_noisy_qubit(Op.MEAS, reverse=reverse)[0]
-            if "statistics" in kwargs.keys():
-                kwargs["statistics"][hardware].append((most_noisy_meas, Op.MEAS, not reverse))
-            pivot_qubits.add(most_noisy_meas[1])
         if noise_model.basis_gates in [BasisGates.TYPE1, BasisGates.TYPE6]:
             # we get the most noisy qubits in terms of U1 and U2
-            for reverse in [False, True]:
-                most_noisy_U1 = noise_model.get_most_noisy_qubit(Op.U1, reverse=reverse)[0]
-                most_noisy_U2 = noise_model.get_most_noisy_qubit(Op.U2, reverse=reverse)[0]
+            for reverse in [False]:
+                most_noisy_U3 = noise_model.get_most_noisy_qubit(Op.U3, reverse=reverse)[0]
                 if "statistics" in kwargs.keys():
-                    kwargs["statistics"][hardware].append((most_noisy_U1, Op.U1, not reverse))
-                    kwargs["statistics"][hardware].append((most_noisy_U2, Op.U2, not reverse))
-                pivot_qubits.add(most_noisy_U1[1])
-                pivot_qubits.add(most_noisy_U2[1])
+                    kwargs["statistics"][hardware].append((most_noisy_U3, Op.U3, not reverse))
+                pivot_qubits.add(most_noisy_U3[1])
             
         else:
-            for reverse in [False, True]:
+            for reverse in [False]:
                 # for some reason, IBM does not has error models for RZ gates
                 # we get the most noisy qubits in terms of SX and RZ gates
                 most_noisy_SX = noise_model.get_most_noisy_qubit(Op.SX, reverse=reverse)[0]
@@ -149,13 +143,50 @@ def get_experiment_batches():
         batches[hardware.value] = [hardware.value]
     return batches
 
+def get_initial_parameters(config) -> List[float]:
+    if config["experiment_id"] == ParamInsExperimentId.H2Mol_Q1:
+        return [0.0, 0.0, 0.0]
+    raise Exception(f"Initial parameters for experiment {config['experiment_id']} not specified")
+
+def cost_function(params: List[float], noise_model: NoiseModel, parametric_actions: List[POMDPAction], config: Dict[Any, Any], problem_instance: ParamInsInstance, energy_history: List[float], project_settings: Dict[str, str], config_path: str):
+    horizon = config["max_horizon"]
+    
+    hardware_str = config["hardware"][0]
+    output_path = os.path.join(config["output_dir"], "pomdps", f"{hardware_str}_0.txt")
+    
+    # bind params
+    bind_dict = dict()
+    current_param_index = 0
+    for parametric_action in parametric_actions:
+        print("paramatric action", parametric_action.symbols)
+        for symbol in parametric_action.symbols:
+            if symbol not in bind_dict.keys():
+                bind_dict[symbol] = params[current_param_index]
+                current_param_index += 1
+    assert current_param_index == len(params)
+    actions = []
+    for parametric_action in parametric_actions:
+        actions.append(parametric_action.bind_symbols_from_dict(bind_dict))
+    
+    pomdp = build_pomdp(actions, noise_model, horizon, problem_instance.embedding, initial_state=problem_instance.initial_state)
+    # pomdp.optimize_graph(problem_instance) # no optimization because every vertex has its own energy
+    
+    # save POMDP
+    pomdp.serialize(problem_instance, output_path) 
+    
+    # now that pomdp is ready we must run bellman equation
+    energy = get_bellman_value(project_settings, config_path)
+    energy_history.append(energy)
+    return energy
+    
+
 if __name__ == "__main__":
     arg_backend = sys.argv[1]
     Precision.PRECISION = MAX_PRECISION
     Precision.update_threshold()
     
     if arg_backend == "gen_configs":
-        generate_configs("param_ins", ParamInsExperimentId.H2Mol_Q1, 1, 2, allowed_hardware=P0_ALLOWED_HARDWARE, batches=get_experiment_batches())
+        generate_configs("param_ins", ParamInsExperimentId.H2Mol_Q1, 1, 2, allowed_hardware=P0_ALLOWED_HARDWARE, batches=get_experiment_batches(), opt_technique="min")
         
     if arg_backend == "embeddings":
         batches = get_experiment_batches()
@@ -164,9 +195,38 @@ if __name__ == "__main__":
             generate_embeddings(config_path=config_path, experiment_enum=ParamInsExperimentId, experiment_id=ParamInsExperimentId.H2Mol_Q1, get_hardware_embeddings=get_hardware_embeddings)
             
     if arg_backend == "run_config":
-        config = load_config_file(sys.argv[1], ParamInsExperimentId)
+        config_path = sys.argv[2]
+        config = load_config_file(config_path, ParamInsExperimentId)
+        directory_exists(config["output_dir"])
+        
+        output_folder = os.path.join(config["output_dir"], "pomdps")
+        # check that there is a folder with the experiment id inside pomdps path
+        directory_exists(output_folder)
+        
+        assert len(config["hardware"]) == 1
+        hardware_spec = find_enum_object(config["hardware"][0], HardwareSpec)
+        noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_THERMALIZATION)
         initial_parameters = get_initial_parameters(config)
-        result = minimize(cost_func_vqe, initial_parameters, args=(ansatz, observable, estimator), method="SLSQP")
+        
+        embeddings = default_load_embeddings(config, ParamInsExperimentId)
+        print(embeddings)
+        assert embeddings["count"] == 1
+        embeddings = embeddings[hardware_spec]["embeddings"]
+        assert len(embeddings) == 1
+        embedding = embeddings[0]
+        
+        actions = get_actions(noise_model, embedding, ParamInsExperimentId.H2Mol_Q1)
+        for action in actions:
+            print("action", action.symbols)
+        
+        problem_instance = ParamInsInstance(embedding, ParamInsExperimentId.H2Mol_Q1)
+        
+        project_settings = get_project_settings()
+        energy_history = []
+        result = minimize(cost_function, initial_parameters, 
+                        args=(noise_model, actions, config, problem_instance, energy_history, project_settings, config_path), 
+                        method="SLSQP")
+        
         
         
        
