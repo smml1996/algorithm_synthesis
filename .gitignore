@@ -9,6 +9,7 @@ __pycache__/
 *$py.class
 _deps/
 qalgorithm_synthesis/qalgorithm_synthesis
+qalgorithm_synthesis/CTestTestfile.cmake
 
 *.sh
 # C extensions
