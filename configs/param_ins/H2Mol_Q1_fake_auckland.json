@@ -2,11 +2,12 @@
     "name": "fake_auckland",
     "experiment_id": "H2Mol_Q1",
     "min_horizon": 1,
-    "max_horizon": 2,
+    "max_horizon": 1,
     "output_dir": "/Users/stefaniemuroyalei/Documents/algorithm_synthesis/results/param_ins/H2Mol_Q1/fake_auckland",
     "algorithms_file": "",
     "hardware": [
         "fake_auckland"
     ],
-    "opt_tecnique": "max"
+    "opt_technique": "min",
+    "verbose": 1
 }

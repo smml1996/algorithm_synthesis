@@ -6,21 +6,27 @@ import time
 import numpy as np
 import json
 import os, sys
+
+
+from qiskit import QuantumCircuit, QuantumRegister
 sys.path.append(os.getcwd() + "/..")
 
+from algorithm import AlgorithmNode, execute_algorithm
 from experiments_utils import default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_bellman_value, get_config_path, get_project_settings
 from pomdp import POMDPAction, build_pomdp
 import qmemory
 from qpu_utils import BasisGates, Op
 
 
-from ibm_noise_models import HardwareSpec, Instruction, NoiseModel, get_num_qubits_to_hardware, load_config_file
+from ibm_noise_models import HardwareSpec, Instruction, NoiseModel, get_ibm_noise_model, get_num_qubits_to_hardware, ibm_simulate_circuit, instruction_to_ibm, load_config_file
 from typing import Any, Dict, List
 from utils import Precision, find_enum_object, np_get_ground_state
 from cmemory import ClassicalState
 from qstates import QuantumState, np_get_energy, np_get_fidelity, np_schroedinger_equation
 from qiskit.quantum_info import SparsePauliOp
 from qiskit_nature import settings
+from qiskit.primitives import Estimator
+from qiskit.circuit import Parameter
 
 settings.use_pauli_sum_op = False
 
@@ -35,6 +41,12 @@ MAX_PRECISION = 10
 WITH_THERMALIZATION = False
 P0_ALLOWED_HARDWARE = [HardwareSpec.AUCKLAND, HardwareSpec.WASHINGTON, HardwareSpec.ROCHESTER]
 
+
+MINIMIZATION_METHODS = ["SLSQP", #Gradient-based method. Constrained, smooth problems.
+                        "BFGS", # gradient-based. Smooth, unconstrained problems.
+                        "Powell", # Derivative-free method. Functions that are discontinuous or noisy.
+                        "CG" # Gradient-based method.  Large, smooth, unconstrained problems.
+                        ]
 
 class ParamInsExperimentId(Enum):
     H2Mol_Q1 = "H2Mol_Q1"
@@ -78,6 +90,9 @@ class ParamInsInstance:
         self.get_initial_states()
         if experiment_id == ParamInsExperimentId.H2Mol_Q1:
             self.hamiltonian = get_hamiltonian()
+            target_state = np_schroedinger_equation(self.hamiltonian, complex(0, -14), self.initial_state[0].to_np_array())
+            self.target_energy = np_get_energy(self.hamiltonian, target_state)
+            self.initial_parameters = [0.0, 0.0, 0.0]
          
     def get_initial_states(self):
         if self.experiment_id in [ParamInsExperimentId.H2Mol_Q1]:
@@ -87,11 +102,129 @@ class ParamInsInstance:
         assert quantum_state is not None
         self.initial_state = (quantum_state, ClassicalState())
         
+    def get_ibm_initial_state(self, qc: QuantumCircuit, basis_gates: BasisGates):
+        
+        if self.experiment_id in [ParamInsExperimentId.H2Mol_Q1]:
+            instruction = Instruction(0, Op.X)
+            instruction_seq = instruction.to_basis_gate_impl(basis_gates)
+            instruction_to_ibm(qc, instruction_seq, noiseless=True)
+            
+    def get_ibm_ansatz(self, qc: QuantumCircuit):
+        if self.experiment_id in [ParamInsExperimentId.H2Mol_Q1]:
+            a = Parameter('a')
+            b = Parameter('b')
+            c = Parameter('c')
+            
+            qc.u(a,b,c, 0) # applies u3 gate to qubit 0
+            # qc.u3(a,b,c, 0) # applies u3 gate to qubit 0
+        else:
+            raise Exception(f"ansatz for expeirment id {self.experiment_id} not defined")
+        
     def get_reward(self, hybrid_state) -> bool:
         qs, cs = hybrid_state
         assert isinstance(qs, QuantumState)
         if self.experiment_id in [ParamInsExperimentId.H2Mol_Q1]:
             return np_get_energy(self.hamiltonian, qs.to_np_array())
+    
+    def get_my_results(self, noise_model: NoiseModel, minimization_method: str):
+        assert minimization_method in MINIMIZATION_METHODS
+        actions = get_actions(noise_model, self.embedding, self.experiment_id)
+        energy_history = []
+        result = minimize(cost_function, self.initial_parameters, 
+                                args=(noise_model, actions, config, problem_instance, energy_history, project_settings, config_path), 
+                                method=minimization_method)
+        expected_energy = result.fun
+        assert isclose(expected_energy, problem_instance.target_energy, rel_tol=Precision.rel_tol) or (expected_energy > problem_instance.target_energy)
+        params_value = result.x
+        n_iterations = result.nit # number of iterations
+        return params_value, expected_energy, n_iterations
+    
+    def get_ibm_results(self, minimization_method: str, basis_gates: BasisGates):
+        assert minimization_method in MINIMIZATION_METHODS
+        qc = QuantumCircuit(1)
+        self.get_ibm_initial_state(qc, basis_gates) # reference state
+        self.get_ibm_ansatz(qc) # appends ansatz for this experiment
+        
+        estimator = Estimator()
+        result = minimize(cost_func_vqe, self.initial_parameters, args=(qc, self.hamiltonian, estimator), method="SLSQP")
+        expected_energy = result.fun
+        params_value = result.x
+        n_iterations = result.nit
+        return params_value, expected_energy, n_iterations
+        
+    def get_my_real_energy(self, noise_model: NoiseModel, params: List[float], factor=1):
+        parametric_actions = get_actions(noise_model, {0:0}, self.experiment_id)
+        actions = get_binded_actions(parametric_actions, params)
+        actions_to_instructions = dict()
+        for action in actions:
+            actions_to_instructions[action.name] = action.instruction_sequence
+        actions_to_instructions["halt"] = []
+        algorithms_path = os.path.join(config["output_dir"], "algorithms")
+        algorithm_path = os.path.join(algorithms_path, f"{noise_model.hardware_spec.value}_0_1.json") # TODO: generalize me
+        
+        # load algorithm json
+        f_algorithm = open(algorithm_path)
+        alg = AlgorithmNode(serialized=json.load(f_algorithm), actions_to_instructions=actions_to_instructions)
+        f_algorithm.close()  
+        
+        expected_energy = 0
+        qr = QuantumRegister(1)
+        qc = QuantumCircuit(qr)
+        self.get_ibm_initial_state(qc, noise_model.basis_gates)
+        execute_algorithm(alg, qc)
+        qc.save_statevector('res', pershot=True)
+        
+        # execute algorithm
+        initial_layout = {qr[0]: self.embedding[0]}
+        ibm_noise_model = get_ibm_noise_model(noise_model.hardware_spec, thermal_relaxation=WITH_THERMALIZATION)
+        
+        for _ in range(factor):
+            state_vs = np.array(ibm_simulate_circuit(qc, ibm_noise_model, initial_layout))
+        
+            # compute expected energy
+            for state in state_vs:
+                expected_energy += np_get_energy(self.hamiltonian, state)
+            
+        expected_energy/=(1024*factor)
+        return expected_energy
+    
+    def get_ibm_real_energy(self,  hardware_spec: HardwareSpec, params: List[float], basis_gates: BasisGates, factor=1):
+        expected_energy = 0
+        qr = QuantumRegister(1)
+        qc = QuantumCircuit(qr)
+        self.get_ibm_initial_state(qc, basis_gates)
+        self.get_ibm_ansatz(qc)
+        qc.save_statevector('res', pershot=True)
+        
+        # bind parameters
+        params_dict = dict(zip(qc.parameters, params))
+        qc = qc.bind_parameters(params_dict)
+        
+        initial_layout = {qr[0]: self.embedding[0]}
+        ibm_noise_model = get_ibm_noise_model(hardware_spec, thermal_relaxation=WITH_THERMALIZATION)
+        for _ in range(factor):
+            state_vs = np.array(ibm_simulate_circuit(qc, ibm_noise_model, initial_layout))
+            for state in state_vs:
+                expected_energy += np_get_energy(self.hamiltonian, state)
+        expected_energy/=(1024*factor)
+        return expected_energy
+
+def cost_func_vqe(params, ansatz, hamiltonian, estimator):
+    """Return estimate of energy from estimator
+
+    Parameters:
+        params (ndarray): Array of ansatz parameters
+        ansatz (QuantumCircuit): Parameterized ansatz circuit
+        hamiltonian (SparsePauliOp): Operator representation of Hamiltonian
+        estimator (Estimator): Estimator primitive instance
+
+    Returns:
+        float: Energy estimate
+    """
+    assert isinstance(estimator, Estimator)
+    pub = (ansatz, hamiltonian, params)
+    cost = estimator.run([ansatz], [hamiltonian], [params]).result().values[0]
+    return cost
         
 def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: ParamInsExperimentId) -> List[Action]:
    
@@ -130,7 +263,8 @@ def get_hardware_embeddings(hardware: HardwareSpec, **kwargs) -> List[Dict[int, 
                 # kwargs["statistics"][hardware].append((most_noisy_RZ, Op.RZ))
                 pivot_qubits.add(most_noisy_SX[1])
                 # pivot_qubits.add(most_noisy_RZ[1])
-            
+        
+        assert len(pivot_qubits) == 1
         for p in pivot_qubits:
             answer.append({0: p})
         return answer
@@ -143,22 +277,11 @@ def get_experiment_batches():
         batches[hardware.value] = [hardware.value]
     return batches
 
-def get_initial_parameters(config) -> List[float]:
-    if config["experiment_id"] == ParamInsExperimentId.H2Mol_Q1:
-        return [0.0, 0.0, 0.0]
-    raise Exception(f"Initial parameters for experiment {config['experiment_id']} not specified")
-
-def cost_function(params: List[float], noise_model: NoiseModel, parametric_actions: List[POMDPAction], config: Dict[Any, Any], problem_instance: ParamInsInstance, energy_history: List[float], project_settings: Dict[str, str], config_path: str):
-    horizon = config["max_horizon"]
-    
-    hardware_str = config["hardware"][0]
-    output_path = os.path.join(config["output_dir"], "pomdps", f"{hardware_str}_0.txt")
-    
-    # bind params
+def get_binded_actions(parametric_actions, params):
+        # bind params
     bind_dict = dict()
     current_param_index = 0
     for parametric_action in parametric_actions:
-        print("paramatric action", parametric_action.symbols)
         for symbol in parametric_action.symbols:
             if symbol not in bind_dict.keys():
                 bind_dict[symbol] = params[current_param_index]
@@ -167,6 +290,16 @@ def cost_function(params: List[float], noise_model: NoiseModel, parametric_actio
     actions = []
     for parametric_action in parametric_actions:
         actions.append(parametric_action.bind_symbols_from_dict(bind_dict))
+        
+    return actions
+        
+def cost_function(params: List[float], noise_model: NoiseModel, parametric_actions: List[POMDPAction], config: Dict[Any, Any], problem_instance: ParamInsInstance, energy_history: List[float], project_settings: Dict[str, str], config_path: str):
+    horizon = config["max_horizon"]
+    
+    hardware_str = config["hardware"][0]
+    output_path = os.path.join(config["output_dir"], "pomdps", f"{hardware_str}_0.txt")
+    
+    actions = get_binded_actions(parametric_actions, params)
     
     pomdp = build_pomdp(actions, noise_model, horizon, problem_instance.embedding, initial_state=problem_instance.initial_state)
     # pomdp.optimize_graph(problem_instance) # no optimization because every vertex has its own energy
@@ -186,7 +319,7 @@ if __name__ == "__main__":
     Precision.update_threshold()
     
     if arg_backend == "gen_configs":
-        generate_configs("param_ins", ParamInsExperimentId.H2Mol_Q1, 1, 2, allowed_hardware=P0_ALLOWED_HARDWARE, batches=get_experiment_batches(), opt_technique="min")
+        generate_configs("param_ins", ParamInsExperimentId.H2Mol_Q1, 2, 2, allowed_hardware=P0_ALLOWED_HARDWARE, batches=get_experiment_batches(), opt_technique="min")
         
     if arg_backend == "embeddings":
         batches = get_experiment_batches()
@@ -194,38 +327,71 @@ if __name__ == "__main__":
             config_path = get_config_path("param_ins", ParamInsExperimentId.H2Mol_Q1, batch_name)
             generate_embeddings(config_path=config_path, experiment_enum=ParamInsExperimentId, experiment_id=ParamInsExperimentId.H2Mol_Q1, get_hardware_embeddings=get_hardware_embeddings)
             
-    if arg_backend == "run_config":
-        config_path = sys.argv[2]
-        config = load_config_file(config_path, ParamInsExperimentId)
-        directory_exists(config["output_dir"])
-        
-        output_folder = os.path.join(config["output_dir"], "pomdps")
-        # check that there is a folder with the experiment id inside pomdps path
-        directory_exists(output_folder)
-        
-        assert len(config["hardware"]) == 1
-        hardware_spec = find_enum_object(config["hardware"][0], HardwareSpec)
-        noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_THERMALIZATION)
-        initial_parameters = get_initial_parameters(config)
-        
-        embeddings = default_load_embeddings(config, ParamInsExperimentId)
-        print(embeddings)
-        assert embeddings["count"] == 1
-        embeddings = embeddings[hardware_spec]["embeddings"]
-        assert len(embeddings) == 1
-        embedding = embeddings[0]
-        
-        actions = get_actions(noise_model, embedding, ParamInsExperimentId.H2Mol_Q1)
-        for action in actions:
-            print("action", action.symbols)
-        
-        problem_instance = ParamInsInstance(embedding, ParamInsExperimentId.H2Mol_Q1)
-        
+    if arg_backend == "exp_q1": # runs ParamInsExperimentId.H2Mol_Q1
         project_settings = get_project_settings()
-        energy_history = []
-        result = minimize(cost_function, initial_parameters, 
-                        args=(noise_model, actions, config, problem_instance, energy_history, project_settings, config_path), 
-                        method="SLSQP")
+        experiment_id = ParamInsExperimentId.H2Mol_Q1
+        batches = get_experiment_batches()
+        
+        # generate configs
+        generate_configs("param_ins", experiment_id, min_horizon=1, max_horizon=1, allowed_hardware=P0_ALLOWED_HARDWARE, batches=batches, opt_technique="min")
+        
+        for batch_name in batches.keys():
+            config_path = get_config_path("param_ins", experiment_id, batch_name)
+            config = load_config_file(config_path, ParamInsExperimentId)
+            directory_exists(config["output_dir"])
+            
+            results_summary_path = os.path.join(config["output_dir"], "summary_results.csv")
+            results_summary_file = open(results_summary_path, "w")
+            line = "my_energy,ibm_energy,my_real_energy,ibm_real_energy,my_nit,ibm_nit,minimizer,my_theta,ibm_theta,my_phi,ibm_phi,my_lambda,ibm_lambda\n"
+            results_summary_file.write(line)
+            
+            # generate embeddings
+            generate_embeddings(config_path=config_path, experiment_enum=ParamInsExperimentId, experiment_id=ParamInsExperimentId.H2Mol_Q1, get_hardware_embeddings=get_hardware_embeddings)
+            
+            output_folder = os.path.join(config["output_dir"], "pomdps")
+            # check that there is a folder with the experiment id inside pomdps path
+            directory_exists(output_folder)
+            
+            assert len(config["hardware"]) == 1
+            hardware_spec = find_enum_object(config["hardware"][0], HardwareSpec)
+            noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_THERMALIZATION)
+            
+            embeddings = default_load_embeddings(config, ParamInsExperimentId)
+            assert embeddings["count"] == 1
+            embeddings = embeddings[hardware_spec]["embeddings"]
+            assert len(embeddings) == 1
+            embedding = embeddings[0]
+            
+            for minimization_method in MINIMIZATION_METHODS:
+                problem_instance = ParamInsInstance(embedding, ParamInsExperimentId.H2Mol_Q1)
+                
+                # getting my methods results
+                my_params_value, my_energy, my_n_iterations = problem_instance.get_my_results(noise_model, minimization_method)
+                assert len(my_params_value) == 3
+                my_theta = round(my_params_value[0],3)
+                my_phi = round(my_params_value[1],3)
+                my_lambda = round(my_params_value[2],3)
+            
+                
+                # getting ibm method results
+                ibm_params_value, ibm_energy, ibm_n_iterations = problem_instance.get_ibm_results(minimization_method, noise_model.basis_gates)
+                assert len(ibm_params_value) == 3
+                ibm_theta = round(ibm_params_value[0],3)
+                ibm_phi = round(ibm_params_value[1],3)
+                ibm_lambda = round(ibm_params_value[2],3)
+                
+                # results of simulator with the circuit that we synthesize
+                my_real_energy = problem_instance.get_my_real_energy(noise_model, my_params_value)
+                
+                # results of simulator with the binded ansatz that ibm finds
+                ibm_real_energy = problem_instance.get_ibm_real_energy(hardware_spec, ibm_params_value, noise_model.basis_gates)
+                
+                line = f"{my_energy},{ibm_energy},{my_real_energy},{ibm_real_energy},{my_n_iterations},{ibm_n_iterations},{minimization_method},{my_theta},{ibm_theta},{my_phi},{ibm_phi},{my_lambda},{ibm_lambda}\n"
+                print(line)
+                results_summary_file.write(line)
+                
+            results_summary_file.close()
+                
         
         
         

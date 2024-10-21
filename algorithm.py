@@ -39,7 +39,9 @@ class AlgorithmNode:
             assert actions_to_instructions is not None
             self.action_name = serialized["action"]
             self.instruction_sequence = actions_to_instructions[self.action_name]
-            self.last_target = self.instruction_sequence[-1].target
+            if len(self.instruction_sequence) > 0:
+                self.last_target = self.instruction_sequence[-1].target
+            
             self.count_meas = 0
             self.depth = 0
 
@@ -113,7 +115,6 @@ def execute_algorithm(node: AlgorithmNode, qpu: QuantumCircuit, count_ins=0, cbi
     if node is None:
         return count_ins
     
-    assert cbits is not None
     instruction_to_ibm(qpu, node.instruction_sequence)
     if node.next_ins is not None:
         assert node.case0 is None

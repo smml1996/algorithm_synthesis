@@ -131,6 +131,8 @@ def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max
         opt_technique (str, optional): possible values are "max" or "min"
         verebose (int, optional): possible values are 1 or 0, meaning verbose equal true and false respectively.
     """    
+    
+    assert (min_horizon <= max_horizon)
     configs_path = get_configs_path()
     if not os.path.exists(configs_path):
         print(f"{configs_path} does not exists. Creating it...")

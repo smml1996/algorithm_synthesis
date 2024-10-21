@@ -7,6 +7,7 @@ from qiskit import QuantumCircuit, transpile
 from qiskit.providers.fake_provider import *
 from qiskit_aer.noise import NoiseModel as IBMNoiseModel
 from qiskit_aer import AerSimulator
+from qiskit.extensions import XGate, ZGate, CXGate, UGate, SXGate, RZGate
 from qpu_utils import *
 import json
 
@@ -355,6 +356,9 @@ class Instruction:
                 return [Instruction(self.target, Op.U3, params=[self.params[0], 0.0, 0.0], symbols=self.symbols)]
             if self.op == Op.RZ:
                 return [Instruction(self.target, Op.U1, params=[self.params[0]], symbols=self.symbols)]
+            if self.op == Op.X:
+                assert basis_gates != BasisGates.TYPE6
+                return [Instruction(self.target, Op.U3, params=[pi, 0.0, pi], symbols=self.symbols)]
         else:
             assert basis_gates in [BasisGates.TYPE2, BasisGates.TYPE3, BasisGates.TYPE7]
             if self.op == Op.H:
@@ -820,31 +824,61 @@ class NoiseModel:
         return qubits_and_noises
             
             
+NoiselessX = XGate(label="noiseless_x")
+NoiselessZ = ZGate(label="noiseless_z")
+NoiselessCX = CXGate(label="noiseless_cx")
+NoiselessSX = SXGate(label="noiseless_sx")
+
                     
                 
                 
 
-def instruction_to_ibm(qc, instruction_sequence):
+def instruction_to_ibm(qc, instruction_sequence, noiseless=False):
     for instruction in instruction_sequence:
         assert isinstance(instruction, Instruction)
         assert isinstance(qc, QuantumCircuit)
         if instruction.op == Op.X:
-            qc.x(instruction.target)
+            if noiseless:
+                qc.append(NoiselessX, [instruction.target])
+            else:
+                qc.x(instruction.target)
         elif instruction.op == Op.Z:
-            qc.z(instruction.target)
+            if noiseless:
+                qc.append(NoiselessZ, [instruction.target])
+            else:
+                qc.z(instruction.target)
         elif instruction.op == Op.MEAS:
+            assert not noiseless
             qc.measure(instruction.target, instruction.target)
         elif instruction.op == Op.CNOT:
             assert instruction.control is not None
-            qc.cx(instruction.control, instruction.target)
+            if noiseless:
+                qc.append(NoiselessCX, [instruction.control, instruction.target])
+            else:
+                qc.cx(instruction.control, instruction.target)
         elif instruction.op == Op.U3:
-            qc.u(instruction.params[0], instruction.params[1], instruction.params[2], instruction.target)
+            if noiseless:
+                NoiselessU3 = UGate(label="noiseless_u3", theta=instruction.params[0], phi=instruction.params[1], lam=instruction.params[2])
+                qc.append(NoiselessU3, [instruction.target])
+            else:
+                qc.u(instruction.params[0], instruction.params[1], instruction.params[2], instruction.target)
         elif instruction.op == Op.U2:
-            qc.u(pi/2, instruction.params[0], instruction.params[1], instruction.target)
+            if noiseless:
+                NoiselessU3 = UGate(label="noiseless_u3", theta=pi/2, phi=instruction.params[0], lam=instruction.params[1])
+                qc.append(NoiselessU3, [instruction.target])
+            else:
+                qc.u(pi/2, instruction.params[0], instruction.params[1], instruction.target)
         elif instruction.op == Op.SX:
-            qc.sx(instruction.target)
+            if noiseless:
+                qc.append(NoiselessSX, [instruction.target])
+            else:
+                qc.sx(instruction.target)
         elif instruction.op == Op.RZ:
-            qc.rz(instruction.params[0], instruction.target)
+            if noiseless:
+                NoiselessRZ = RZGate(label="noiseless_rz", phi=instruction.params[0])
+                qc.append(NoiselessRZ, [instruction.params[0], instruction.target])
+            else:
+                qc.rz(instruction.params[0], instruction.target)
         else:
             raise Exception(f"Instruction {instruction.name} could not be translated to IBM instruction. Missing implementation.")
     
