@@ -33,7 +33,7 @@ settings.use_pauli_sum_op = False
 from qiskit_nature.second_q.drivers import PySCFDriver
 from qiskit_nature.units import DistanceUnit
 from qiskit_nature.second_q.formats.molecule_info import MoleculeInfo
-from qiskit_nature.second_q.mappers import JordanWignerMapper, QubitConverter
+from qiskit_nature.second_q.mappers import JordanWignerMapper, QubitConverter, ParityMapper
 
 from scipy.optimize import minimize
 
@@ -50,36 +50,66 @@ MINIMIZATION_METHODS = ["SLSQP", #Gradient-based method. Constrained, smooth pro
 
 class ParamInsExperimentId(Enum):
     H2Mol_Q1 = "H2Mol_Q1"
+    H2Mol_Q1_SU2_Min = "H2Mol_Q1_SU2_Min" # Tries Efficient SU(2) gates(Rx and Ry), minimizes energy
+    H2Mol_Q1_SU2_Max = "H2Mol_Q1_SU2_Max" # Tries Efficient SU(2) gates(Rx and Ry), maximizes probability of reaching ground state
+    H2Mol_Q2_SU2_Min = "H2Mol_Q2_SU2_Min" # Efficient SU(2) gates(Rx and Ry CX), minimizes energy
+    H2Mol_Q2_SU2_Max = "H2Mol_Q2_SU2_Max" # Efficient SU(2) gates(Rx and Ry CX), maximizes probability of reaching ground state. Second qubit is an ancilla an it include measurements.
+    H2Mol_Q2_An_SU2_Min = "H2Mol_Q2_An_SU2_Min" # Efficient SU(2) gates(Rx and Ry CX), minimizes energy
+    H2Mol_Q2_An_SU2_Max = "H2Mol_Q2_An_SU2_Max" # Efficient SU(2) gates(Rx and Ry CX), maximizes probability of reaching ground state. Second qubit is an ancilla an it include measurements.
     
 
-def get_hamiltonian() -> SparsePauliOp:
-    # Define the hydrogen molecule at internuclear distance R = 0.75 angstroms
-    molecule = MoleculeInfo(
-        ["H", "H"], 
-        [(0.0, 0.0, 0.0), (0.0, 0.0, 0.75)],
-        charge=0,
-        multiplicity=1,
-        units=DistanceUnit.ANGSTROM
-    )
-    
-    # Set up the PySCF driver to calculate molecular integrals
-    driver = PySCFDriver.from_molecule(molecule=molecule, basis="sto3g")
+def get_hamiltonian(experiment_id: ParamInsExperimentId) -> SparsePauliOp:
+    # https://qiskit-community.github.io/qiskit-nature/migration/0.6_c_qubit_converter.html
+    if experiment_id in [ParamInsExperimentId.H2Mol_Q1, ParamInsExperimentId.H2Mol_Q1_SU2_Min, ParamInsExperimentId.H2Mol_Q1_SU2_Max, ParamInsExperimentId.H2Mol_Q2_An_SU2_Max, ParamInsExperimentId.H2Mol_Q2_An_SU2_Min]:
+        # Define the hydrogen molecule at internuclear distance R = 0.75 angstroms
+        molecule = MoleculeInfo(
+            ["H", "H"], 
+            [(0.0, 0.0, 0.0), (0.0, 0.0, 0.75)],
+            charge=0,
+            multiplicity=1,
+            units=DistanceUnit.ANGSTROM
+        )
+        
+        # Set up the PySCF driver to calculate molecular integrals
+        driver = PySCFDriver.from_molecule(molecule=molecule, basis="sto3g")
 
-    # Obtain the electronic structure problem
-    problem = driver.run()
-    
-    hamiltonian = problem.hamiltonian.second_q_op()
-    mapper = JordanWignerMapper()
-    converter = QubitConverter(mapper, z2symmetry_reduction="auto")
-    
-    qubit_op = converter.convert(
-        hamiltonian,
-        num_particles=problem.num_particles,
-        sector_locator=problem.symmetry_sector_locator,
-    )
+        # Obtain the electronic structure problem
+        problem = driver.run()
+        
+        hamiltonian = problem.hamiltonian.second_q_op()
+        mapper = JordanWignerMapper()
+        converter = QubitConverter(mapper, z2symmetry_reduction="auto")
+        
+        qubit_op = converter.convert(
+            hamiltonian,
+            num_particles=problem.num_particles,
+            sector_locator=problem.symmetry_sector_locator,
+        )
 
-    assert isinstance(qubit_op, SparsePauliOp)
-    return qubit_op
+        assert isinstance(qubit_op, SparsePauliOp)
+        return qubit_op
+    elif experiment_id in [ParamInsExperimentId.H2Mol_Q2_SU2_Min, ParamInsExperimentId.H2Mol_Q2_SU2_Max]:
+        # Define the hydrogen molecule at internuclear distance R = 0.75 angstroms
+        molecule = MoleculeInfo(
+            ["H", "H"], 
+            [(0.0, 0.0, 0.0), (0.0, 0.0, 0.75)],
+            charge=0,
+            multiplicity=1,
+            units=DistanceUnit.ANGSTROM
+        )
+        
+        # Set up the PySCF driver to calculate molecular integrals
+        driver = PySCFDriver.from_molecule(molecule=molecule, basis="sto3g")
+
+        # Obtain the electronic structure problem
+        problem = driver.run()
+        
+        hamiltonian = problem.hamiltonian.second_q_op()
+        mapper = ParityMapper(num_particles=problem.num_particles)
+        reduced_op = mapper.map(hamiltonian)
+
+        assert isinstance(reduced_op, SparsePauliOp)
+        return reduced_op
 
     
 class ParamInsInstance:
@@ -88,11 +118,12 @@ class ParamInsInstance:
         self.embedding = embedding
         self.initial_state = None
         self.get_initial_states()
+        self.hamiltonian = get_hamiltonian(experiment_id)
         if experiment_id == ParamInsExperimentId.H2Mol_Q1:
-            self.hamiltonian = get_hamiltonian()
             target_state = np_schroedinger_equation(self.hamiltonian, complex(0, -14), self.initial_state[0].to_np_array())
             self.target_energy = np_get_energy(self.hamiltonian, target_state)
             self.initial_parameters = [0.0, 0.0, 0.0]
+        
          
     def get_initial_states(self):
         if self.experiment_id in [ParamInsExperimentId.H2Mol_Q1]:
@@ -239,37 +270,60 @@ def get_hardware_embeddings(hardware: HardwareSpec, **kwargs) -> List[Dict[int, 
     # assert hardware not in kwargs["statistics"].keys()
     if "statistics" in kwargs.keys():
         kwargs["statistics"][hardware] = []
-    if kwargs["experiment_id"] in [ParamInsExperimentId.H2Mol_Q1]:
-        answer = []
-        pivot_qubits = set()
-
-        # get qubit with highest accumulated measurement error rate
+    experiment_id = kwargs["experiment_id"]
+    answer = []
+    pivot_qubits = set()
+    if experiment_id in [ParamInsExperimentId.H2Mol_Q1]:
         if noise_model.basis_gates in [BasisGates.TYPE1, BasisGates.TYPE6]:
-            # we get the most noisy qubits in terms of U1 and U2
             for reverse in [False]:
                 most_noisy_U3 = noise_model.get_most_noisy_qubit(Op.U3, reverse=reverse)[0]
                 if "statistics" in kwargs.keys():
                     kwargs["statistics"][hardware].append((most_noisy_U3, Op.U3, not reverse))
                 pivot_qubits.add(most_noisy_U3[1])
-            
         else:
             for reverse in [False]:
-                # for some reason, IBM does not has error models for RZ gates
-                # we get the most noisy qubits in terms of SX and RZ gates
                 most_noisy_SX = noise_model.get_most_noisy_qubit(Op.SX, reverse=reverse)[0]
-                # most_noisy_RZ = noise_model.get_most_noisy_qubit(Op.RZ)[0]
                 if "statistics" in kwargs.keys():
                     kwargs["statistics"][hardware].append((most_noisy_SX, Op.SX, not reverse))
-                # kwargs["statistics"][hardware].append((most_noisy_RZ, Op.RZ))
                 pivot_qubits.add(most_noisy_SX[1])
-                # pivot_qubits.add(most_noisy_RZ[1])
+        assert len(pivot_qubits) == 1
+        for p in pivot_qubits:
+            answer.append({0: p})
+        return answer
+    elif experiment_id in [ParamInsExperimentId.H2Mol_Q1_SU2_Max, ParamInsExperimentId.H2Mol_Q1_SU2_Min]:
+        if noise_model.basis_gates in [BasisGates.TYPE1, BasisGates.TYPE6]:
+            # we get the most noisy qubits in terms of U1 and U2
+            for reverse in [False, True]:
+                # U3 is used in Ry gate
+                most_noisy_U3 = noise_model.get_most_noisy_qubit(Op.U3, reverse=reverse)[0]
+                pivot_qubits.add(most_noisy_U3[1])
+                
+                # U1 is used in Rz gate
+                most_noisy_U1 = noise_model.get_most_noisy_qubit(Op.U1, reverse=reverse)[0]
+                pivot_qubits.add(most_noisy_U1[1])
+            
+        else:
+            assert noise_model.basis_gates in [BasisGates.TYPE2, BasisGates.TYPE3, BasisGates.TYPE7]
+            for reverse in [False, True]:
+                # for some reason, IBM does not has error models for RZ gates
+                # we get the most noisy qubits in terms of SX (Ry gates uses them)
+                most_noisy_SX = noise_model.get_most_noisy_qubit(Op.SX, reverse=reverse)[0]
+                pivot_qubits.add(most_noisy_SX[1])
         
         assert len(pivot_qubits) == 1
         for p in pivot_qubits:
             answer.append({0: p})
         return answer
     else:
-        raise Exception("Not implemented!")
+        assert experiment_id in [ParamInsExperimentId.H2Mol_Q2_SU2_Min, ParamInsExperimentId.H2Mol_Q2_An_SU2_Max, ParamInsExperimentId.H2Mol_Q2_An_SU2_Min, ParamInsExperimentId.H2Mol_Q2_An_SU2_Max]
+        # Use most/least noise CX gate to choose two qubits
+        
+        for reverse in [False, True]:
+            most_noisy_CX = noise_model.get_most_noisy_qubit(Op.CX, reverse=reverse)[0]
+            target = most_noisy_CX[1][0]
+            control = most_noisy_CX[1][1]
+            answer.append({0: control, 1: target})
+
 
 def get_experiment_batches():
     batches = dict()
