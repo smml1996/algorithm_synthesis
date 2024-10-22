@@ -52,10 +52,11 @@ class ParamInsExperimentId(Enum):
     H2Mol_Q1 = "H2Mol_Q1"
     H2Mol_Q1_SU2_Min = "H2Mol_Q1_SU2_Min" # Tries Efficient SU(2) gates(Rx and Ry), minimizes energy
     H2Mol_Q1_SU2_Max = "H2Mol_Q1_SU2_Max" # Tries Efficient SU(2) gates(Rx and Ry), maximizes probability of reaching ground state
-    H2Mol_Q2_SU2_Min = "H2Mol_Q2_SU2_Min" # Efficient SU(2) gates(Rx and Ry CX), minimizes energy
-    H2Mol_Q2_SU2_Max = "H2Mol_Q2_SU2_Max" # Efficient SU(2) gates(Rx and Ry CX), maximizes probability of reaching ground state. Second qubit is an ancilla an it include measurements.
     H2Mol_Q2_An_SU2_Min = "H2Mol_Q2_An_SU2_Min" # Efficient SU(2) gates(Rx and Ry CX), minimizes energy
     H2Mol_Q2_An_SU2_Max = "H2Mol_Q2_An_SU2_Max" # Efficient SU(2) gates(Rx and Ry CX), maximizes probability of reaching ground state. Second qubit is an ancilla an it include measurements.
+    H2Mol_Q2_SU2_Min = "H2Mol_Q2_SU2_Min" # Efficient SU(2) gates(Rx and Ry CX), minimizes energy
+    H2Mol_Q2_SU2_Max = "H2Mol_Q2_SU2_Max" # Efficient SU(2) gates(Rx and Ry CX), maximizes probability of reaching ground state. Second qubit is an ancilla an it include measurements.
+    
     
 
 def get_hamiltonian(experiment_id: ParamInsExperimentId) -> SparsePauliOp:
@@ -262,6 +263,44 @@ def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id
     if experiment_id == ParamInsExperimentId.H2Mol_Q1:
         U3_gate = Instruction(embedding[0], Op.U3, params=['a', 'b', 'c'], symbols=['a', 'b', 'c']).to_basis_gate_impl(noise_model.basis_gates)
         return [POMDPAction("U3", U3_gate)]
+    if experiment_id in [ParamInsExperimentId.H2Mol_Q1_SU2_Min, ParamInsExperimentId.H2Mol_Q1_SU2_Max]:
+        # ansatz = EfficientSU2(2, su2_gates=["rx", "y"], entanglement="linear", reps=1)
+        # ansatz.decompose().draw("mpl") --> Rx1 - Y - Rx2 - Y
+        Rx1_gate = Instruction(embedding[0], Op.RX, params=['a'], symbols=['a']).to_basis_gate_impl(noise_model.basis_gates)
+        Rx2_gate = Instruction(embedding[0], Op.RX, params=['b'], symbols=['b']).to_basis_gate_impl(noise_model.basis_gates)
+        Y_gate = Instruction(embedding[0], Op.Y)
+        
+        return [POMDPAction("Rx1", Rx1_gate), POMDPAction("Ry2", Rx2_gate), POMDPAction("Y", Y_gate)]
+    if experiment_id in [ParamInsExperimentId.H2Mol_Q2_SU2_Max, ParamInsExperimentId.H2Mol_Q2_SU2_Min]:
+        Rx1_gate = Instruction(embedding[0], Op.RX, params=['a'], symbols=['a']).to_basis_gate_impl(noise_model.basis_gates)
+        Ry1_gate = Instruction(embedding[0], Op.RY, params=['b'], symbols=['b']).to_basis_gate_impl(noise_model.basis_gates)
+        
+        RxRy1 = Rx1_gate + Ry1_gate
+        
+        Rx2_gate = Instruction(embedding[0], Op.RX, params=['c'], symbols=['c']).to_basis_gate_impl(noise_model.basis_gates)
+        Ry2_gate = Instruction(embedding[0], Op.RY, params=['d'], symbols=['d']).to_basis_gate_impl(noise_model.basis_gates)
+        RxRy2 = Rx2_gate + Ry2_gate
+        
+        CX_gate = Instruction(embedding[1], Op.CNOT, control=embedding[0]).to_basis_gate_impl(noise_model.basis_gates)
+        
+        return [POMDPAction("RxRy1", RxRy1),  POMDPAction("RxRy2", RxRy2), POMDPAction("CX",CX_gate)]
+    if experiment_id in [ParamInsExperimentId.H2Mol_Q2_An_SU2_Min, ParamInsExperimentId.H2Mol_Q2_An_SU2_Max]:
+        Rx1_gate = Instruction(embedding[0], Op.RX, params=['a'], symbols=['a']).to_basis_gate_impl(noise_model.basis_gates)
+        Ry1_gate = Instruction(embedding[0], Op.RY, params=['b'], symbols=['b']).to_basis_gate_impl(noise_model.basis_gates)
+        
+        RxRy1 = Rx1_gate + Ry1_gate
+        
+        Rx2_gate = Instruction(embedding[0], Op.RX, params=['c'], symbols=['c']).to_basis_gate_impl(noise_model.basis_gates)
+        Ry2_gate = Instruction(embedding[0], Op.RY, params=['d'], symbols=['d']).to_basis_gate_impl(noise_model.basis_gates)
+        RxRy2 = Rx2_gate + Ry2_gate
+        
+        CX_gate = Instruction(embedding[1], Op.CNOT, control=embedding[0]).to_basis_gate_impl(noise_model.basis_gates)
+        
+        U3_gate = Instruction(embedding[1], Op.U3, params=['e', 'f', 'g'], symbols=['e', 'f', 'g']).to_basis_gate_impl(noise_model.basis_gates)
+        
+        MEAS_gate = Instruction(embedding[1], Op.MEAS)
+        
+        return [POMDPAction("RxRy1", RxRy1),  POMDPAction("RxRy2", RxRy2), POMDPAction("U3", U3_gate), POMDPAction("CX", CX_gate), POMDPAction("MEAS", [MEAS_gate])]
     else:
         raise Exception("Not implemented!")
 
@@ -325,14 +364,19 @@ def get_hardware_embeddings(hardware: HardwareSpec, **kwargs) -> List[Dict[int, 
             answer.append({0: control, 1: target})
 
 
-def get_experiment_batches():
-    batches = dict()
-    for hardware in P0_ALLOWED_HARDWARE:
-        batches[hardware.value] = [hardware.value]
-    return batches
+def get_experiment_batches(experiment_id: ParamInsExperimentId, embeddings=None):
+    if experiment_id == ParamInsExperimentId.H2Mol_Q1:
+        batches = dict()
+        for hardware in P0_ALLOWED_HARDWARE:
+            batches[hardware.value] = [hardware.value]
+        return batches
+    else:
+        assert embedding is not None
+        raise Exception("Not implemented")
+        # TODO: FILL ME
 
 def get_binded_actions(parametric_actions, params):
-        # bind params
+    # bind params
     bind_dict = dict()
     current_param_index = 0
     for parametric_action in parametric_actions:
