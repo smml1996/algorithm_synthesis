@@ -127,11 +127,11 @@ class ParamInsInstance:
         
          
     def get_initial_states(self):
-        if self.experiment_id in [ParamInsExperimentId.H2Mol_Q1]:
-            quantum_state = QuantumState(0, qubits_used=list(self.embedding.values()))
-            X0 = Instruction(self.embedding[0], Op.X).get_gate_data()
+        quantum_state = QuantumState(0, qubits_used=list(self.embedding.values()))
+        for key in self.embedding.keys():
+            X0 = Instruction(self.embedding[key], Op.X).get_gate_data()
             quantum_state = qmemory.handle_write(quantum_state, X0)
-        assert quantum_state is not None
+            assert quantum_state is not None
         self.initial_state = (quantum_state, ClassicalState())
         
     def get_ibm_initial_state(self, qc: QuantumCircuit, basis_gates: BasisGates):
