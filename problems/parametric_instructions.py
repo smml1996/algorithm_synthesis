@@ -127,6 +127,7 @@ class ParamInsInstance:
         
          
     def get_initial_states(self):
+        # the initial state is with all qubits in state |1>
         quantum_state = QuantumState(0, qubits_used=list(self.embedding.values()))
         for key in self.embedding.keys():
             X0 = Instruction(self.embedding[key], Op.X).get_gate_data()
@@ -135,9 +136,9 @@ class ParamInsInstance:
         self.initial_state = (quantum_state, ClassicalState())
         
     def get_ibm_initial_state(self, qc: QuantumCircuit, basis_gates: BasisGates):
-        
-        if self.experiment_id in [ParamInsExperimentId.H2Mol_Q1]:
-            instruction = Instruction(0, Op.X)
+        # the initial state is with all qubits in state |1>
+        for key in self.embedding.keys():
+            instruction = Instruction(key, Op.X)
             instruction_seq = instruction.to_basis_gate_impl(basis_gates)
             instruction_to_ibm(qc, instruction_seq, noiseless=True)
             
