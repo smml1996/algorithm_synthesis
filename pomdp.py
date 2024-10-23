@@ -44,6 +44,12 @@ class POMDPAction:
                     if symbol not in used_symbols:
                         self.symbols.append(symbol)
                         used_symbols.add(symbol)
+                        
+    def optimize(self):
+        new_instruction_sequence = []
+        for instruction in self.instruction_sequence:
+            if not self.instruction.is_identity():
+                new_instruction_sequence.append(instruction)
                     
     def bind_symbols_from_lst(self, lst: List[float]) -> Any:
         """_summary_

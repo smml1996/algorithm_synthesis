@@ -267,7 +267,7 @@ class ParamInsInstance:
         assert config["min_horizon"] == config["max_horizon"]
         # fix this {0:0} line below
         parametric_actions = get_actions(noise_model, {0:0}, self.experiment_id, reps=reps)
-        actions = get_binded_actions(parametric_actions, params)
+        actions = get_binded_actions(parametric_actions, params, optimize=True)
         actions_to_instructions = dict()
         for action in actions:
             actions_to_instructions[action.name] = action.instruction_sequence
@@ -503,7 +503,7 @@ def get_experiment_batches(experiment_id: ParamInsExperimentId,  reps=None):
         
         
 
-def get_binded_actions(parametric_actions, params):
+def get_binded_actions(parametric_actions, params, optimize=False):
     # bind params
     bind_dict = dict()
     current_param_index = 0
@@ -517,6 +517,10 @@ def get_binded_actions(parametric_actions, params):
     for parametric_action in parametric_actions:
         actions.append(parametric_action.bind_symbols_from_dict(bind_dict))
         
+    if optimize:
+        for action in actions:
+            action.optimize()
+        
     return actions
         
 def cost_function(params: List[float], noise_model: NoiseModel, parametric_actions: List[POMDPAction], config: Dict[Any, Any], problem_instance: ParamInsInstance, energy_history: List[float], project_settings: Dict[str, str], config_path: str):
@@ -525,7 +529,7 @@ def cost_function(params: List[float], noise_model: NoiseModel, parametric_actio
     hardware_str = config["hardware"][0]
     output_path = os.path.join(config["output_dir"], "pomdps", f"{hardware_str}_latest.txt")
     
-    actions = get_binded_actions(parametric_actions, params)
+    actions = get_binded_actions(parametric_actions, params, optimize=True)
     
     pomdp = build_pomdp(actions, noise_model, horizon, problem_instance.embedding, initial_state=problem_instance.initial_state)
     # pomdp.optimize_graph(problem_instance) # no optimization because every vertex has its own energy

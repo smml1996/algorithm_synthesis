@@ -1,3 +1,4 @@
+from cmath import cos, sin, sqrt
 from copy import deepcopy
 from enum import Enum
 from math import pi
@@ -222,6 +223,60 @@ class Instruction:
                 assert len(temp_set) < len(self.symbols)
                 raise Exception(f"There are repeated symbols: {symbols}")
         self.name = name
+        
+    def is_identity(self):
+        matrix_values = []
+        if self.Op.U1:
+            matrix_values.append(1)
+            matrix_values.append(0)
+            matrix_values.append(0)
+            matrix_values.append(np.e**(complex(0, self.params[0])))
+        if self.Op.U1D:
+            matrix_values.append(1)
+            matrix_values.append(0)
+            matrix_values.append(0)
+            matrix_values.append(np.e**(complex(0, -self.params[0])))
+        if self.op in [Op.U2, Op.U2D]:
+            return False
+        if self.op == Op.U3:
+            matrix_values.append(cos(self.params[0]/2))
+            matrix_values.append(sin(self.params[0]/2))
+            matrix_values.append(sin(self.params[0]/2))
+            matrix_values.append(np.e**(complex(0,self.params[1] + self.params[2]))*cos(self.params[0]/2))
+        if self.op == Op.U3D:
+            matrix_values.append(cos(self.params[0]/2))
+            matrix_values.append(sin(self.params[0]/2))
+            matrix_values.append(sin(self.params[0]/2))
+            matrix_values.append(np.e**(complex(0,-self.params[1] - self.params[2]))*cos(self.params[0]/2))
+        if self.Op in [Op.RX, Op.RY]:
+            matrix_values.append(cos(self.params[0]/2))
+            matrix_values.append(sin(self.params[0]/2))
+            matrix_values.append(sin(self.params[0]/2))
+            matrix_values.append(cos(self.params[0]/2))
+        if self.Op.RZ:
+            matrix_values.append(np.e**(complex(0, -self.params[0]/2)))
+            matrix_values.append(0)
+            matrix_values.append(0)
+            matrix_values.append(np.e**(complex(0, self.params[0]/2)))
+            
+        for index in range(len(matrix_values)):            
+            matrix_values[index] = matrix_values[index] * np.conjugate(matrix_values[index])
+            assert isclose(matrix_values[index].imag, 0, abs_tol=Precision.isclose_abstol)
+            matrix_values[index] = matrix_values[index].real
+                
+        
+        if isclose(matrix_values[0], matrix_values[3], rel_tol=Precision.rel_tol):
+            if not isclose(abs(matrix_values[0]), 1, rel_tol=Precision.rel_tol):
+                return False
+        else:
+            return False
+        if not isclose(matrix_values[1], 0, abs_tol=Precision.isclose_abstol):
+            return False
+        if not isclose(matrix_values[2], 0, abs_tol=Precision.isclose_abstol):
+            return False
+
+        return False
+        
         
     def bind_symbols_from_lst(self, values: List[float]) -> Any:
         """_summary_
