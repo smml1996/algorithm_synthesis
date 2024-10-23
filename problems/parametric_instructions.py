@@ -19,7 +19,7 @@ from qpu_utils import BasisGates, Op
 
 
 from ibm_noise_models import HardwareSpec, Instruction, NoiseModel, get_ibm_noise_model, get_num_qubits_to_hardware, ibm_simulate_circuit, instruction_to_ibm, load_config_file
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 from utils import Precision, find_enum_object, np_get_ground_state
 from cmemory import ClassicalState
 from qstates import QuantumState, np_array_to_qs, np_get_energy, np_get_energy_from_rho, np_get_fidelity, np_schroedinger_equation
@@ -41,6 +41,7 @@ from scipy.optimize import minimize
 MAX_PRECISION = 10
 WITH_THERMALIZATION = False
 P0_ALLOWED_HARDWARE = [HardwareSpec.AUCKLAND, HardwareSpec.WASHINGTON, HardwareSpec.ROCHESTER]
+OPTIMIZE_ACTIONS = False
 
 
 MINIMIZATION_METHODS = ["SLSQP", #Gradient-based method. Constrained, smooth problems.
@@ -267,7 +268,7 @@ class ParamInsInstance:
         assert config["min_horizon"] == config["max_horizon"]
         # fix this {0:0} line below
         parametric_actions = get_actions(noise_model, {0:0}, self.experiment_id, reps=reps)
-        actions = get_binded_actions(parametric_actions, params, noise_model=noise_model, embedding=self.embedding, experiment_id=config["experiment_id"], reps=reps, optimize=True)
+        actions = get_binded_actions(parametric_actions, params, noise_model=noise_model, embedding=self.embedding, experiment_id=config["experiment_id"], reps=reps, optimize=OPTIMIZE_ACTIONS)
         actions_to_instructions = dict()
         for action in actions:
             actions_to_instructions[action.name] = action.instruction_sequence
@@ -342,6 +343,41 @@ def cost_func_vqe(params, ansatz, hamiltonian, estimator):
     cost = estimator.run([ansatz], [hamiltonian], [params]).result().values[0]
     return cost
         
+def get_efficient_su2_two_qubit_gates(embedding, symbols, params_d, basis_gates):
+    assert len(symbols) == 4
+    a = symbols[0]
+    b = symbols[1]
+    c = symbols[2]
+    d = symbols[3]
+    if params_d is not None:
+        Rx1_instruction = Instruction(embedding[0], Op.RX, params=[params_d[a]])
+        Ry1_instruction = Instruction(embedding[0], Op.RY, params=[params_d[b]])
+        Rx2_instruction = Instruction(embedding[1], Op.RX, params=[params_d[c]])
+        Ry2_instruction = Instruction(embedding[1], Op.RY, params=[params_d[d]])
+    else:
+        Rx1_instruction = Instruction(embedding[0], Op.RX, params=[a], symbols=[a])
+        Ry1_instruction = Instruction(embedding[0], Op.RY, params=[b], symbols=[b])
+        Rx2_instruction = Instruction(embedding[1], Op.RX, params=[c], symbols=[c])
+        Ry2_instruction = Instruction(embedding[1], Op.RY, params=[d], symbols=[d])
+        
+    Rx1_gate = Rx1_instruction.to_basis_gate_impl(basis_gates)
+    Ry1_gate = Ry1_instruction.to_basis_gate_impl(basis_gates)
+    Rx2_gate = Rx2_instruction.to_basis_gate_impl(basis_gates)
+    Ry2_gate = Ry2_instruction.to_basis_gate_impl(basis_gates)
+    return Rx1_instruction, Ry1_instruction, Rx2_instruction, Ry2_instruction, Rx1_gate, Ry1_gate, Rx2_gate, Ry2_gate
+
+def optimized_block(lst_insts_gates: List[Tuple[Instruction, List[Instruction]]]):
+    block_name = ""
+    block = []
+    
+    for (instruction, instruction_seq) in lst_insts_gates:
+        if not instruction.is_identity():
+            block = block + instruction_seq
+            block_name += instruction.op.name
+    
+    return block_name, block
+
+        
 def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: ParamInsExperimentId, reps, params_d=None, optimize=False) -> List[Action]:
     if experiment_id == ParamInsExperimentId.H2Mol_Q1:
         if (params_d is not None):
@@ -353,99 +389,40 @@ def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id
     if experiment_id in [ParamInsExperimentId.H2Mol_Q1_SU2_Min, ParamInsExperimentId.H2Mol_Q1_SU2_Max]:
         # ansatz = EfficientSU2(2, su2_gates=["rx", "ry"], entanglement="linear", reps=1)
         # ansatz.decompose().draw("mpl") --> Rx1 - Ry1 - Rx2 - Ry2
-        
-        answer = []
-        if params_d is not None:            
-            Rx1_instruction = Instruction(embedding[0], Op.RX, params=[params_d['a']])
-            Ry1_instruction = Instruction(embedding[0], Op.RY, params=[params_d['c']])
-        else:
-            Rx1_instruction = Instruction(embedding[0], Op.RX, params=['a'], symbols=['a'])
-            Ry1_instruction = Instruction(embedding[0], Op.RY, params=['c'], symbols=['c'])
-            
-        Rx1_gate = Rx1_instruction.to_basis_gate_impl(noise_model.basis_gates)
-        Ry1_gate = Ry1_instruction.to_basis_gate_impl(noise_model.basis_gates)
-            
-        if optimize:
-            assert params_d is not None
-            if not Rx1_instruction.is_identity():
-                answer.append(POMDPAction("Rx1", Rx1_gate))
-            if not Ry1_instruction.is_identity():
-                answer.append(POMDPAction("Ry1", Ry1_gate))
-        else:
-            answer.append(POMDPAction("Rx1", Rx1_gate))
-            answer.append(POMDPAction("Ry1", Ry1_gate))
-            
+        # here is not convenient to optimize because there are only 4 instructions, and we can explore easily a more exhaustive space if we do not optimize
+        Rx1_gate = Instruction(embedding[0], Op.RX, params=['a'], symbols=['a']).to_basis_gate_impl(noise_model.basis_gates)
+        Ry1_gate = Instruction(embedding[0], Op.RY, params=['c'], symbols=['c']).to_basis_gate_impl(noise_model.basis_gates)
         if reps == 0:
-            return answer
+            return [POMDPAction("Rx1", Rx1_gate), POMDPAction("Ry1", Ry1_gate)]
         else:
             assert reps == 1
-            if params_d is not None:
-                Rx2_instruction = Instruction(embedding[0], Op.RX, params=[params_d['b']])
-                Ry2_instruction = Instruction(embedding[0], Op.RY, params=[params_d['d']])
-            else:
-                Rx2_instruction = Instruction(embedding[0], Op.RX, params=['b'], symbols=['b'])
-                Ry2_instruction = Instruction(embedding[0], Op.RY, params=['d'], symbols=['d'])
-            
-            Rx2_gate = Rx2_instruction.to_basis_gate_impl(noise_model.basis_gates)
-            Ry2_gate = Ry2_instruction.to_basis_gate_impl(noise_model.basis_gates)
-            if optimize:
-                assert params_d is not None
-                if not Rx2_instruction.is_identity():
-                    answer.append(POMDPAction("Rx2", Rx2_gate))
-                if not Ry2_instruction.is_identity():
-                    answer.append(POMDPAction("Ry2", Ry2_gate))
-            else:
-                answer.append(POMDPAction("Rx2", Rx2_gate))
-                answer.append(POMDPAction("Ry2", Ry2_gate))
-            
-            return answer
+            Rx2_gate = Instruction(embedding[0], Op.RX, params=['b'], symbols=['b']).to_basis_gate_impl(noise_model.basis_gates)
+            Ry2_gate = Instruction(embedding[0], Op.RY, params=['d'], symbols=['d']).to_basis_gate_impl(noise_model.basis_gates)
+            return [POMDPAction("Rx1", Rx1_gate), POMDPAction("Rx2", Rx2_gate), POMDPAction("Ry1", Ry1_gate), POMDPAction("Ry2", Ry2_gate)]
     if experiment_id in [ParamInsExperimentId.H2Mol_Q2_SU2_Max, ParamInsExperimentId.H2Mol_Q2_SU2_Min]:
-        
-        if params_d is not None:
-            Rx1_instruction = Instruction(embedding[0], Op.RX, params=[params_d['a']])
-            Ry1_instruction = Instruction(embedding[0], Op.RY, params=[params_d['b']])
-            Rx2_instruction = Instruction(embedding[1], Op.RX, params=[params_d['c']])
-            Ry2_instruction = Instruction(embedding[1], Op.RY, params=[params_d['d']])
-        else:
-            Rx1_instruction = Instruction(embedding[0], Op.RX, params=['a'], symbols=['a'])
-            Ry1_instruction = Instruction(embedding[0], Op.RY, params=['b'], symbols=['b'])
-            Rx2_instruction = Instruction(embedding[1], Op.RX, params=['c'], symbols=['c'])
-            Ry2_instruction = Instruction(embedding[1], Op.RY, params=['d'], symbols=['d'])
             
-        Rx1_gate = Rx1_instruction.to_basis_gate_impl(noise_model.basis_gates)
-        Ry1_gate = Ry1_instruction.to_basis_gate_impl(noise_model.basis_gates)
-        Rx2_gate = Rx2_instruction.to_basis_gate_impl(noise_model.basis_gates)
-        Ry2_gate = Ry2_instruction.to_basis_gate_impl(noise_model.basis_gates)
-        
+        Rx1_instruction, Ry1_instruction, Rx2_instruction, Ry2_instruction, Rx1_gate, Ry1_gate, Rx2_gate, Ry2_gate = get_efficient_su2_two_qubit_gates(embedding, ['a', 'b', 'c', 'd'], params_d, noise_model.basis_gates)
         
         if reps == 0:
             return [POMDPAction("Rx1", Rx1_gate), POMDPAction("Rx2", Rx2_gate),  POMDPAction("Ry1", Ry1_gate), POMDPAction("Ry2", Ry2_gate)]
         elif reps == 1:
             answer = []
             if optimize:
-                assert params_d is not None
-                # first top layer
-                RxRy1_name = ""
-                RxRy1 = []
-                if not Rx1_instruction.is_identity():
-                    RxRy1_name += "Rx"
-                    RxRy1 = RxRy1 + Rx1_gate
-                if not Ry1_instruction.is_identity():
-                    RxRy1_name += "Ry"
-                    RxRy1 = RxRy1 + Ry1_gate
+                assert params_d is not None   
+                # first top layer         
+                RxRy1_name, RxRy1 = optimized_block([
+                    (Rx1_instruction, Rx1_gate),
+                    (Ry1_instruction, Ry1_gate)
+                ])
                 RxRy1_name += "1"
                 if len(RxRy1) > 0:
                     answer.append(POMDPAction(RxRy1_name, RxRy1))
                 
                 # first bottom layer
-                RxRy2_name = ""
-                RxRy2 = []
-                if not Rx2_instruction.is_identity():
-                    RxRy2_name += "Rx"
-                    RxRy2 = RxRy2 + Rx2_gate
-                if not Ry2_instruction.is_identity():
-                    RxRy2_name += "Ry"
-                    RxRy2 = RxRy2 + Ry2_gate
+                RxRy2_name, RxRy2 = optimized_block([
+                    (Rx2_instruction, Rx2_gate),
+                    (Ry2_instruction, Ry2_gate)
+                ])
                 RxRy2_name += "2"
                 if len(RxRy2) > 0:
                     answer.append(POMDPAction(RxRy2_name, RxRy2))
@@ -457,48 +434,26 @@ def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id
             CX_gate = Instruction(embedding[1], Op.CNOT, control=embedding[0]).to_basis_gate_impl(noise_model.basis_gates)
             answer.append(POMDPAction("CX",CX_gate))
             
+            Rx3_instruction, Ry3_instruction, Rx4_instruction, Ry4_instruction, Rx3_gate, Ry3_gate, Rx4_gate, Ry4_gate = get_efficient_su2_two_qubit_gates(embedding, ['e', 'f', 'g', 'h'], params_d, noise_model.basis_gates)
             
-            if params_d is not None:
-                Rx3_instruction = Instruction(embedding[0], Op.RX, params=[params_d['e']])
-                Ry3_instruction = Instruction(embedding[0], Op.RY, params=[params_d['f']])
-                Rx4_instruction = Instruction(embedding[1], Op.RX, params=[params_d['g']])
-                Ry4_instruction = Instruction(embedding[1], Op.RY, params=[params_d['h']])
-            else:
-                Rx3_instruction = Instruction(embedding[0], Op.RX, params=['e'], symbols=['e'])
-                Ry3_instruction = Instruction(embedding[0], Op.RY, params=['f'], symbols=['f'])
-                Rx4_instruction = Instruction(embedding[1], Op.RX, params=['g'], symbols=['g'])
-                Ry4_instruction = Instruction(embedding[1], Op.RY, params=['h'], symbols=['h'])
-            
-            Rx3_gate = Rx3_instruction.to_basis_gate_impl(noise_model.basis_gates)
-            Ry3_gate = Ry3_instruction.to_basis_gate_impl(noise_model.basis_gates)
-            Rx4_gate = Rx4_instruction.to_basis_gate_impl(noise_model.basis_gates)
-            Ry4_gate = Ry4_instruction.to_basis_gate_impl(noise_model.basis_gates)
             
             if optimize:
                 assert params_d is not None
-                # second top layer
-                RxRy3_name = ""
-                RxRy3 = []
-                if not Rx3_instruction.is_identity():
-                    RxRy3_name += "Rx"
-                    RxRy3 = RxRy3 + Rx3_gate
-                if not Ry3_instruction.is_identity():
-                    RxRy3_name += "Ry"
-                    RxRy3 = RxRy3 + Ry3_gate
+                # second top layer                          
+                RxRy3_name, RxRy3 = optimized_block([
+                    (Rx3_instruction, Rx3_gate),
+                    (Ry3_instruction, Ry3_gate)
+                ])
                 RxRy3_name += "3"
                 if len(RxRy3) > 0:
                     answer.append(POMDPAction(RxRy3_name, RxRy3))
                 
-                # second bottom layer
-                RxRy4_name = ""
-                RxRy4 = []
-                if not Rx4_instruction.is_identity():
-                    RxRy4_name += "Rx"
-                    RxRy4 = RxRy4 + Rx4_gate
-                if not Ry4_instruction.is_identity():
-                    RxRy4_name += "Ry"
-                    RxRy4 = RxRy4 + Ry4_gate
-                RxRy4_name += "2"
+                # second bottom layer                
+                RxRy4_name, RxRy4 = optimized_block([
+                    (Rx4_instruction, Rx4_gate),
+                    (Ry4_instruction, Ry4_gate)
+                ])
+                RxRy4_name += "4"
                 if len(RxRy4) > 0:
                     answer.append(POMDPAction(RxRy4_name, RxRy4))
             else:
@@ -509,46 +464,24 @@ def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id
             return answer
     if experiment_id in [ParamInsExperimentId.H2Mol_Q2_An_SU2_Min, ParamInsExperimentId.H2Mol_Q2_An_SU2_Max]:
         
-        if params_d is not None:
-            Rx1_instruction = Instruction(embedding[0], Op.RX, params=[params_d['a']])
-            Ry1_instruction = Instruction(embedding[0], Op.RY, params=[params_d['b']])
-            Rx2_instruction = Instruction(embedding[1], Op.RX, params=[params_d['c']])
-            Ry2_instruction = Instruction(embedding[1], Op.RY, params=[params_d['d']])
-        else:
-            Rx1_instruction = Instruction(embedding[0], Op.RX, params=['a'], symbols=['a'])
-            Ry1_instruction = Instruction(embedding[0], Op.RY, params=['b'], symbols=['b'])
-            Rx2_instruction = Instruction(embedding[1], Op.RX, params=['c'], symbols=['c'])
-            Ry2_instruction = Instruction(embedding[1], Op.RY, params=['d'], symbols=['d'])
-            
-        Rx1_gate = Rx1_instruction.to_basis_gate_impl(noise_model.basis_gates)
-        Ry1_gate = Ry1_instruction.to_basis_gate_impl(noise_model.basis_gates)
-        Rx2_gate = Rx2_instruction.to_basis_gate_impl(noise_model.basis_gates)
-        Ry2_gate = Ry2_instruction.to_basis_gate_impl(noise_model.basis_gates)
+        Rx1_instruction, Ry1_instruction, Rx2_instruction, Ry2_instruction, Rx1_gate, Ry1_gate, Rx2_gate, Ry2_gate = get_efficient_su2_two_qubit_gates(embedding, ['a', 'b', 'c', 'd'], params_d, noise_model.basis_gates)
         
         if optimize:
-            assert params_d is not None
-            # first top layer
-            RxRy1_name = ""
-            RxRy1 = []
-            if not Rx1_instruction.is_identity():
-                RxRy1_name += "Rx"
-                RxRy1 = RxRy1 + Rx1_gate
-            if not Ry1_instruction.is_identity():
-                RxRy1_name += "Ry"
-                RxRy1 = RxRy1 + Ry1_gate
+            assert params_d is not None   
+            # first top layer         
+            RxRy1_name, RxRy1 = optimized_block([
+                (Rx1_instruction, Rx1_gate),
+                (Ry1_instruction, Ry1_gate)
+            ])
             RxRy1_name += "1"
             if len(RxRy1) > 0:
                 answer.append(POMDPAction(RxRy1_name, RxRy1))
             
             # first bottom layer
-            RxRy2_name = ""
-            RxRy2 = []
-            if not Rx2_instruction.is_identity():
-                RxRy2_name += "Rx"
-                RxRy2 = RxRy2 + Rx2_gate
-            if not Ry2_instruction.is_identity():
-                RxRy2_name += "Ry"
-                RxRy2 = RxRy2 + Ry2_gate
+            RxRy2_name, RxRy2 = optimized_block([
+                (Rx2_instruction, Rx2_gate),
+                (Ry2_instruction, Ry2_gate)
+            ])
             RxRy2_name += "2"
             if len(RxRy2) > 0:
                 answer.append(POMDPAction(RxRy2_name, RxRy2))
@@ -687,18 +620,19 @@ def get_binded_actions(parametric_actions, params, noise_model=None, embedding=N
         actions = get_actions(noise_model, embedding, experiment_id, reps, optimize=optimize)
     else:
         actions = []
-    for parametric_action in parametric_actions:
-        actions.append(parametric_action.bind_symbols_from_dict(bind_dict))
+        for parametric_action in parametric_actions:
+            actions.append(parametric_action.bind_symbols_from_dict(bind_dict))
         
     return actions
         
 def cost_function(params: List[float], noise_model: NoiseModel, parametric_actions: List[POMDPAction], config: Dict[Any, Any], problem_instance: ParamInsInstance, energy_history: List[float], project_settings: Dict[str, str], config_path: str):
+    # TODO: explore all space optimize=True, optimize=False
     horizon = config["max_horizon"]
     
     hardware_str = config["hardware"][0]
     output_path = os.path.join(config["output_dir"], "pomdps", f"{hardware_str}_latest.txt")
     
-    actions = get_binded_actions(parametric_actions, params, noise_model=noise_model, embedding=problem_instance.embedding, experiment_id=problem_instance.experiment_id, reps=problem_instance.reps, optimize=True)
+    actions = get_binded_actions(parametric_actions, params, noise_model=noise_model, embedding=problem_instance.embedding, experiment_id=problem_instance.experiment_id, reps=problem_instance.reps, optimize=OPTIMIZE_ACTIONS)
     
     pomdp = build_pomdp(actions, noise_model, horizon, problem_instance.embedding, initial_state=problem_instance.initial_state)
     # pomdp.optimize_graph(problem_instance) # no optimization because every vertex has its own energy
