@@ -90,18 +90,27 @@ class AlgorithmNode:
     
     def serialize(self):
         if self.next_ins is not None:
-            next_ins = self.next_ins.serialize()
+            if self.next_ins.action_name != "halt":
+                next_ins = self.next_ins.serialize()
+            else:
+                next_ins = -1
         else:
-            next_ins = "None"
+            next_ins = -1
         
         if self.case0 is not None:
-            case0 = self.case0.serialize()
+            if self.case0.action_name != "halt":
+                case0 = self.case0.serialize()
+            else:
+                case0 = -1
         else:
-            case0 = "None"
+            case0 = -1
         if self.case1 is not None:
-            case1 = self.case1.serialize()
+            if self.case1.action_name != "halt":
+                case1 = self.case1.serialize()
+            else:
+                case1 = -1
         else:
-            case1 = "None"
+            case1 = -1
 
         return {
             "action": self.action_name,

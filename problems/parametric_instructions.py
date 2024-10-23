@@ -12,7 +12,7 @@ from qiskit import ClassicalRegister, QuantumCircuit, QuantumRegister
 sys.path.append(os.getcwd() + "/..")
 
 from algorithm import AlgorithmNode, execute_algorithm
-from experiments_utils import default_load_embeddings, directory_exists, generate_configs, generate_embeddings, generate_embeddings_files, get_bellman_value, get_config_path, get_project_settings
+from experiments_utils import default_load_embeddings, directory_exists, generate_configs, generate_embeddings, generate_embeddings_files, get_bellman_value, get_config_path, get_markov_chain_results, get_project_settings
 from pomdp import POMDPAction, build_pomdp
 import qmemory
 from qpu_utils import BasisGates, Op
@@ -167,12 +167,46 @@ class ParamInsInstance:
             
             qc.u(a,b,c, 0) # applies u3 gate to qubit 0
         if self.experiment_id in [ParamInsInstance.H2Mol_Q1_SU2_Min, ParamInsInstance.H2Mol_Q1_SU2_Max, ParamInsInstance.H2Mol_Q2_An_SU2_Min, ParamInsInstance.H2Mol_Q2_An_SU2_Max]:
-            ansatz = EfficientSU2(1, su2_gates=["rx", "ry"], entanglement="linear", reps=self.reps)
+            ansatz = EfficientSU2(len(self.embedding.keys()), su2_gates=["rx", "ry"], entanglement="linear", reps=self.reps)
             qc.compose(ansatz, inplace=True)
         else:
             assert self.experiment_id in [ParamInsExperimentId.H2Mol_Q2_SU2_Min, ParamInsExperimentId.H2Mol_Q2_SU2_Max]
-            ansatz = EfficientSU2(2, su2_gates=["rx", "ry"], entanglement="linear", reps=self.reps)
+            ansatz = EfficientSU2(len(self.embedding.keys()), su2_gates=["rx", "ry"], entanglement="linear", reps=self.reps)
             qc.compose(ansatz, inplace=True)
+            
+    def get_ibm_ansatz_actions(self, noise_model: NoiseModel) -> List[POMDPAction]:
+        if self.experiment_id in [ParamInsExperimentId.H2Mol_Q1_SU2_Min, ParamInsExperimentId.H2Mol_Q1_SU2_Max, ParamInsExperimentId.H2Mol_Q2_SU2_Max, ParamInsExperimentId.H2Mol_Q2_SU2_Min]:
+            return get_actions(noise_model, self.embedding, self.experiment_id, reps)
+        else:
+            assert self.experiment_id in [ParamInsExperimentId.H2Mol_Q2_An_SU2_Min, ParamInsExperimentId.H2Mol_Q2_An_SU2_Max]
+            return get_actions(noise_model, self.embedding, ParamInsExperimentId.H2Mol_Q2_SU2_Max, reps)
+    
+    def get_ibm_horizon(self) -> int:
+        if self.experiment_id in [ParamInsExperimentId.H2Mol_Q1_SU2_Min, ParamInsExperimentId.H2Mol_Q1_SU2_Max]:
+            return 2 * (self.reps+1)
+        else:
+            assert self.experiment_id in [ParamInsExperimentId.H2Mol_Q2_SU2_Max, ParamInsExperimentId.H2Mol_Q2_SU2_Min, ParamInsExperimentId.H2Mol_Q2_An_SU2_Min, ParamInsExperimentId.H2Mol_Q2_An_SU2_Max]
+            if self.reps == 0:
+                return 4
+            else:
+                return 5
+    
+    def get_ibm_ansatz_alg(self, any_noise_model: NoiseModel) -> AlgorithmNode:
+        actions = self.get_ibm_ansatz_actions(any_noise_model)
+        first_algorithm_node = None
+        prev_algorithm_node = None
+        
+        for action in actions:
+            current_algorithm_node = AlgorithmNode(action.name, action.instruction_sequence)
+            if first_algorithm_node is None:
+                assert prev_algorithm_node is None
+                first_algorithm_node = current_algorithm_node
+            else:
+                assert prev_algorithm_node is not None
+                assert isinstance(prev_algorithm_node, AlgorithmNode)
+                prev_algorithm_node.next_ins = current_algorithm_node
+            prev_algorithm_node = current_algorithm_node
+        return first_algorithm_node
         
     def get_reward(self, hybrid_state) -> float:
         qs, _ = hybrid_state
@@ -229,9 +263,10 @@ class ParamInsInstance:
     
     
         
-    def get_my_simulated_energy(self, config, noise_model: NoiseModel, params: List[float], factor=1):
+    def get_my_simulated_energy(self, config, noise_model: NoiseModel, params: List[float], reps, factor=1):
         assert config["min_horizon"] == config["max_horizon"]
-        parametric_actions = get_actions(noise_model, {0:0}, self.experiment_id)
+        # fix this {0:0} line below
+        parametric_actions = get_actions(noise_model, {0:0}, self.experiment_id, reps=reps)
         actions = get_binded_actions(parametric_actions, params)
         actions_to_instructions = dict()
         for action in actions:
@@ -307,7 +342,7 @@ def cost_func_vqe(params, ansatz, hamiltonian, estimator):
     cost = estimator.run([ansatz], [hamiltonian], [params]).result().values[0]
     return cost
         
-def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: ParamInsExperimentId, reps=1) -> List[Action]:
+def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: ParamInsExperimentId, reps) -> List[Action]:
    
     if experiment_id == ParamInsExperimentId.H2Mol_Q1:
         U3_gate = Instruction(embedding[0], Op.U3, params=['a', 'b', 'c'], symbols=['a', 'b', 'c']).to_basis_gate_impl(noise_model.basis_gates)
@@ -488,7 +523,7 @@ def cost_function(params: List[float], noise_model: NoiseModel, parametric_actio
     horizon = config["max_horizon"]
     
     hardware_str = config["hardware"][0]
-    output_path = os.path.join(config["output_dir"], "pomdps", f"{hardware_str}_0.txt")
+    output_path = os.path.join(config["output_dir"], "pomdps", f"{hardware_str}_latest.txt")
     
     actions = get_binded_actions(parametric_actions, params)
     
@@ -509,15 +544,7 @@ def cost_function(params: List[float], noise_model: NoiseModel, parametric_actio
     
     
 def get_experiment_reps_values(experiment_id: ParamInsExperimentId) -> List[int]:
-    reps_values = [0]
-    if experiment_id == ParamInsExperimentId.H2Mol_Q1_SU2_Min:
-        reps_values.append(1)
-    if experiment_id == ParamInsExperimentId.H2Mol_Q1_SU2_Max:
-        reps_values.append(1)
-    if experiment_id == ParamInsExperimentId.H2Mol_Q2_SU2_Min:
-        reps_values.append(1)
-    if experiment_id == ParamInsExperimentId.H2Mol_Q2_SU2_Max:
-        reps_values.append(1)
+    reps_values = [0,1]
     return reps_values
 
 
@@ -628,7 +655,7 @@ if __name__ == "__main__":
                 ibm_lambda = round(ibm_params_value[2],3)
                 
                 # results of simulator with the circuit that we synthesize
-                my_real_energy = problem_instance.get_my_simulated_energy(noise_model, config, my_params_value)
+                my_real_energy = problem_instance.get_my_simulated_energy(noise_model, config, my_params_value, reps=0)
                 
                 # results of simulator with the binded ansatz that ibm finds
                 ibm_real_energy = problem_instance.get_ibm_ansatz_sim_energy(hardware_spec, ibm_params_value, noise_model.basis_gates)
@@ -651,7 +678,7 @@ if __name__ == "__main__":
             experiment_id = ParamInsExperimentId.H2Mol_Q2_SU2_Min
         if arg_backend == "Q2Max":
             experiment_id = ParamInsExperimentId.H2Mol_Q2_SU2_Max
-        
+        project_settings = get_project_settings()
         batches = get_experiment_batches(experiment_id)
         for batch_name in batches.keys():
             config_path = get_config_path("param_ins", experiment_id, batch_name)
@@ -714,8 +741,26 @@ if __name__ == "__main__":
                 ibm_time = round(end_time - start_time, 3)
                 
                 # simulation results
-                sim_my_computed_value = problem_instance.get_my_simulated_energy(noise_model, my_params)
+                sim_my_computed_value = problem_instance.get_my_simulated_energy(noise_model, my_params, reps)
                 sim_ibm_computed_value = problem_instance.get_ibm_simulated_energy(hardware_spec, ibm_params, noise_model.basis_gates, factor=2)
+                
+                # results from Markov Chain (we already know the algorithm and resolve the choices)
+                algorithm_path = os.path.join(config["output_dir"], "algorithms", f"{hardware_spec.value}_0_{config['max_horizon']}.json")
+                pomdp_path = os.path.join(config["output_dir"], "pomdps", f"{hardware_spec.value}_latest.txt")
+                mc_my_computed_value = get_markov_chain_results(project_settings, algorithm_path, pomdp_path)
+                
+                parametric_actions = problem_instance.get_ibm_ansatz_actions(noise_model)
+                actions = get_binded_actions(parametric_actions, ibm_params)
+                ibm_pomdp = build_pomdp(actions, noise_model, problem_instance.get_ibm_horizon(), problem_instance.embedding, initial_state=problem_instance.initial_state)
+                ibm_pomdp_path = os.path.join(config["output_dir"], "pomdps", f"ibm_{hardware_spec.value}_latest.txt")
+                ibm_pomdp.serialize(problem_instance, ibm_pomdp_path)
+                
+                ibm_algorithm_path = os.path.join(config["output_dir"], "algorithms", f"ibm_{hardware_spec.value}.json")
+                ibm_algorithm_node = problem_instance.get_ibm_ansatz_alg()
+                assert isinstance(ibm_algorithm_node, AlgorithmNode)
+                algorithm_file = open(ibm_algorithm_path, "w")
+                algorithm_file.write(json.dump(ibm_algorithm_node.serialize()))
+                mc_ibm_computed_value = get_markov_chain_results(project_settings, ibm_algorithm_path, ibm_pomdp_path)
                 
                 line_elements = [
                    my_computed_value, ibm_computed_value,
@@ -732,12 +777,6 @@ if __name__ == "__main__":
                     line_elements.append(str(round(ibm_params[index],3)))
                 all_results_file.write(",".join(line_elements) + "\n")
         all_results_file.close()
-                    
-                
-                
-                
-                
-            
     else:
         
         raise Exception("first argument does not match anything")

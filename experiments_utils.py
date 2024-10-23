@@ -290,5 +290,17 @@ def get_bellman_value(project_settings, config_path) -> float:
         return float(result.stdout)
     except:
         print(result.stderr)
-        raise Exception("Could not convert executable to float")
+        raise Exception(f"Could not convert executable to float when running {args}")
+    
+def get_markov_chain_results(project_settings, algorithm_path, pomdp_path) ->float:
+    executable_path = project_settings["CPP_EXEC_PATH"]
+    
+    args = ["exact", algorithm_path, pomdp_path]
+    result = subprocess.run([executable_path] + args, capture_output=True, text=True)
+    try:
+        return float(result.stdout)
+    except:
+        print(result.stderr)
+        raise Exception(f"Could not convert executable to float when running {args}")
+
     
