@@ -642,6 +642,26 @@ def cost_function(params: List[float], noise_model: NoiseModel, parametric_actio
     
     # now that pomdp is ready we must run bellman equation
     energy = get_bellman_value(project_settings, config_path)
+    
+    # if OPTIMIZE_ACTIONS: # TODO: TRY ME
+    #     # now run when actions are not optimized (if previous run we optimized actions)
+    #     actions = get_binded_actions(parametric_actions, params, noise_model=noise_model, embedding=problem_instance.embedding, experiment_id=problem_instance.experiment_id, reps=problem_instance.reps, optimize=False)
+    
+    #     pomdp = build_pomdp(actions, noise_model, horizon, problem_instance.embedding, initial_state=problem_instance.initial_state)
+    #     # pomdp.optimize_graph(problem_instance) # no optimization because every vertex has its own energy
+        
+    #     # save POMDP
+    #     pomdp.serialize(problem_instance, output_path) 
+        
+    #     # now that pomdp is ready we must run bellman equation
+    #     energy2 = get_bellman_value(project_settings, config_path)
+        
+    #     if config["opt_technique"] == "max": 
+    #         if energy2 > energy:
+    #             energy = energy2
+    #     elif energy2 < energy:
+    #         energy = energy2
+        
     energy_history.append(energy)
     
     if config["opt_technique"] == "max":    
