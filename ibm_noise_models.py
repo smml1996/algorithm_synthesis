@@ -225,6 +225,10 @@ class Instruction:
         self.name = name
         
     def is_identity(self):
+        for p in self.params:
+            assert not isinstance(p, complex)
+            assert not isinstance(p, str)
+            
         matrix_values = []
         if self.Op.U1:
             matrix_values.append(1)
@@ -263,8 +267,7 @@ class Instruction:
             matrix_values[index] = matrix_values[index] * np.conjugate(matrix_values[index])
             assert isclose(matrix_values[index].imag, 0, abs_tol=Precision.isclose_abstol)
             matrix_values[index] = matrix_values[index].real
-                
-        
+
         if isclose(matrix_values[0], matrix_values[3], rel_tol=Precision.rel_tol):
             if not isclose(abs(matrix_values[0]), 1, rel_tol=Precision.rel_tol):
                 return False
