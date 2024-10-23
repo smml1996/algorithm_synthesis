@@ -151,7 +151,7 @@ class QuantumState:
         return answer
     
     def single_partial_trace(self, rho=None, index=0, qubits_used=None):
-        """removes the qubits and index from the system
+        """removes the qubits at `index` from the system
 
         Args:
             rho (_type_, optional): _description_. Defaults to None.
@@ -296,6 +296,18 @@ def np_get_energy(H: SparsePauliOp, quantum_state: np.array) -> float:
     assert isclose(expectation_value.imag, 0.0, abs_tol=Precision.isclose_abstol)
     return expectation_value.real
 
+def np_get_energy_from_rho(H: SparsePauliOp, density_matrix: np.array) -> float:
+    trace_rho = np.trace(density_matrix)
+    assert np.isclose(trace_rho, 1.0, atol=1e-9), "Density matrix trace is not 1"
+    energy_matrix = np.matmul(density_matrix, H)
+    
+    energy = np.trace(energy_matrix)
+    
+    assert isclose(energy.imag, 0.0, abs_tol=Precision.isclose_abstol)
+    return energy.real
+
+
+
 def np_schroedinger_equation(H: SparsePauliOp, t: complex, initial_state: np.array) -> np.array:
     I = complex(0, 1)
 
@@ -321,3 +333,15 @@ def normalize_np_array(quantum_state):
     assert norm > 0
     sq_norm = np.sqrt(norm)
     return quantum_state/sq_norm
+
+def np_array_to_qs(state_vector, qubits_used):
+    qs = None
+    for (index, amp) in enumerate(state_vector):
+        if not isclose(amp, 0.0, abs_tol=Precision.isclose_abstol):
+            if qs is None:
+                qs = QuantumState(index, amp, qubits_used=qubits_used)
+            else:
+                assert qs.get_amplitude(index) == 0.0
+                qs.insert_amplitude(index, amp) 
+
+    return qs

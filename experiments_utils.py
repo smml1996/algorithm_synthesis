@@ -86,6 +86,21 @@ def generate_embeddings(**kwargs) -> Dict[Any, Any]:
     f.write(json.dumps(result))
     f.close()
     
+def generate_embeddings_files(config: Dict[str, Any], hardware_spec, batch_name:str, embeddings) -> Dict[Any, Any]:
+    directory_exists(config["output_dir"])
+    
+    result = dict()
+    result[hardware_spec.value] = dict()
+    embedding_index = int(batch_name.split("-")[1]) # assume that embedding index is encoded in the batch name
+        
+    result[hardware_spec.value]["count"] = 1
+    result[hardware_spec.value]["embeddings"] = [embeddings[embedding_index]]
+
+    result["count"] = 1
+    f = open(get_embeddings_path(config), "w")
+    f.write(json.dumps(result))
+    f.close()
+    
 def get_num_qubits_to_hardware(hardware_str=True, allowed_hardware=HardwareSpec) -> Dict[int, HardwareSpec|str]:
    
     s = dict()
@@ -118,7 +133,7 @@ def get_output_path(experiment_name, experiment_id, batch_name):
     directory_exists(os.path.join(project_path, "results", experiment_name, experiment_id.value))
     return os.path.join(project_path, "results", experiment_name, experiment_id.value,f"{batch_name}")
 
-def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max_horizon, allowed_hardware=HardwareSpec, batches: Dict[str, List[HardwareSpec]]=None, opt_technique: str="max", verbose=1):
+def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max_horizon, allowed_hardware=HardwareSpec, batches: Dict[str, List[HardwareSpec]]=None, opt_technique: str="max", reps=0, verbose=0):
     """_summary_
 
     Args:
@@ -158,6 +173,7 @@ def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max
             config["hardware"] = hardware_specs_str
             config["opt_technique"] = opt_technique
             config["verbose"] = verbose
+            config["reps"] = reps
         
             config_path = get_config_path(experiment_name, experiment_id, batch_name)
             f = open(config_path, "w")

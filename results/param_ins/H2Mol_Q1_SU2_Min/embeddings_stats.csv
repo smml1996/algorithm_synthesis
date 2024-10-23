@@ -1,0 +1,9 @@
+hardware_spec,address,instruction,succ_prob,least_noisy
+fake_almaden,10,U3,0.987,False
+fake_auckland,15,SX,0.96,False
+fake_poughkeepsie,13,U3,0.978,False
+fake_rochester,51,U3,0.975,False
+fake_singapore,13,U3,0.99,False
+fake_tokyo,13,U3,0.978,False
+fake_toronto,16,SX,0.99,False
+fake_washington,37,SX,0.96,False

@@ -1,0 +1,14 @@
+{
+    "name": "fake_almaden-0-0",
+    "experiment_id": "H2Mol_Q1_SU2_Max",
+    "min_horizon": 7,
+    "max_horizon": 7,
+    "output_dir": "/Users/stefaniemuroyalei/Documents/algorithm_synthesis/results/param_ins/H2Mol_Q1_SU2_Max/fake_almaden-0-0",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_almaden"
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
+}
