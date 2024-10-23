@@ -19,59 +19,58 @@ auto all_keys_required = {"name", "min_horizon", "max_horizon", "output_dir", "o
 /// @return 
 int main(int argc, char **argv) {
     string arg1 = argv[1];
-
-    cerr << "opening config file: " << argv[2] << endl; 
-
-    std::ifstream f(argv[2]); // parse configuration file
-    json config_json = json::parse(f);
-    f.close();
-    
-    for (auto key : all_keys_required) { // check that config file has all we need
-        if (!config_json.contains(key)) {
-            string key_ = key;
-            throw std::invalid_argument(key_ + "not in config file");
-        }
-    }
-
-
-    // print config file
-    for (auto& el : config_json.items()) {
-        std::cerr << el.key() << " : " << el.value() << "\n\n";
-    }
-
-    string experiment_name = config_json["name"];
-    string experiment_id = config_json["experiment_id"];
-    int min_horizon = config_json["min_horizon"];
-    int max_horizon = config_json["max_horizon"];
-    string opt_technique = config_json["opt_technique"];
-    filesystem::path output_dir = config_json["output_dir"];
-    filesystem::path embeddings_file_ = "embeddings.json";
-    filesystem::path embeddings_path  = output_dir / embeddings_file_;
-    
-    filesystem::path pomdps_path = output_dir / "pomdps/";
-    // check embedding file exists
-    if (!std::filesystem::exists(embeddings_path)) {
-        throw std::runtime_error("Embedding files does not exist");
-    } 
-
-    // open embeddings file
-    std::ifstream embeddings_file(embeddings_path);
-    json all_embeddings = json::parse(embeddings_file);
-    embeddings_file.close();
-
-    // checking output dir exists (or create)
-    if (!std::filesystem::exists(output_dir)) {
-        std::cerr << "Output dir does not exists. Creating directory..." << std::endl;
-        if (std::filesystem::create_directory(output_dir)) {
-            std::cerr << "Directory created successfully." << std::endl;
-        } else {
-            std::cerr << "Failed to create directory or it already exists.\n" << std::endl;
-        }
-    } else {
-        cerr << "output directory exists" << endl;
-    }
     
     if ( arg1.compare("bellmaneq") == 0) {
+        cerr << "opening config file: " << argv[2] << endl; 
+
+        std::ifstream f(argv[2]); // parse configuration file
+        json config_json = json::parse(f);
+        f.close();
+        
+        for (auto key : all_keys_required) { // check that config file has all we need
+            if (!config_json.contains(key)) {
+                string key_ = key;
+                throw std::invalid_argument(key_ + "not in config file");
+            }
+        }
+
+
+        // print config file
+        for (auto& el : config_json.items()) {
+            std::cerr << el.key() << " : " << el.value() << "\n\n";
+        }
+
+        string experiment_name = config_json["name"];
+        string experiment_id = config_json["experiment_id"];
+        int min_horizon = config_json["min_horizon"];
+        int max_horizon = config_json["max_horizon"];
+        string opt_technique = config_json["opt_technique"];
+        filesystem::path output_dir = config_json["output_dir"];
+        filesystem::path embeddings_file_ = "embeddings.json";
+        filesystem::path embeddings_path  = output_dir / embeddings_file_;
+        
+        filesystem::path pomdps_path = output_dir / "pomdps/";
+        // check embedding file exists
+        if (!std::filesystem::exists(embeddings_path)) {
+            throw std::runtime_error("Embedding files does not exist");
+        } 
+
+        // open embeddings file
+        std::ifstream embeddings_file(embeddings_path);
+        json all_embeddings = json::parse(embeddings_file);
+        embeddings_file.close();
+
+        // checking output dir exists (or create)
+        if (!std::filesystem::exists(output_dir)) {
+            std::cerr << "Output dir does not exists. Creating directory..." << std::endl;
+            if (std::filesystem::create_directory(output_dir)) {
+                std::cerr << "Directory created successfully." << std::endl;
+            } else {
+                std::cerr << "Failed to create directory or it already exists.\n" << std::endl;
+            }
+        } else {
+            cerr << "output directory exists" << endl;
+        }
   
         filesystem::path algorithms_path = output_dir / "algorithms";
         // create directory where algorithms should be stored (if it does not already exists)
@@ -120,45 +119,18 @@ int main(int argc, char **argv) {
         }
         lambdas_file.close();
     } else if (arg1.compare("exact") == 0){
+        string algorithm_path = argv[2]; 
+        string pomdp_path = argv[3];
+        // getting the algorithms for a given horizon and experiment index
+        std::ifstream f(algorithm_path);
+        json algorithms_data = json::parse(f);
+        f.close();
+        Algorithm* algorithm = new Algorithm(algorithms_data);
+        auto pomdp = parse_pomdp_file(pomdp_path);
+        Belief initial_belief = get_initial_belief(pomdp);
+        auto acc = get_algorithm_acc(pomdp, algorithm, initial_belief);
+        cout << acc << endl;
 
-        string algorithms_path = config_json["algorithms_file"];
-        // check embedding file exists
-        if (!std::filesystem::exists(algorithms_path)) {
-            throw std::runtime_error("algorithms file does not exist");
-        } 
-
-        filesystem::path accuracies_file_path = output_dir / "exact_accuracies.csv";
-        ofstream output_file(accuracies_file_path);
-        output_file << "horizon,diff_index,real_hardware,acc\n";
-
-        for (int horizon = min_horizon; horizon < max_horizon+1; horizon++) {
-            // getting the algorithms for a given horizon and experiment index
-            std::ifstream f(algorithms_path);
-            json algorithms_data = json::parse(f);
-            int count_algorithms = algorithms_data["count"];
-            auto algorithms = algorithms_data["algorithms"];
-            f.close();
-            // we iterate over all algorithms to test them in all embeddings
-            for(auto alg_index = 0; alg_index < count_algorithms; alg_index++) {
-                Algorithm* algorithm = new Algorithm(algorithms[to_string(alg_index)]);
-                for (auto& el : all_embeddings.items()) {
-                    if (el.key() == "count") continue;
-                    string hardware = el.key();
-                    int count = el.value()["count"];
-                    for (int embedding_index = 0; embedding_index < count; embedding_index ++) {
-                        filesystem::path instance_pomdp_path = pomdps_path / (hardware+"_"+ to_string(embedding_index) + ".txt");
-                        auto pomdp = parse_pomdp_file(instance_pomdp_path);
-                        Belief initial_belief = get_initial_belief(pomdp);
-                        auto acc = get_algorithm_acc(pomdp, algorithm, initial_belief);
-                        output_file << horizon << "," << alg_index << "," << hardware << embedding_index << "," << acc << "\n";
-                    }
-                }
-                output_file.flush();
-            }
-
-        }
-
-        output_file.close();
     } else {
         cerr << "nothing matches" << endl;
     }
