@@ -41,7 +41,7 @@ from scipy.optimize import minimize
 MAX_PRECISION = 10
 WITH_THERMALIZATION = False
 P0_ALLOWED_HARDWARE = [HardwareSpec.AUCKLAND, HardwareSpec.WASHINGTON, HardwareSpec.ROCHESTER]
-OPTIMIZE_ACTIONS = False
+OPTIMIZE_ACTIONS = False # TODO: Try to toggle me
 
 
 MINIMIZATION_METHODS = ["SLSQP", #Gradient-based method. Constrained, smooth problems.
