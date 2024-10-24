@@ -590,17 +590,21 @@ def get_hardware_embeddings(hardware: HardwareSpec, experiment_id, statistics=No
 
         return answer
 
-def get_experiment_batches(experiment_id: ParamInsExperimentId,  reps=None):
+def get_experiment_batches(experiment_id: ParamInsExperimentId, reps=None):
     batches = dict()
     if experiment_id == ParamInsExperimentId.H2Mol_Q1:
         for hardware in P0_ALLOWED_HARDWARE:
             batches[hardware.value] = [hardware.value]
     else:
-        assert reps is not None
-        for hardware in HardwareSpec:
-            embeddings = get_hardware_embeddings(hardware, experiment_id=experiment_id)
-            for (index, _) in enumerate(embeddings):
-                batches[f"{hardware.value}-{index}-{reps}"] = [hardware.value]
+        if reps is None:
+            reps_values = [0,2]
+        else:
+            reps_values = [reps]
+        for r in reps_values:
+            for hardware in HardwareSpec:
+                embeddings = get_hardware_embeddings(hardware, experiment_id=experiment_id)
+                for (index, _) in enumerate(embeddings):
+                    batches[f"{hardware.value}-{index}-{r}"] = [hardware.value]
             
     return batches
         
@@ -691,10 +695,10 @@ if __name__ == "__main__":
                     horizons = [7, 5]
                     opt_technique = "max"
                 if experiment_id == ParamInsExperimentId.H2Mol_Q2_An_SU2_Min:
-                    horizons = [6]
+                    horizons = [6,6]
                     opt_technique = "min"
                 if experiment_id == ParamInsExperimentId.H2Mol_Q2_An_SU2_Max:
-                    horizons = [6]
+                    horizons = [6,6]
                     opt_technique = "max"
                 if experiment_id == ParamInsExperimentId.H2Mol_Q2_SU2_Min:
                     horizons = [5, 5]
@@ -792,19 +796,21 @@ if __name__ == "__main__":
                 results_summary_file.write(line)
                 
             results_summary_file.close()
-    elif arg_backend[1] == "run_config":        
-        if arg_backend == "Q1SU2Min":
+    elif arg_backend == "run_config":        
+        if sys.argv[2] == "Q1SU2Min":
             experiment_id = ParamInsExperimentId.H2Mol_Q1_SU2_Min
-        if arg_backend == "Q1SU2Max":
+        elif sys.argv[2] == "Q1SU2Max":
             experiment_id = ParamInsExperimentId.H2Mol_Q1_SU2_Max
-        if arg_backend == "Q2AnMin":
+        elif sys.argv[2] == "Q2AnMin":
             experiment_id = ParamInsExperimentId.H2Mol_Q2_An_SU2_Min
-        if arg_backend == "Q2AnMax":
+        elif sys.argv[2] == "Q2AnMax":
             experiment_id = ParamInsExperimentId.H2Mol_Q2_An_SU2_Max
-        if arg_backend == "Q2Min":
+        elif sys.argv[2] == "Q2Min":
             experiment_id = ParamInsExperimentId.H2Mol_Q2_SU2_Min
-        if arg_backend == "Q2Max":
+        elif sys.argv[2] == "Q2Max":
             experiment_id = ParamInsExperimentId.H2Mol_Q2_SU2_Max
+        else:
+            raise Exception(f"third argument does not match any experiment ({sys.argv[2]})")
         project_settings = get_project_settings()
         batches = get_experiment_batches(experiment_id)
         for batch_name in batches.keys():
@@ -906,7 +912,7 @@ if __name__ == "__main__":
         all_results_file.close()
     else:
         
-        raise Exception("first argument does not match anything")
+        raise Exception(f"first argument does not match anything ({arg_backend})")
         
         
         
