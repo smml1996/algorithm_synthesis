@@ -1,0 +1,2 @@
+my_energy,ibm_energy,sim_my_energy,sim_ibm_energy,mc_my_energy,mc_ibm_energy,my_nit,ibm_nit,reps,opt_technique,minimization_method,my_time,ibm_time,my_p0,ibm_p0,my_p1,ibm_p1
+-1.81433,-1.84269,-1.80595,-1.8023,-1.81433,-1.81433,5,7,0,min,SLSQP,1.628,0.013,0.0,-0.0,4.597,2.912

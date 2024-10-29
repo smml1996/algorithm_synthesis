@@ -1,6 +1,7 @@
 
 from argparse import Action
 from cmath import isclose, pi
+from copy import deepcopy
 from enum import Enum
 import time
 import numpy as np
@@ -44,10 +45,11 @@ P0_ALLOWED_HARDWARE = [HardwareSpec.AUCKLAND, HardwareSpec.WASHINGTON, HardwareS
 OPTIMIZE_ACTIONS = False # TODO: Try to toggle me
 
 
-MINIMIZATION_METHODS = ["SLSQP", #Gradient-based method. Constrained, smooth problems.
-                        "BFGS", # gradient-based. Smooth, unconstrained problems.
-                        "Powell", # Derivative-free method. Functions that are discontinuous or noisy.
-                        "CG" # Gradient-based method.  Large, smooth, unconstrained problems.
+MINIMIZATION_METHODS = [
+                        "SLSQP", #Gradient-based method. Constrained, smooth problems.
+                        # "BFGS", # gradient-based. Smooth, unconstrained problems.
+                        # "Powell", # Derivative-free method. Functions that are discontinuous or noisy.
+                        # "CG" # Gradient-based method.  Large, smooth, unconstrained problems.
                         ]
 
 class ParamInsExperimentId(Enum):
@@ -117,13 +119,14 @@ def get_hamiltonian(experiment_id: ParamInsExperimentId) -> SparsePauliOp:
 
     
 class ParamInsInstance:
-    def __init__(self, embedding: Dict[int, int], experiment_id: ParamInsExperimentId, num_parameters:int , reps=0) -> None:
+    def __init__(self, embedding: Dict[int, int], experiment_id: ParamInsExperimentId, reps) -> None:
         self.experiment_id = experiment_id
         self.embedding = embedding
         self.initial_state = None
         self.get_initial_states()
         self.hamiltonian = get_hamiltonian(experiment_id)
         self.reps=reps
+        num_parameters = get_num_params_experiment(experiment_id, reps)
         self.initial_parameters = [0.0 for _ in range(num_parameters)]
         if experiment_id in [ParamInsExperimentId.H2Mol_Q1, ParamInsExperimentId.H2Mol_Q1_SU2_Max, ParamInsExperimentId.H2Mol_Q2_An_SU2_Max, ParamInsExperimentId.H2Mol_Q2_SU2_Max]:
             # Here we compute the ground energy which is mainly needed for finding the probability of reaching the ground state in certain experiments
@@ -134,14 +137,8 @@ class ParamInsInstance:
             else:
                 initial_qs = self.initial_state[0]
                 
-            target_state = initial_qs
+            target_state = np_schroedinger_equation(self.hamiltonian, complex(0, -14), initial_qs.to_np_array())
             self.target_energy = np_get_energy(self.hamiltonian, target_state)
-            while True:
-                target_state = np_schroedinger_equation(self.hamiltonian, complex(0, -14), initial_qs.to_np_array())
-                new_energy = np_get_energy(self.hamiltonian, target_state)
-                if isclose(new_energy, self.target_energy, abs_tol=Precision.isclose_abstol):
-                    break
-                self.target_energy = new_energy
         
          
     def get_initial_states(self):
@@ -167,7 +164,7 @@ class ParamInsInstance:
             c = Parameter('c')
             
             qc.u(a,b,c, 0) # applies u3 gate to qubit 0
-        if self.experiment_id in [ParamInsInstance.H2Mol_Q1_SU2_Min, ParamInsInstance.H2Mol_Q1_SU2_Max, ParamInsInstance.H2Mol_Q2_An_SU2_Min, ParamInsInstance.H2Mol_Q2_An_SU2_Max]:
+        if self.experiment_id in [ParamInsExperimentId.H2Mol_Q1_SU2_Min, ParamInsExperimentId.H2Mol_Q1_SU2_Max, ParamInsExperimentId.H2Mol_Q2_An_SU2_Min, ParamInsExperimentId.H2Mol_Q2_An_SU2_Max]:
             ansatz = EfficientSU2(len(self.embedding.keys()), su2_gates=["rx", "ry"], entanglement="linear", reps=self.reps)
             qc.compose(ansatz, inplace=True)
         else:
@@ -226,10 +223,9 @@ class ParamInsInstance:
             else:
                 return 0.00
         
-    def ibm_get_reward(self, state: np.array) -> float:
-        assert isinstance(state, np.array)
+    def ibm_get_reward(self, state) -> float:
 
-        qs = np_array_to_qs(state, list(self.embedding.values()))
+        qs = np_array_to_qs(state, list(self.embedding.keys()))
         
         return self.get_reward((qs, None)) # the second component should be a classical state, but for these experiments does not matter
     
@@ -242,16 +238,16 @@ class ParamInsInstance:
                                 args=(noise_model, actions, config, problem_instance, energy_history, project_settings, config_path), 
                                 method=minimization_method)
         expected_energy = result.fun
-        assert isclose(expected_energy, problem_instance.target_energy, rel_tol=Precision.rel_tol) or (expected_energy > problem_instance.target_energy)
+        # assert isclose(expected_energy, problem_instance.target_energy, rel_tol=Precision.rel_tol) or (expected_energy > problem_instance.target_energy)
         params_value = result.x
         n_iterations = result.nit # number of iterations
-        if config["opt_technique"]:
+        if config["opt_technique"] == "max":
             expected_energy = -expected_energy
         return params_value, expected_energy, n_iterations
     
     def get_ibm_results(self, minimization_method: str, basis_gates: BasisGates):
         assert minimization_method in MINIMIZATION_METHODS
-        qc = QuantumCircuit(1)
+        qc = QuantumCircuit(len(self.embedding.keys()))
         self.get_ibm_initial_state(qc, basis_gates) # reference state
         self.get_ibm_ansatz(qc) # appends ansatz for this experiment
         
@@ -266,8 +262,10 @@ class ParamInsInstance:
         
     def get_my_simulated_energy(self, config, noise_model: NoiseModel, params: List[float], reps, factor=1):
         assert config["min_horizon"] == config["max_horizon"]
-        # fix this {0:0} line below
-        parametric_actions = get_actions(noise_model, {0:0}, self.experiment_id, reps=reps)
+        fake_embedding = dict()
+        for key in self.embedding.keys():
+            fake_embedding[key] = key
+        parametric_actions = get_actions(noise_model, fake_embedding, self.experiment_id, reps=reps)
         actions = get_binded_actions(parametric_actions, params, noise_model=noise_model, embedding=self.embedding, experiment_id=config["experiment_id"], reps=reps, optimize=OPTIMIZE_ACTIONS)
         actions_to_instructions = dict()
         for action in actions:
@@ -289,11 +287,11 @@ class ParamInsInstance:
         self.get_ibm_initial_state(qc, noise_model.basis_gates)
         execute_algorithm(alg, qc, cbits=cr)
         qc.save_statevector('res', pershot=True)
+        initial_layout = dict()
+        for key in self.embedding.keys():
+            initial_layout[qr[key]] =  self.embedding[key]
         
-        for key in self.embedding:
-            initial_layout = {qr[key]: self.embedding[key]}
         ibm_noise_model = get_ibm_noise_model(noise_model.hardware_spec, thermal_relaxation=WITH_THERMALIZATION)
-        
         # execute algorithm
         for _ in range(factor):
             state_vs = np.array(ibm_simulate_circuit(qc, ibm_noise_model, initial_layout))
@@ -307,7 +305,7 @@ class ParamInsInstance:
     
     def get_ibm_ansatz_sim_energy(self,  hardware_spec: HardwareSpec, params: List[float], basis_gates: BasisGates, factor=1):
         expected_energy = 0
-        qr = QuantumRegister(1)
+        qr = QuantumRegister(len(self.embedding.keys()))
         qc = QuantumCircuit(qr)
         self.get_ibm_initial_state(qc, basis_gates)
         self.get_ibm_ansatz(qc)
@@ -315,14 +313,16 @@ class ParamInsInstance:
         
         # bind parameters
         params_dict = dict(zip(qc.parameters, params))
-        qc = qc.bind_parameters(params_dict)
+        qc = qc.assign_parameters(params_dict)
         
-        initial_layout = {qr[0]: self.embedding[0]}
+        initial_layout = dict()
+        for key in self.embedding.keys():
+            initial_layout[qr[key]] = self.embedding[key]
         ibm_noise_model = get_ibm_noise_model(hardware_spec, thermal_relaxation=WITH_THERMALIZATION)
         for _ in range(factor):
             state_vs = np.array(ibm_simulate_circuit(qc, ibm_noise_model, initial_layout))
             for state in state_vs:
-                expected_energy += self.ibm_get_reward(self.hamiltonian, state)
+                expected_energy += self.ibm_get_reward(state)
         expected_energy/=(1024*factor)
         return expected_energy
 
@@ -597,7 +597,8 @@ def get_experiment_batches(experiment_id: ParamInsExperimentId, reps=None):
             batches[hardware.value] = [hardware.value]
     else:
         if reps is None:
-            reps_values = [0,2]
+            reps_values = [0,1]
+            # reps_values = [1] # TODO: change me
         else:
             reps_values = [reps]
         for r in reps_values:
@@ -634,7 +635,7 @@ def cost_function(params: List[float], noise_model: NoiseModel, parametric_actio
     horizon = config["max_horizon"]
     
     hardware_str = config["hardware"][0]
-    output_path = os.path.join(config["output_dir"], "pomdps", f"{hardware_str}_latest.txt")
+    output_path = os.path.join(config["output_dir"], "pomdps", f"{hardware_str}_0.txt")
     
     actions = get_binded_actions(parametric_actions, params, noise_model=noise_model, embedding=problem_instance.embedding, experiment_id=problem_instance.experiment_id, reps=problem_instance.reps, optimize=OPTIMIZE_ACTIONS)
     
@@ -689,10 +690,10 @@ if __name__ == "__main__":
             if experiment_id != ParamInsExperimentId.H2Mol_Q1:
                 reps_values = get_experiment_reps_values(experiment_id)
                 if experiment_id == ParamInsExperimentId.H2Mol_Q1_SU2_Min:
-                    horizons = [7, 5]
+                    horizons = [5, 5]
                     opt_technique = "min"
                 if experiment_id == ParamInsExperimentId.H2Mol_Q1_SU2_Max:
-                    horizons = [7, 5]
+                    horizons = [5, 5]
                     opt_technique = "max"
                 if experiment_id == ParamInsExperimentId.H2Mol_Q2_An_SU2_Min:
                     horizons = [6,6]
@@ -744,6 +745,7 @@ if __name__ == "__main__":
             config_path = get_config_path("param_ins", experiment_id, batch_name)
             config = load_config_file(config_path, ParamInsExperimentId)
             directory_exists(config["output_dir"])
+            assert isinstance(int, config["reps"])
             
             results_summary_path = os.path.join(config["output_dir"], "summary_results.csv")
             results_summary_file = open(results_summary_path, "w")
@@ -768,7 +770,7 @@ if __name__ == "__main__":
             embedding = embeddings[0]
             
             for minimization_method in MINIMIZATION_METHODS:
-                problem_instance = ParamInsInstance(embedding, ParamInsExperimentId.H2Mol_Q1)
+                problem_instance = ParamInsInstance(embedding, ParamInsExperimentId.H2Mol_Q1, config["reps"])
                 
                 # getting my methods results
                 my_params_value, my_energy, my_n_iterations = problem_instance.get_my_results(noise_model, config, minimization_method)
@@ -814,8 +816,11 @@ if __name__ == "__main__":
         project_settings = get_project_settings()
         batches = get_experiment_batches(experiment_id)
         for batch_name in batches.keys():
+            print(batch_name)
             config_path = get_config_path("param_ins", experiment_id, batch_name)
             config = load_config_file(config_path, ParamInsExperimentId)
+            
+            directory_exists(os.path.join(config["output_dir"], "pomdps"))
             
             # retrieving hardware spec
             assert len(config["hardware"]) == 1
@@ -831,7 +836,7 @@ if __name__ == "__main__":
             embedding = embeddings[0]
             
             # settings up file that stores results
-            all_results_path = os.path.join(config_path["output_dir"], "results.csv")
+            all_results_path = os.path.join(config["output_dir"], "results.csv")
             all_results_file = open(all_results_path, "w")
             
             reps = int(batch_name.split("-")[2])
@@ -845,7 +850,7 @@ if __name__ == "__main__":
             # writting header
             header_elements = [
                 f"my_{computed_value}", f"ibm_{computed_value}",
-                f"sim_my_{computed_value}", f"sim_my_{computed_value}",
+                f"sim_my_{computed_value}", f"sim_ibm_{computed_value}",
                 f"mc_my_{computed_value}", f"mc_ibm_{computed_value}",
                 "my_nit", "ibm_nit", "reps" ,"opt_technique", "minimization_method",
                 "my_time","ibm_time"
@@ -859,13 +864,7 @@ if __name__ == "__main__":
             all_results_file.write(",".join(header_elements) + "\n")
             
             for minimization_method in MINIMIZATION_METHODS:
-                problem_instance = ParamInsInstance(embedding, experiment_id, reps=reps)
-                
-                # we run a cost function that corresponds to Bellman equation
-                start_time = time.time()
-                my_params, my_computed_value, my_nit = problem_instance.get_my_results(noise_model, config, minimization_method)
-                end_time = time.time()
-                my_time = round(end_time-start_time, 3)
+                problem_instance = ParamInsInstance(embedding, experiment_id, reps)
                 
                 # run ibm variational algorithm
                 start_time = time.time()
@@ -873,13 +872,20 @@ if __name__ == "__main__":
                 end_time = time.time()
                 ibm_time = round(end_time - start_time, 3)
                 
+                # we run a cost function that corresponds to Bellman equation
+                # problem_instance.initial_parameters = deepcopy(ibm_params)
+                start_time = time.time()
+                my_params, my_computed_value, my_nit = problem_instance.get_my_results(noise_model, config, minimization_method)
+                end_time = time.time()
+                my_time = round(end_time-start_time, 3)
+                
                 # simulation results
-                sim_my_computed_value = problem_instance.get_my_simulated_energy(noise_model, my_params, reps)
-                sim_ibm_computed_value = problem_instance.get_ibm_simulated_energy(hardware_spec, ibm_params, noise_model.basis_gates, factor=2)
+                sim_my_computed_value = problem_instance.get_my_simulated_energy(config,noise_model, my_params, reps, factor=2)
+                sim_ibm_computed_value = problem_instance.get_ibm_ansatz_sim_energy(hardware_spec, ibm_params, noise_model.basis_gates, factor=2)
                 
                 # results from Markov Chain (we already know the algorithm and resolve the choices)
                 algorithm_path = os.path.join(config["output_dir"], "algorithms", f"{hardware_spec.value}_0_{config['max_horizon']}.json")
-                pomdp_path = os.path.join(config["output_dir"], "pomdps", f"{hardware_spec.value}_latest.txt")
+                pomdp_path = os.path.join(config["output_dir"], "pomdps", f"{hardware_spec.value}_0.txt")
                 mc_my_computed_value = get_markov_chain_results(project_settings, algorithm_path, pomdp_path)
                 
                 parametric_actions = problem_instance.get_ibm_ansatz_actions(noise_model)
@@ -889,18 +895,20 @@ if __name__ == "__main__":
                 ibm_pomdp.serialize(problem_instance, ibm_pomdp_path)
                 
                 ibm_algorithm_path = os.path.join(config["output_dir"], "algorithms", f"ibm_{hardware_spec.value}.json")
-                ibm_algorithm_node = problem_instance.get_ibm_ansatz_alg()
+                ibm_algorithm_node = problem_instance.get_ibm_ansatz_alg(noise_model)
                 assert isinstance(ibm_algorithm_node, AlgorithmNode)
                 algorithm_file = open(ibm_algorithm_path, "w")
-                algorithm_file.write(json.dump(ibm_algorithm_node.serialize()))
+                algorithm_file.write(json.dumps(ibm_algorithm_node.serialize()))
+                algorithm_file.close()
                 mc_ibm_computed_value = get_markov_chain_results(project_settings, ibm_algorithm_path, ibm_pomdp_path)
                 
                 line_elements = [
-                   my_computed_value, ibm_computed_value,
-                    sim_my_computed_value, sim_ibm_computed_value,
-                    mc_my_computed_value, mc_ibm_computed_value,
-                    my_nit, ibm_nit, reps, opt_technique, minimization_method,
-                    my_time,ibm_time
+                    str(round(float(my_computed_value),5)), 
+                    str(round(ibm_computed_value,5)),
+                    str(round(sim_my_computed_value,5)), str(round(sim_ibm_computed_value,5)),
+                    str(round(mc_my_computed_value,5)), str(round(mc_ibm_computed_value,5)),
+                    str(my_nit), str(ibm_nit), str(reps), opt_technique, minimization_method,
+                    str(round(my_time,3)),str(round(ibm_time,3))
                 ]
                 
                 assert len(my_params) == len(ibm_params)
@@ -909,6 +917,13 @@ if __name__ == "__main__":
                     line_elements.append(str(round(my_params[index],3)))
                     line_elements.append(str(round(ibm_params[index],3)))
                 all_results_file.write(",".join(line_elements) + "\n")
+                all_results_file.flush()
+                print(",".join(line_elements))
+                print()
+                
+                # rename algorithms so that they are not overwritten 
+                os.rename(algorithm_path, os.path.join(config["output_dir"], "algorithms", f"my_{hardware_spec.value}_{minimization_method}.json"))
+                os.rename(ibm_algorithm_path, os.path.join(config["output_dir"], "algorithms", f"ibm_{minimization_method}.json"))
         all_results_file.close()
     else:
         

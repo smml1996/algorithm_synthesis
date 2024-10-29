@@ -1,8 +1,8 @@
 {
     "name": "fake_singapore-0-1",
     "experiment_id": "H2Mol_Q1_SU2_Min",
-    "min_horizon": 5,
-    "max_horizon": 5,
+    "min_horizon": 4,
+    "max_horizon": 4,
     "output_dir": "/Users/stefaniemuroyalei/Documents/algorithm_synthesis/results/param_ins/H2Mol_Q1_SU2_Min/fake_singapore-0-1",
     "algorithms_file": "",
     "hardware": [

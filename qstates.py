@@ -330,7 +330,9 @@ def normalize_np_array(quantum_state):
     norm = np.dot(np.conjugate(quantum_state).T, quantum_state)
     assert isclose(norm.imag, 0.0, abs_tol=Precision.isclose_abstol)
     norm = norm.real
-    assert norm > 0
+    if not (norm > 0):
+        raise Exception(f"Norm is 0: {norm}, for quantum state {quantum_state}")
+    
     sq_norm = np.sqrt(norm)
     return quantum_state/sq_norm
 

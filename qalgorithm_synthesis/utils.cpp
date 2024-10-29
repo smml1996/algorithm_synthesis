@@ -92,19 +92,19 @@ public:
     Algorithm(json data){
         this->action = data["action"];
 
-        if (data["next"] == -1){
+        if (data["next"] == "None"){
             this->next_ins = nullptr;
         }else{
             this->next_ins = new Algorithm(data["next"]);
         }
 
-        if (data["case0"] == -1) {
+        if (data["case0"] == "None") {
             this->case0 = nullptr;
         } else {
             this->case0 = new Algorithm(data["case0"]);
         }
 
-        if (data["case1"] == -1) {
+        if (data["case1"] == "None") {
             this->case1 = nullptr;
         } else{
             this->case1 = new Algorithm(data["case1"]);

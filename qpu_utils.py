@@ -121,6 +121,7 @@ def bin_to_int(bin: str) -> int:
 
 
 def get_complex(amplitude):
+    print(amplitude)
     if not isinstance(amplitude, complex):
         amplitude = complex(amplitude, 0.0)
     if isinstance(amplitude, complex):

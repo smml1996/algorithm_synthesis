@@ -280,10 +280,12 @@ Belief get_initial_belief(POMDP &pomdp) {
 
 MyFloat get_algorithm_acc(POMDP &pomdp, Algorithm*& algorithm, Belief &current_belief) {
     MyFloat curr_belief_val = current_belief.get_belief_reward(pomdp.rewards);
-    
 
+    if (algorithm == nullptr) {
+        return curr_belief_val;
+    }
     string action = algorithm->action;
-    if ((action == HALT_ACTION) or (algorithm == nullptr)) {
+    if (action == HALT_ACTION) {
         return curr_belief_val;
     }
 

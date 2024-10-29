@@ -93,24 +93,24 @@ class AlgorithmNode:
             if self.next_ins.action_name != "halt":
                 next_ins = self.next_ins.serialize()
             else:
-                next_ins = -1
+                next_ins = "None"
         else:
-            next_ins = -1
+            next_ins = "None"
         
         if self.case0 is not None:
             if self.case0.action_name != "halt":
                 case0 = self.case0.serialize()
             else:
-                case0 = -1
+                case0 = "None"
         else:
-            case0 = -1
+            case0 = "None"
         if self.case1 is not None:
             if self.case1.action_name != "halt":
                 case1 = self.case1.serialize()
             else:
-                case1 = -1
+                case1 = "None"
         else:
-            case1 = -1
+            case1 = "None"
 
         return {
             "action": self.action_name,
