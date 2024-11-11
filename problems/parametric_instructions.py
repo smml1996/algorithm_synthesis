@@ -277,7 +277,7 @@ class ParamInsInstance:
         horizon = config["max_horizon"]
         pomdp = build_pomdp(actions, noise_model, horizon, self.embedding, initial_state=self.initial_state)
         light_pomdp = LightPOMDP(pomdp)
-        algorithm, params, guarantee = parametric_bellman_equation(light_pomdp, light_pomdp.initial_belief, horizon, self.hamiltonian)
+        algorithm, params, guarantee = parametric_bellman_equation(light_pomdp, light_pomdp.initial_belief, horizon, self)
         return params, guarantee, algorithm
     
     def get_ibm_results(self, basis_gates: BasisGates):

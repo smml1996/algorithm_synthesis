@@ -1,11 +1,11 @@
 import os
-from cmath import isclose
+from cmath import cos, isclose
 from collections import deque
-from math import ceil, floor
+from math import ceil, floor, sin
 from typing import *
 from enum import Enum
 import numpy as np
-from sympy import simplify
+from sympy import Symbol, expand_trig, simplify, symbols, trigsimp
 
 CONFIG_KEYS = ["name", "experiment_id", "min_horizon", "max_horizon", "output_dir", "algorithms_file", "hardware"]
 
@@ -173,10 +173,53 @@ class Belief:
     
 def my_simplify(expr: Any) -> Any:
     previous = expr
-    after = simplify(expr)
-    
-    print(f"{previous} --> {after}")
+    after = trigsimp(expr) 
+    print(f"[trigsimp] {previous} --> {after}")
     return after
+
+def expand_trig_func(expr: Any) -> Any:
+    '''apply the sum or double angle identities
+    '''
+    previous = expr
+    after = expand_trig(expr) 
+    print(f"[expand trig] {previous} --> {after}")
+    return after
+
+class SymbolBank:
+    counter = 0
+    def get_symbol(self):
+        new_symbol = symbols(f'x{SymbolBank.counter}')
+        SymbolBank.counter += 1
+        return new_symbol
+    
+def get_cos_sin_exprs(cost_function) -> List[Any]:
+    ''' returns a list of expressions that we need to replace.
+    An expression that we need to replace is an expression to which a cosine or sine function is applied
+    '''
+    if len(cost_function.args) > 0:
+        result = []
+        for arg in cost_function.args:
+            if isinstance(arg, cos) or isinstance(arg, sin):
+                result.extend(arg.args[0])
+            else:
+                result.extend(get_cos_sin_exprs(arg))
+        return result
+    else:
+        return []
+    
+def replace_cos_sin_exprs(cost_function) -> Any:
+    '''replaces expression sorrounded by cos/sin expression such that each depends only of 1 variable
+    '''
+    exprs_to_replace = get_cos_sin_exprs(cost_function)
+    exprs_to_symbols = dict()
+    for expr in exprs_to_replace:
+        new_symbol = SymbolBank.get_symbol()
+        cost_function = cost_function.subs(expr, new_symbol)
+        exprs_to_symbols[expr] = new_symbol
+        
+    return cost_function
+        
+        
     
     
     

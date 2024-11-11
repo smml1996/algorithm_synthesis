@@ -1,9 +1,11 @@
 from cmath import isclose
+
+from sympy import Add, linsolve
 from algorithm import AlgorithmNode
 from ibm_noise_models import Instruction, MeasChannel, NoiseModel, QuantumChannel
 from qmemory import get_seq_probability, handle_write
 from qpu_utils import Op
-from utils import Belief, Precision, Queue
+from utils import Belief, Precision, Queue, expand_trig_func, my_simplify, replace_cos_sin_exprs
 from qstates import QuantumState
 from cmemory import ClassicalState, cwrite
 from typing import Any, Tuple, List, Dict
@@ -343,6 +345,12 @@ class LightPOMDP:
         for state in pomdp.states:
             assert state.id not in self.observations.keys()
             self.observations[state.id] = pomdp.get_obs(state)
+            
+    def get_all_symbols(self):
+        all_symbols = []
+        for action in self.actions:
+            all_symbols.extend(action.symbols)
+        return all_symbols
 
 def create_new_vertex(all_vertices, quantum_state, classical_state):
     for v in all_vertices:
@@ -430,17 +438,64 @@ def build_pomdp(actions: List[POMDPAction],
     result = POMDP(initial_v, all_vertices, actions, graph)
     return result
 
-def get_optimal_guarantee_params(pomdp: LightPOMDP, current_belief, hamiltonian) -> Tuple[float, Dict[str, float]]:
-    pass
+def get_optimal_guarantee_params(pomdp: LightPOMDP, current_belief, problem_instance) -> Tuple[float, Dict[str, float]]:
+    assert isinstance(current_belief, Belief)
+    cost_function = 0.0 # this is the function we want to minimize and find the best parameters
+    
+    for (v_id, val) in current_belief.probabilities.items():
+        vertex = pomdp.state_ids_to_vertex[v_id]
+        assert isinstance(vertex, POMDPVertex)
+        cost_function += problem_instance.get_reward((vertex.quantum_state, vertex.classical_state))
+        
+    cost_function = my_simplify(cost_function) # simplify cost function
+    cost_function = expand_trig_func(cost_function) # remove multiplication of trigonometric functions
+    
+    # we make the cost function be a sum of terms such that each term depends only on 1 variable
+    cost_function = replace_cos_sin_exprs(cost_function)
+    
+    assert isinstance(cost_function, Add)
+    
+    terms = cost_function.args
+    exprs_per_symbol = dict()
+    for term in terms:
+        term_symbols = term.free_symbols
+        assert len(term_symbols) == 1
+        current_symbol = term_symbols[0]
+        if current_symbol not in exprs_per_symbol.keys():
+            exprs_per_symbol[current_symbol] = 0.0
+            
+        exprs_per_symbol[current_symbol] += term
+    
+    linear_equations = []
+    symbols_to_solve = set()
+    for (symbol, expr) in exprs_per_symbol.items():
+        
+        pass
+        symbol_val = 0 # todo find this
+        # fill linear equations we  must later solve
+        linear_equations.append(expr - symbol_val)
+        for s in expr.free_symbols:
+            symbols_to_solve.add(s)
+        
 
-def parametric_bellman_equation(pomdp: LightPOMDP, current_belief: Belief, horizon: int, hamiltonian: np.array) -> Tuple[AlgorithmNode, dict[str, float], float]:
-    halt_guarantee, p = get_optimal_guarantee_params(pomdp, current_belief, hamiltonian)
+    # finally solve linear system of equations
+    symbols_to_solve = tuple(symbols_to_solve)
+    solution = linsolve(linear_equations, symbols_to_solve)
+    solved_symbols_to_sol = dict()
+    for (symbol, val) in zip(symbols_to_solve, solution) :
+        cost_function = cost_function.subs(symbol, val)
+        solved_symbols_to_sol[symbol] = val
+    energy = my_simplify(cost_function)
+    return energy, solved_symbols_to_sol
+
+def parametric_bellman_equation(pomdp: LightPOMDP, current_belief: Belief, horizon: int, problem_instance) -> Tuple[AlgorithmNode, dict[str, float], float]:
+    halt_guarantee, symbols_to_val = get_optimal_guarantee_params(pomdp, current_belief, problem_instance)
     
     if horizon == 0:
-        return (AlgorithmNode("halt"), p, halt_guarantee)
+        return (AlgorithmNode("halt"), symbols_to_val, halt_guarantee)
     
     all_algorithms = []
-    all_algorithms.append((AlgorithmNode("halt"), p, halt_guarantee))
+    all_algorithms.append((AlgorithmNode("halt"), symbols_to_val, halt_guarantee))
     
     for action in pomdp.actions:
         assert isinstance(action, POMDPAction)
@@ -475,7 +530,7 @@ def parametric_bellman_equation(pomdp: LightPOMDP, current_belief: Belief, horiz
             new_algo_node = AlgorithmNode(binded_action.name, binded_action.instruction_sequence)
             new_algo_node.next_ins = next_algorithms[0]
             new_algo_node.depth = next_algorithms[0].depth +1
-            all_algorithms.append((new_algo_node, next_parameters, guarantee))
+            all_algorithms.append((new_algo_node, next_parameters[0], guarantee))
         else:
             raise Exception("Not implemented")
     
