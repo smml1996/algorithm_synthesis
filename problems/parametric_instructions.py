@@ -10,6 +10,7 @@ import os, sys
 
 
 from qiskit import ClassicalRegister, QuantumCircuit, QuantumRegister
+from sympy import symbols
 sys.path.append(os.getcwd() + "/..")
 
 from algorithm import AlgorithmNode, execute_algorithm
@@ -348,24 +349,26 @@ def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id
             U3_instruction = Instruction(embedding[0], Op.U3, params=[params_d['a'], params_d['b'], params_d['c']])
             U3_gate = U3_instruction.to_basis_gate_impl(noise_model.basis_gates)
         else:
-            U3_gate = Instruction(embedding[0], Op.U3, params=['a', 'b', 'c'], symbols=['a', 'b', 'c']).to_basis_gate_impl(noise_model.basis_gates)
+            a,b,c = symbols('a,b,c')
+            U3_gate = Instruction(embedding[0], Op.U3, params=[a,b,c], symbols=[a,b,c]).to_basis_gate_impl(noise_model.basis_gates)
         return [POMDPAction("U3", U3_gate)]
     if experiment_id in [ParamInsExperimentId.H2Mol_Q1_SU2_Min, ParamInsExperimentId.H2Mol_Q1_SU2_Max]:
+        a,b,c,d = symbols('a,b,c,d')
         # ansatz = EfficientSU2(2, su2_gates=["rx", "ry"], entanglement="linear", reps=1)
         # ansatz.decompose().draw("mpl") --> Rx1 - Ry1 - Rx2 - Ry2
         # here is not convenient to optimize because there are only 4 instructions, and we can explore easily a more exhaustive space if we do not optimize
-        Rx1_gate = Instruction(embedding[0], Op.RX, params=['a'], symbols=['a']).to_basis_gate_impl(noise_model.basis_gates)
-        Ry1_gate = Instruction(embedding[0], Op.RY, params=['c'], symbols=['c']).to_basis_gate_impl(noise_model.basis_gates)
+        Rx1_gate = Instruction(embedding[0], Op.RX, params=[a], symbols=[a]).to_basis_gate_impl(noise_model.basis_gates)
+        Ry1_gate = Instruction(embedding[0], Op.RY, params=[c], symbols=[c]).to_basis_gate_impl(noise_model.basis_gates)
         if reps == 0:
             return [POMDPAction("Rx1", Rx1_gate), POMDPAction("Ry1", Ry1_gate)]
         else:
             assert reps == 1
-            Rx2_gate = Instruction(embedding[0], Op.RX, params=['b'], symbols=['b']).to_basis_gate_impl(noise_model.basis_gates)
-            Ry2_gate = Instruction(embedding[0], Op.RY, params=['d'], symbols=['d']).to_basis_gate_impl(noise_model.basis_gates)
+            Rx2_gate = Instruction(embedding[0], Op.RX, params=[b], symbols=[b]).to_basis_gate_impl(noise_model.basis_gates)
+            Ry2_gate = Instruction(embedding[0], Op.RY, params=[d], symbols=[d]).to_basis_gate_impl(noise_model.basis_gates)
             return [POMDPAction("Rx1", Rx1_gate), POMDPAction("Rx2", Rx2_gate), POMDPAction("Ry1", Ry1_gate), POMDPAction("Ry2", Ry2_gate)]
     if experiment_id in [ParamInsExperimentId.H2Mol_Q2_SU2_Max, ParamInsExperimentId.H2Mol_Q2_SU2_Min]:
-            
-        Rx1_instruction, Ry1_instruction, Rx2_instruction, Ry2_instruction, Rx1_gate, Ry1_gate, Rx2_gate, Ry2_gate = get_efficient_su2_two_qubit_gates(embedding, ['a', 'b', 'c', 'd'], params_d, noise_model.basis_gates)
+        a,b,c,d = symbols('a,b,c,d')
+        Rx1_instruction, Ry1_instruction, Rx2_instruction, Ry2_instruction, Rx1_gate, Ry1_gate, Rx2_gate, Ry2_gate = get_efficient_su2_two_qubit_gates(embedding, [a,b,c,d], params_d, noise_model.basis_gates)
         
         if reps == 0:
             return [POMDPAction("Rx1", Rx1_gate), POMDPAction("Rx2", Rx2_gate),  POMDPAction("Ry1", Ry1_gate), POMDPAction("Ry2", Ry2_gate)]
@@ -398,7 +401,8 @@ def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id
             CX_gate = Instruction(embedding[1], Op.CNOT, control=embedding[0]).to_basis_gate_impl(noise_model.basis_gates)
             answer.append(POMDPAction("CX",CX_gate))
             
-            Rx3_instruction, Ry3_instruction, Rx4_instruction, Ry4_instruction, Rx3_gate, Ry3_gate, Rx4_gate, Ry4_gate = get_efficient_su2_two_qubit_gates(embedding, ['e', 'f', 'g', 'h'], params_d, noise_model.basis_gates)
+            e, f, g, h = symbols("e f g h")
+            Rx3_instruction, Ry3_instruction, Rx4_instruction, Ry4_instruction, Rx3_gate, Ry3_gate, Rx4_gate, Ry4_gate = get_efficient_su2_two_qubit_gates(embedding, [e, f, g, h], params_d, noise_model.basis_gates)
             
             
             if optimize:
@@ -427,8 +431,8 @@ def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id
                 answer.append(POMDPAction("RxRy4", RxRy4))
             return answer
     if experiment_id in [ParamInsExperimentId.H2Mol_Q2_An_SU2_Min, ParamInsExperimentId.H2Mol_Q2_An_SU2_Max]:
-        
-        Rx1_instruction, Ry1_instruction, Rx2_instruction, Ry2_instruction, Rx1_gate, Ry1_gate, Rx2_gate, Ry2_gate = get_efficient_su2_two_qubit_gates(embedding, ['a', 'b', 'c', 'd'], params_d, noise_model.basis_gates)
+        a,b,c,d = symbols('a,b,c,d')
+        Rx1_instruction, Ry1_instruction, Rx2_instruction, Ry2_instruction, Rx1_gate, Ry1_gate, Rx2_gate, Ry2_gate = get_efficient_su2_two_qubit_gates(embedding, [a,b,c,d], params_d, noise_model.basis_gates)
         
         if optimize:
             assert params_d is not None   
@@ -459,8 +463,9 @@ def get_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id
         CX_gate = Instruction(embedding[1], Op.CNOT, control=embedding[0]).to_basis_gate_impl(noise_model.basis_gates)
         answer.append(POMDPAction("CX", CX_gate))
         
+        e,f,g = symbols("e f g")
         
-        U3_gate = Instruction(embedding[1], Op.U3, params=['e', 'f', 'g'], symbols=['e', 'f', 'g']).to_basis_gate_impl(noise_model.basis_gates)
+        U3_gate = Instruction(embedding[1], Op.U3, params=[e,f,g], symbols=[e,f,g]).to_basis_gate_impl(noise_model.basis_gates)
         answer.append(POMDPAction("U3", U3_gate))
         
         MEAS_gate = Instruction(embedding[1], Op.MEAS)

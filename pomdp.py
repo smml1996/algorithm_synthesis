@@ -1,6 +1,6 @@
 from cmath import isclose
 
-from sympy import Add, linsolve
+from sympy import Add, Symbol, linsolve
 from algorithm import AlgorithmNode
 from ibm_noise_models import Instruction, MeasChannel, NoiseModel, QuantumChannel
 from qmemory import get_seq_probability, handle_write
@@ -46,6 +46,7 @@ class POMDPAction:
             if instruction.symbols is not None:
                 for symbol in instruction.symbols:
                     if symbol not in used_symbols:
+                        assert isinstance(symbol, Symbol)
                         self.symbols.append(symbol)
                         used_symbols.add(symbol)
                         
