@@ -6,6 +6,7 @@ from numpy import conjugate
 from qpu_utils import Precision, get_complex, int_to_bin, bin_to_int
 from scipy.linalg import expm
 from qiskit.quantum_info import SparsePauliOp
+from sympy import simplify
 
 class QuantumState:
     sparse_vector : Dict # map basis states to sympy-Symbolic
@@ -15,13 +16,11 @@ class QuantumState:
                  init_amplitude = complex(1.0, 0.0), qubits_used=[]):
         self.sparse_vector = dict()
         if init_basis is not None:
-            self.insert_amplitude(init_basis, init_amplitude)
+            self.insert_amplitude(init_basis, simplify(init_amplitude))
         if len(qubits_used) == 0:
             raise Exception("no indices of qubits specified!")
         self.qubits_used = sorted(qubits_used, reverse=False) # addresses of qubits that are used, we need this to build efficiently density matrices that contain only these qubits
         
-
-
     def __str__(self) -> str:
         result = ""
         for (key, value) in self.sparse_vector.items():
@@ -58,7 +57,7 @@ class QuantumState:
         return self.get_amplitude(0), self.get_amplitude(1)
     
     def insert_amplitude(self, basis: int, amplitude: Any) -> bool:
-        amplitude = get_complex(amplitude)
+        amplitude = simplify(get_complex(amplitude))
         if isclose(amplitude.real, 0.0, abs_tol=Precision.isclose_abstol) and isclose(amplitude.imag, 0.0, abs_tol=Precision.isclose_abstol):
                 return False
 
@@ -74,7 +73,7 @@ class QuantumState:
             return False
         
         prev_amplitude = self.get_amplitude(basis)
-        current_amplitude = get_complex(prev_amplitude + amplitude)
+        current_amplitude = simplify(get_complex(prev_amplitude + amplitude))
         if isclose(current_amplitude.real, 0.0, abs_tol=Precision.isclose_abstol) and isclose(current_amplitude.imag, 0.0, abs_tol=Precision.isclose_abstol):
             # if the new amplitude is 0 in both the real and imaginary part we delete this key
             del self.sparse_vector[basis]
@@ -87,11 +86,11 @@ class QuantumState:
         for val in self.sparse_vector.values():
             sum_ += val*conjugate(val)
 
-        norm = sqrt(sum_)
+        norm = simplify(sqrt(sum_))
 
         for key in self.sparse_vector.keys():
             val = self.sparse_vector[key] / norm
-            self.sparse_vector[key] = val
+            self.sparse_vector[key] = simplify(val)
 
     def __eq__(self, other):
         assert isinstance(other, QuantumState)
@@ -220,7 +219,7 @@ class QuantumState:
         result = 0
         for i in range(len(rho)):
             result += rho[i][i]
-        return result
+        return simplify(result)
     
     def to_np_array(self) -> np.array:
         result = []
@@ -277,11 +276,11 @@ def get_inner_product(qstate1, qstate2) -> float:
     for (key, val1) in qstate1.sparse_vector.items():
         val2 = qstate2.get_amplitude(key)
         inner_product += val1*conjugate(val2)
-    return inner_product
+    return simplify(inner_product)
 
 def get_fidelity(qstate1: QuantumState, qstate2: QuantumState) -> float:
     inner_product = get_inner_product(qstate1, qstate2)
-    return inner_product*conjugate(inner_product)
+    return simplify(inner_product*conjugate(inner_product))
 
 
     
@@ -294,7 +293,7 @@ def np_get_energy(H: SparsePauliOp, quantum_state: np.array) -> float:
     H_q = np.dot(H, quantum_state)            # Matrix multiplication H|q>
     expectation_value = np.dot(q_dagger, H_q)  # Inner product ⟨q|H|q⟩
     assert isclose(expectation_value.imag, 0.0, abs_tol=Precision.isclose_abstol)
-    return expectation_value.real
+    return simplify(expectation_value.real)
 
 def np_get_energy_from_rho(H: SparsePauliOp, density_matrix: np.array) -> float:
     trace_rho = np.trace(density_matrix)
@@ -304,7 +303,7 @@ def np_get_energy_from_rho(H: SparsePauliOp, density_matrix: np.array) -> float:
     energy = np.trace(energy_matrix)
     
     assert isclose(energy.imag, 0.0, abs_tol=Precision.isclose_abstol)
-    return energy.real
+    return simplify(energy.real)
 
 
 
@@ -323,7 +322,7 @@ def np_schroedinger_equation(H: SparsePauliOp, t: complex, initial_state: np.arr
 
 def np_get_fidelity(state1: np.array, state2: np.array) -> float:
     result = np.dot(np.conjugate(state1).T, state2 )
-    return result.real*np.conjugate(result.real)
+    return simplify(result.real*np.conjugate(result.real))
 
 def normalize_np_array(quantum_state):
     # normalize quantum state
@@ -334,7 +333,7 @@ def normalize_np_array(quantum_state):
         raise Exception(f"Norm is 0: {norm}, for quantum state {quantum_state}")
     
     sq_norm = np.sqrt(norm)
-    return quantum_state/sq_norm
+    return simplify(quantum_state/sq_norm)
 
 def np_array_to_qs(state_vector, qubits_used):
     qs = None
