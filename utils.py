@@ -5,6 +5,7 @@ from math import ceil, floor
 from typing import *
 from enum import Enum
 import numpy as np
+from sympy import simplify
 
 CONFIG_KEYS = ["name", "experiment_id", "min_horizon", "max_horizon", "output_dir", "algorithms_file", "hardware"]
 
@@ -151,5 +152,33 @@ def np_get_ground_state(eigenvalues, eigenvectors):
         if isclose(r_eigenvalue, eigenvalue, rel_tol=Precision.rel_tol):
             result.append(eigenvector)
     return r_eigenvalue, result
+
+class Belief:
+    def __init__(self) -> None:
+        self.probabilities = dict()
+        
+    def set_probability(self, key: Any, value: Any):
+        self.probabilities[key] = value
+        
+    def add_probability(self, key: Any, value: Any):
+        if key not in self.probabilities.keys():
+            self.set_probability(key, value)
+        else:
+            self.probabilities[key] += value
+        
+    def get_probability(self, key: Any):
+        if key in self.probabilities.keys():
+            return self.probabilities[key]
+        return 0.0
+    
+def my_simplify(expr: Any) -> Any:
+    previous = expr
+    after = simplify(expr)
+    
+    print(f"{previous} --> {after}")
+    return after
+    
+    
+    
 
             

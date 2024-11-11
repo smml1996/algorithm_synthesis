@@ -14,7 +14,7 @@ sys.path.append(os.getcwd() + "/..")
 
 from algorithm import AlgorithmNode, execute_algorithm
 from experiments_utils import default_load_embeddings, directory_exists, generate_configs, generate_embeddings, generate_embeddings_files, get_bellman_value, get_config_path, get_markov_chain_results, get_project_settings
-from pomdp import POMDPAction, build_pomdp
+from pomdp import LightPOMDP, POMDPAction, build_pomdp, parametric_bellman_equation
 import qmemory
 from qpu_utils import BasisGates, Op
 
@@ -36,37 +36,25 @@ from qiskit_nature.units import DistanceUnit
 from qiskit_nature.second_q.formats.molecule_info import MoleculeInfo
 from qiskit_nature.second_q.mappers import JordanWignerMapper, QubitConverter, ParityMapper
 from qiskit.circuit.library import EfficientSU2
-
-from scipy.optimize import minimize
+from scipy import minimize
 
 MAX_PRECISION = 10
 WITH_THERMALIZATION = False
 P0_ALLOWED_HARDWARE = [HardwareSpec.AUCKLAND, HardwareSpec.WASHINGTON, HardwareSpec.ROCHESTER]
 OPTIMIZE_ACTIONS = False # TODO: Try to toggle me
 
-
-MINIMIZATION_METHODS = [
-                        "SLSQP", #Gradient-based method. Constrained, smooth problems.
-                        # "BFGS", # gradient-based. Smooth, unconstrained problems.
-                        # "Powell", # Derivative-free method. Functions that are discontinuous or noisy.
-                        # "CG" # Gradient-based method.  Large, smooth, unconstrained problems.
-                        ]
-
 class ParamInsExperimentId(Enum):
     H2Mol_Q1 = "H2Mol_Q1"
     # real experiments:
     H2Mol_Q1_SU2_Min = "H2Mol_Q1_SU2_Min" # Tries Efficient SU(2) gates(Rx and Ry), minimizes energy
-    H2Mol_Q1_SU2_Max = "H2Mol_Q1_SU2_Max" # Tries Efficient SU(2) gates(Rx and Ry), maximizes probability of reaching ground state
     H2Mol_Q2_An_SU2_Min = "H2Mol_Q2_An_SU2_Min" # Efficient SU(2) gates(Rx and Ry CX), minimizes energy
-    H2Mol_Q2_An_SU2_Max = "H2Mol_Q2_An_SU2_Max" # Efficient SU(2) gates(Rx and Ry CX), maximizes probability of reaching ground state. Second qubit is an ancilla an it include measurements.
     H2Mol_Q2_SU2_Min = "H2Mol_Q2_SU2_Min" # Efficient SU(2) gates(Rx and Ry CX), minimizes energy
-    H2Mol_Q2_SU2_Max = "H2Mol_Q2_SU2_Max" # Efficient SU(2) gates(Rx and Ry CX), maximizes probability of reaching ground state. Second qubit is an ancilla an it include measurements.
     
     
 
 def get_hamiltonian(experiment_id: ParamInsExperimentId) -> SparsePauliOp:
     # https://qiskit-community.github.io/qiskit-nature/migration/0.6_c_qubit_converter.html
-    if experiment_id in [ParamInsExperimentId.H2Mol_Q1, ParamInsExperimentId.H2Mol_Q1_SU2_Min, ParamInsExperimentId.H2Mol_Q1_SU2_Max, ParamInsExperimentId.H2Mol_Q2_An_SU2_Max, ParamInsExperimentId.H2Mol_Q2_An_SU2_Min]:
+    if experiment_id in [ParamInsExperimentId.H2Mol_Q1, ParamInsExperimentId.H2Mol_Q1_SU2_Min, ParamInsExperimentId.H2Mol_Q2_An_SU2_Min]:
         # Define the hydrogen molecule at internuclear distance R = 0.75 angstroms
         molecule = MoleculeInfo(
             ["H", "H"], 
@@ -94,7 +82,7 @@ def get_hamiltonian(experiment_id: ParamInsExperimentId) -> SparsePauliOp:
 
         assert isinstance(qubit_op, SparsePauliOp)
         return qubit_op
-    elif experiment_id in [ParamInsExperimentId.H2Mol_Q2_SU2_Min, ParamInsExperimentId.H2Mol_Q2_SU2_Max]:
+    elif experiment_id in [ParamInsExperimentId.H2Mol_Q2_SU2_Min]:
         # Define the hydrogen molecule at internuclear distance R = 0.75 angstroms
         molecule = MoleculeInfo(
             ["H", "H"], 
@@ -128,15 +116,9 @@ class ParamInsInstance:
         self.reps=reps
         num_parameters = get_num_params_experiment(experiment_id, reps)
         self.initial_parameters = [0.0 for _ in range(num_parameters)]
-        if experiment_id in [ParamInsExperimentId.H2Mol_Q1, ParamInsExperimentId.H2Mol_Q1_SU2_Max, ParamInsExperimentId.H2Mol_Q2_An_SU2_Max, ParamInsExperimentId.H2Mol_Q2_SU2_Max]:
+        if experiment_id in [ParamInsExperimentId.H2Mol_Q1]:
             # Here we compute the ground energy which is mainly needed for finding the probability of reaching the ground state in certain experiments
-            if experiment_id == ParamInsExperimentId.H2Mol_Q2_An_SU2_Max:
-                initial_qs = QuantumState(0, qubits_used=[0])
-                X0 = Instruction(0, Op.X).get_gate_data()
-                initial_qs = qmemory.handle_write(initial_qs, X0)
-            else:
-                initial_qs = self.initial_state[0]
-                
+            initial_qs = self.initial_state[0]
             target_state = np_schroedinger_equation(self.hamiltonian, complex(0, -14), initial_qs.to_np_array())
             self.target_energy = np_get_energy(self.hamiltonian, target_state)
         
@@ -164,26 +146,26 @@ class ParamInsInstance:
             c = Parameter('c')
             
             qc.u(a,b,c, 0) # applies u3 gate to qubit 0
-        if self.experiment_id in [ParamInsExperimentId.H2Mol_Q1_SU2_Min, ParamInsExperimentId.H2Mol_Q1_SU2_Max, ParamInsExperimentId.H2Mol_Q2_An_SU2_Min, ParamInsExperimentId.H2Mol_Q2_An_SU2_Max]:
+        if self.experiment_id in [ParamInsExperimentId.H2Mol_Q1_SU2_Min, ParamInsExperimentId.H2Mol_Q2_An_SU2_Min]:
             ansatz = EfficientSU2(len(self.embedding.keys()), su2_gates=["rx", "ry"], entanglement="linear", reps=self.reps)
             qc.compose(ansatz, inplace=True)
         else:
-            assert self.experiment_id in [ParamInsExperimentId.H2Mol_Q2_SU2_Min, ParamInsExperimentId.H2Mol_Q2_SU2_Max]
+            assert self.experiment_id in [ParamInsExperimentId.H2Mol_Q2_SU2_Min]
             ansatz = EfficientSU2(len(self.embedding.keys()), su2_gates=["rx", "ry"], entanglement="linear", reps=self.reps)
             qc.compose(ansatz, inplace=True)
             
     def get_ibm_ansatz_actions(self, noise_model: NoiseModel) -> List[POMDPAction]:
-        if self.experiment_id in [ParamInsExperimentId.H2Mol_Q1_SU2_Min, ParamInsExperimentId.H2Mol_Q1_SU2_Max, ParamInsExperimentId.H2Mol_Q2_SU2_Max, ParamInsExperimentId.H2Mol_Q2_SU2_Min]:
+        if self.experiment_id in [ParamInsExperimentId.H2Mol_Q1_SU2_Min, ParamInsExperimentId.H2Mol_Q2_SU2_Min]:
             return get_actions(noise_model, self.embedding, self.experiment_id, reps)
         else:
-            assert self.experiment_id in [ParamInsExperimentId.H2Mol_Q2_An_SU2_Min, ParamInsExperimentId.H2Mol_Q2_An_SU2_Max]
-            return get_actions(noise_model, self.embedding, ParamInsExperimentId.H2Mol_Q2_SU2_Max, reps)
+            assert self.experiment_id in [ParamInsExperimentId.H2Mol_Q2_An_SU2_Min]
+            return get_actions(noise_model, self.embedding, ParamInsExperimentId.H2Mol_Q2_An_SU2_Min, reps)
     
     def get_ibm_horizon(self) -> int:
-        if self.experiment_id in [ParamInsExperimentId.H2Mol_Q1_SU2_Min, ParamInsExperimentId.H2Mol_Q1_SU2_Max]:
+        if self.experiment_id in [ParamInsExperimentId.H2Mol_Q1_SU2_Min]:
             return 2 * (self.reps+1)
         else:
-            assert self.experiment_id in [ParamInsExperimentId.H2Mol_Q2_SU2_Max, ParamInsExperimentId.H2Mol_Q2_SU2_Min, ParamInsExperimentId.H2Mol_Q2_An_SU2_Min, ParamInsExperimentId.H2Mol_Q2_An_SU2_Max]
+            assert self.experiment_id in [ParamInsExperimentId.H2Mol_Q2_SU2_Min, ParamInsExperimentId.H2Mol_Q2_An_SU2_Min]
             if self.reps == 0:
                 return 4
             else:
@@ -209,54 +191,18 @@ class ParamInsInstance:
     def get_reward(self, hybrid_state) -> float:
         qs, _ = hybrid_state
         assert isinstance(qs, QuantumState)
-        if self.experiment_id in [ParamInsExperimentId.H2Mol_Q2_An_SU2_Min, ParamInsExperimentId.H2Mol_Q2_An_SU2_Max]:
+        if self.experiment_id in [ParamInsExperimentId.H2Mol_Q2_An_SU2_Min]:
             rho = qs.single_partial_trace(index=self.embedding[1]) # get the density matrix of the partial trace that does not contains the ancilla
             energy = np_get_energy_from_rho(self.hamiltonian, rho)
         else:
             energy = np_get_energy(self.hamiltonian, qs.to_np_array())
-        if self.experiment_id in [ParamInsExperimentId.H2Mol_Q1, ParamInsExperimentId.H2Mol_Q1_SU2_Min, ParamInsExperimentId.H2Mol_Q2_SU2_Min,ParamInsExperimentId.H2Mol_Q2_An_SU2_Min]:
-            return energy
-        else:
-            assert self.experiment_id in [ParamInsExperimentId.H2Mol_Q1_SU2_Max, ParamInsExperimentId.H2Mol_Q2_SU2_Max,ParamInsExperimentId.H2Mol_Q2_An_SU2_Max]
-            if isclose(energy, self.target_energy, abs_tol=Precision.isclose_abstol):
-                    return 1.00
-            else:
-                return 0.00
+        return energy
         
     def ibm_get_reward(self, state) -> float:
 
         qs = np_array_to_qs(state, list(self.embedding.keys()))
         
         return self.get_reward((qs, None)) # the second component should be a classical state, but for these experiments does not matter
-    
-    
-    def get_my_results(self, noise_model: NoiseModel, config, minimization_method: str):
-        assert minimization_method in MINIMIZATION_METHODS
-        actions = get_actions(noise_model, self.embedding, self.experiment_id, self.reps)
-        energy_history = []
-        result = minimize(cost_function, self.initial_parameters, 
-                                args=(noise_model, actions, config, problem_instance, energy_history, project_settings, config_path), 
-                                method=minimization_method)
-        expected_energy = result.fun
-        # assert isclose(expected_energy, problem_instance.target_energy, rel_tol=Precision.rel_tol) or (expected_energy > problem_instance.target_energy)
-        params_value = result.x
-        n_iterations = result.nit # number of iterations
-        if config["opt_technique"] == "max":
-            expected_energy = -expected_energy
-        return params_value, expected_energy, n_iterations
-    
-    def get_ibm_results(self, minimization_method: str, basis_gates: BasisGates):
-        assert minimization_method in MINIMIZATION_METHODS
-        qc = QuantumCircuit(len(self.embedding.keys()))
-        self.get_ibm_initial_state(qc, basis_gates) # reference state
-        self.get_ibm_ansatz(qc) # appends ansatz for this experiment
-        
-        estimator = Estimator()
-        result = minimize(cost_func_vqe, self.initial_parameters, args=(qc, self.hamiltonian, estimator), method="SLSQP")
-        expected_energy = result.fun
-        params_value = result.x
-        n_iterations = result.nit
-        return params_value, expected_energy, n_iterations
     
     
         
@@ -325,7 +271,26 @@ class ParamInsInstance:
                 expected_energy += self.ibm_get_reward(state)
         expected_energy/=(1024*factor)
         return expected_energy
-
+    
+    def get_my_results(self, noise_model: NoiseModel, config):
+        actions = get_actions(noise_model, self.embedding, self.experiment_id, self.reps)
+        horizon = config["max_horizon"]
+        pomdp = build_pomdp(actions, noise_model, horizon, self.embedding, initial_state=self.initial_state)
+        light_pomdp = LightPOMDP(pomdp)
+        algorithm, params, guarantee = parametric_bellman_equation(light_pomdp, light_pomdp.initial_belief, horizon, self.hamiltonian)
+        return params, guarantee, algorithm
+    
+    def get_ibm_results(self, basis_gates: BasisGates):
+        qc = QuantumCircuit(len(self.embedding.keys()))
+        self.get_ibm_initial_state(qc, basis_gates) # reference state
+        self.get_ibm_ansatz(qc) # appends ansatz for this experiment
+        estimator = Estimator()
+        result = minimize(cost_func_vqe, self.initial_parameters, args=(qc, self.hamiltonian, estimator), method="SLSQP")
+        expected_energy = result.fun
+        params_value = result.x
+        n_iterations = result.nit
+        return params_value, expected_energy, n_iterations
+    
 def cost_func_vqe(params, ansatz, hamiltonian, estimator):
     """Return estimate of energy from estimator
 
@@ -339,10 +304,9 @@ def cost_func_vqe(params, ansatz, hamiltonian, estimator):
         float: Energy estimate
     """
     assert isinstance(estimator, Estimator)
-    pub = (ansatz, hamiltonian, params)
     cost = estimator.run([ansatz], [hamiltonian], [params]).result().values[0]
     return cost
-        
+      
 def get_efficient_su2_two_qubit_gates(embedding, symbols, params_d, basis_gates):
     assert len(symbols) == 4
     a = symbols[0]
@@ -540,7 +504,7 @@ def get_hardware_embeddings(hardware: HardwareSpec, experiment_id, statistics=No
         for p in pivot_qubits:
             answer.append({0: p})
         return answer
-    elif experiment_id in [ParamInsExperimentId.H2Mol_Q1_SU2_Max, ParamInsExperimentId.H2Mol_Q1_SU2_Min]:
+    elif experiment_id in [ParamInsExperimentId.H2Mol_Q1_SU2_Min]:
         if noise_model.basis_gates in [BasisGates.TYPE1, BasisGates.TYPE6]:
             # we get the most noisy qubits in terms of U1 and U2
             for reverse in [False, True]:
@@ -575,7 +539,7 @@ def get_hardware_embeddings(hardware: HardwareSpec, experiment_id, statistics=No
             answer.append({0: p})
         return answer
     else:
-        if experiment_id not in [ParamInsExperimentId.H2Mol_Q2_SU2_Min, ParamInsExperimentId.H2Mol_Q2_SU2_Max, ParamInsExperimentId.H2Mol_Q2_An_SU2_Min, ParamInsExperimentId.H2Mol_Q2_An_SU2_Max]:
+        if experiment_id not in [ParamInsExperimentId.H2Mol_Q2_SU2_Min, ParamInsExperimentId.H2Mol_Q2_An_SU2_Min]:
             raise Exception(f"Experiment id {experiment_id} not valid")
         # Use most/least noise CX gate to choose two qubits
         
@@ -692,21 +656,12 @@ if __name__ == "__main__":
                 if experiment_id == ParamInsExperimentId.H2Mol_Q1_SU2_Min:
                     horizons = [5, 5]
                     opt_technique = "min"
-                if experiment_id == ParamInsExperimentId.H2Mol_Q1_SU2_Max:
-                    horizons = [5, 5]
-                    opt_technique = "max"
                 if experiment_id == ParamInsExperimentId.H2Mol_Q2_An_SU2_Min:
                     horizons = [6,6]
                     opt_technique = "min"
-                if experiment_id == ParamInsExperimentId.H2Mol_Q2_An_SU2_Max:
-                    horizons = [6,6]
-                    opt_technique = "max"
                 if experiment_id == ParamInsExperimentId.H2Mol_Q2_SU2_Min:
                     horizons = [5, 5]
                     opt_technique = "min"
-                if experiment_id == ParamInsExperimentId.H2Mol_Q2_SU2_Max:
-                    horizons = [5, 5]
-                    opt_technique = "max"
                 assert len(reps_values) ==len(horizons)
                 
                     
@@ -749,7 +704,7 @@ if __name__ == "__main__":
             
             results_summary_path = os.path.join(config["output_dir"], "summary_results.csv")
             results_summary_file = open(results_summary_path, "w")
-            line = "my_energy,ibm_energy,my_real_energy,ibm_real_energy,my_nit,ibm_nit,minimizer,my_theta,ibm_theta,my_phi,ibm_phi,my_lambda,ibm_lambda\n"
+            line = "my_energy,ibm_energy,my_real_energy,ibm_real_energy,my_nit,ibm_nit,my_theta,ibm_theta,my_phi,ibm_phi,my_lambda,ibm_lambda\n"
             results_summary_file.write(line)
             
             # generate embeddings
@@ -769,48 +724,42 @@ if __name__ == "__main__":
             assert len(embeddings) == 1
             embedding = embeddings[0]
             
-            for minimization_method in MINIMIZATION_METHODS:
-                problem_instance = ParamInsInstance(embedding, ParamInsExperimentId.H2Mol_Q1, config["reps"])
-                
-                # getting my methods results
-                my_params_value, my_energy, my_n_iterations = problem_instance.get_my_results(noise_model, config, minimization_method)
-                assert len(my_params_value) == 3
-                my_theta = round(my_params_value[0],3)
-                my_phi = round(my_params_value[1],3)
-                my_lambda = round(my_params_value[2],3)
             
-                
-                # getting ibm method results
-                ibm_params_value, ibm_energy, ibm_n_iterations = problem_instance.get_ibm_results(minimization_method, noise_model.basis_gates)
-                assert len(ibm_params_value) == 3
-                ibm_theta = round(ibm_params_value[0],3)
-                ibm_phi = round(ibm_params_value[1],3)
-                ibm_lambda = round(ibm_params_value[2],3)
-                
-                # results of simulator with the circuit that we synthesize
-                my_real_energy = problem_instance.get_my_simulated_energy(noise_model, config, my_params_value, reps=0)
-                
-                # results of simulator with the binded ansatz that ibm finds
-                ibm_real_energy = problem_instance.get_ibm_ansatz_sim_energy(hardware_spec, ibm_params_value, noise_model.basis_gates)
-                
-                line = f"{my_energy},{ibm_energy},{my_real_energy},{ibm_real_energy},{my_n_iterations},{ibm_n_iterations},{minimization_method},{my_theta},{ibm_theta},{my_phi},{ibm_phi},{my_lambda},{ibm_lambda}\n"
-                print(line)
-                results_summary_file.write(line)
+            problem_instance = ParamInsInstance(embedding, ParamInsExperimentId.H2Mol_Q1, config["reps"])
+            
+            # getting my methods results
+            my_params_value, my_energy, my_n_iterations = problem_instance.get_my_results(noise_model, config)
+            assert len(my_params_value) == 3
+            my_theta = round(my_params_value[0],3)
+            my_phi = round(my_params_value[1],3)
+            my_lambda = round(my_params_value[2],3)
+        
+            
+            # getting ibm method results
+            ibm_params_value, ibm_energy, ibm_n_iterations = problem_instance.get_ibm_results(noise_model.basis_gates)
+            assert len(ibm_params_value) == 3
+            ibm_theta = round(ibm_params_value[0],3)
+            ibm_phi = round(ibm_params_value[1],3)
+            ibm_lambda = round(ibm_params_value[2],3)
+            
+            # results of simulator with the circuit that we synthesize
+            my_real_energy = problem_instance.get_my_simulated_energy(noise_model, config, my_params_value, reps=0)
+            
+            # results of simulator with the binded ansatz that ibm finds
+            ibm_real_energy = problem_instance.get_ibm_ansatz_sim_energy(hardware_spec, ibm_params_value, noise_model.basis_gates)
+            
+            line = f"{my_energy},{ibm_energy},{my_real_energy},{ibm_real_energy},{my_n_iterations},{ibm_n_iterations},{my_theta},{ibm_theta},{my_phi},{ibm_phi},{my_lambda},{ibm_lambda}\n"
+            print(line)
+            results_summary_file.write(line)
                 
             results_summary_file.close()
     elif arg_backend == "run_config":        
         if sys.argv[2] == "Q1SU2Min":
             experiment_id = ParamInsExperimentId.H2Mol_Q1_SU2_Min
-        elif sys.argv[2] == "Q1SU2Max":
-            experiment_id = ParamInsExperimentId.H2Mol_Q1_SU2_Max
         elif sys.argv[2] == "Q2AnMin":
             experiment_id = ParamInsExperimentId.H2Mol_Q2_An_SU2_Min
-        elif sys.argv[2] == "Q2AnMax":
-            experiment_id = ParamInsExperimentId.H2Mol_Q2_An_SU2_Max
         elif sys.argv[2] == "Q2Min":
             experiment_id = ParamInsExperimentId.H2Mol_Q2_SU2_Min
-        elif sys.argv[2] == "Q2Max":
-            experiment_id = ParamInsExperimentId.H2Mol_Q2_SU2_Max
         else:
             raise Exception(f"third argument does not match any experiment ({sys.argv[2]})")
         project_settings = get_project_settings()
@@ -840,19 +789,14 @@ if __name__ == "__main__":
             all_results_file = open(all_results_path, "w")
             
             reps = int(batch_name.split("-")[2])
-            
-            opt_technique = config["opt_technique"]
-            if opt_technique  == "min":
-                computed_value = "energy"
-            else:
-                computed_value = "prob"
+            computed_value = "energy"
                 
             # writting header
             header_elements = [
                 f"my_{computed_value}", f"ibm_{computed_value}",
                 f"sim_my_{computed_value}", f"sim_ibm_{computed_value}",
                 f"mc_my_{computed_value}", f"mc_ibm_{computed_value}",
-                "my_nit", "ibm_nit", "reps" ,"opt_technique", "minimization_method",
+                "my_nit", "ibm_nit", "reps",
                 "my_time","ibm_time"
             ]
             
@@ -863,67 +807,67 @@ if __name__ == "__main__":
                 header_elements.append(f"ibm_p{index}")
             all_results_file.write(",".join(header_elements) + "\n")
             
-            for minimization_method in MINIMIZATION_METHODS:
-                problem_instance = ParamInsInstance(embedding, experiment_id, reps)
-                
-                # run ibm variational algorithm
-                start_time = time.time()
-                ibm_params, ibm_computed_value, ibm_nit = problem_instance.get_ibm_results(minimization_method, noise_model.basis_gates)
-                end_time = time.time()
-                ibm_time = round(end_time - start_time, 3)
-                
-                # we run a cost function that corresponds to Bellman equation
-                # problem_instance.initial_parameters = deepcopy(ibm_params)
-                start_time = time.time()
-                my_params, my_computed_value, my_nit = problem_instance.get_my_results(noise_model, config, minimization_method)
-                end_time = time.time()
-                my_time = round(end_time-start_time, 3)
-                
-                # simulation results
-                sim_my_computed_value = problem_instance.get_my_simulated_energy(config,noise_model, my_params, reps, factor=2)
-                sim_ibm_computed_value = problem_instance.get_ibm_ansatz_sim_energy(hardware_spec, ibm_params, noise_model.basis_gates, factor=2)
-                
-                # results from Markov Chain (we already know the algorithm and resolve the choices)
-                algorithm_path = os.path.join(config["output_dir"], "algorithms", f"{hardware_spec.value}_0_{config['max_horizon']}.json")
-                pomdp_path = os.path.join(config["output_dir"], "pomdps", f"{hardware_spec.value}_0.txt")
-                mc_my_computed_value = get_markov_chain_results(project_settings, algorithm_path, pomdp_path)
-                
-                parametric_actions = problem_instance.get_ibm_ansatz_actions(noise_model)
-                actions = get_binded_actions(parametric_actions, ibm_params)
-                ibm_pomdp = build_pomdp(actions, noise_model, problem_instance.get_ibm_horizon(), problem_instance.embedding, initial_state=problem_instance.initial_state)
-                ibm_pomdp_path = os.path.join(config["output_dir"], "pomdps", f"ibm_{hardware_spec.value}_latest.txt")
-                ibm_pomdp.serialize(problem_instance, ibm_pomdp_path)
-                
-                ibm_algorithm_path = os.path.join(config["output_dir"], "algorithms", f"ibm_{hardware_spec.value}.json")
-                ibm_algorithm_node = problem_instance.get_ibm_ansatz_alg(noise_model)
-                assert isinstance(ibm_algorithm_node, AlgorithmNode)
-                algorithm_file = open(ibm_algorithm_path, "w")
-                algorithm_file.write(json.dumps(ibm_algorithm_node.serialize()))
-                algorithm_file.close()
-                mc_ibm_computed_value = get_markov_chain_results(project_settings, ibm_algorithm_path, ibm_pomdp_path)
-                
-                line_elements = [
-                    str(round(float(my_computed_value),5)), 
-                    str(round(ibm_computed_value,5)),
-                    str(round(sim_my_computed_value,5)), str(round(sim_ibm_computed_value,5)),
-                    str(round(mc_my_computed_value,5)), str(round(mc_ibm_computed_value,5)),
-                    str(my_nit), str(ibm_nit), str(reps), opt_technique, minimization_method,
-                    str(round(my_time,3)),str(round(ibm_time,3))
-                ]
-                
-                assert len(my_params) == len(ibm_params)
-                
-                for index in range(len(my_params)):
-                    line_elements.append(str(round(my_params[index],3)))
-                    line_elements.append(str(round(ibm_params[index],3)))
-                all_results_file.write(",".join(line_elements) + "\n")
-                all_results_file.flush()
-                print(",".join(line_elements))
-                print()
-                
-                # rename algorithms so that they are not overwritten 
-                os.rename(algorithm_path, os.path.join(config["output_dir"], "algorithms", f"my_{hardware_spec.value}_{minimization_method}.json"))
-                os.rename(ibm_algorithm_path, os.path.join(config["output_dir"], "algorithms", f"ibm_{minimization_method}.json"))
+            
+            problem_instance = ParamInsInstance(embedding, experiment_id, reps)
+            
+            # run ibm variational algorithm
+            start_time = time.time()
+            ibm_params, ibm_computed_value, ibm_nit = problem_instance.get_ibm_results(noise_model.basis_gates)
+            end_time = time.time()
+            ibm_time = round(end_time - start_time, 3)
+            
+            # we run a cost function that corresponds to Bellman equation
+            # problem_instance.initial_parameters = deepcopy(ibm_params)
+            start_time = time.time()
+            my_params, my_computed_value, my_nit = problem_instance.get_my_results(noise_model, config)
+            end_time = time.time()
+            my_time = round(end_time-start_time, 3)
+            
+            # simulation results
+            sim_my_computed_value = problem_instance.get_my_simulated_energy(config,noise_model, my_params, reps, factor=2)
+            sim_ibm_computed_value = problem_instance.get_ibm_ansatz_sim_energy(hardware_spec, ibm_params, noise_model.basis_gates, factor=2)
+            
+            # results from Markov Chain (we already know the algorithm and resolve the choices)
+            algorithm_path = os.path.join(config["output_dir"], "algorithms", f"{hardware_spec.value}_0_{config['max_horizon']}.json")
+            pomdp_path = os.path.join(config["output_dir"], "pomdps", f"{hardware_spec.value}_0.txt")
+            mc_my_computed_value = get_markov_chain_results(project_settings, algorithm_path, pomdp_path)
+            
+            parametric_actions = problem_instance.get_ibm_ansatz_actions(noise_model)
+            actions = get_binded_actions(parametric_actions, ibm_params)
+            ibm_pomdp = build_pomdp(actions, noise_model, problem_instance.get_ibm_horizon(), problem_instance.embedding, initial_state=problem_instance.initial_state)
+            ibm_pomdp_path = os.path.join(config["output_dir"], "pomdps", f"ibm_{hardware_spec.value}_latest.txt")
+            ibm_pomdp.serialize(problem_instance, ibm_pomdp_path)
+            
+            ibm_algorithm_path = os.path.join(config["output_dir"], "algorithms", f"ibm_{hardware_spec.value}.json")
+            ibm_algorithm_node = problem_instance.get_ibm_ansatz_alg(noise_model)
+            assert isinstance(ibm_algorithm_node, AlgorithmNode)
+            algorithm_file = open(ibm_algorithm_path, "w")
+            algorithm_file.write(json.dumps(ibm_algorithm_node.serialize()))
+            algorithm_file.close()
+            mc_ibm_computed_value = get_markov_chain_results(project_settings, ibm_algorithm_path, ibm_pomdp_path)
+            
+            line_elements = [
+                str(round(float(my_computed_value),5)), 
+                str(round(ibm_computed_value,5)),
+                str(round(sim_my_computed_value,5)), str(round(sim_ibm_computed_value,5)),
+                str(round(mc_my_computed_value,5)), str(round(mc_ibm_computed_value,5)),
+                str(my_nit), str(ibm_nit), str(reps),
+                str(round(my_time,3)),str(round(ibm_time,3))
+            ]
+            
+            assert len(my_params) == len(ibm_params)
+            
+            for index in range(len(my_params)):
+                line_elements.append(str(round(my_params[index],3)))
+                line_elements.append(str(round(ibm_params[index],3)))
+            all_results_file.write(",".join(line_elements) + "\n")
+            all_results_file.flush()
+            print(",".join(line_elements))
+            print()
+            
+            # rename algorithms so that they are not overwritten 
+            os.rename(algorithm_path, os.path.join(config["output_dir"], "algorithms", f"my_{hardware_spec.value}_algorithm.json"))
+            os.rename(ibm_algorithm_path, os.path.join(config["output_dir"], "algorithms", f"ibm_algorithm.json"))
         all_results_file.close()
     else:
         

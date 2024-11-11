@@ -1,11 +1,13 @@
 from cmath import isclose
+from algorithm import AlgorithmNode
 from ibm_noise_models import Instruction, MeasChannel, NoiseModel, QuantumChannel
 from qmemory import get_seq_probability, handle_write
 from qpu_utils import Op
-from utils import Precision, Queue
+from utils import Belief, Precision, Queue
 from qstates import QuantumState
 from cmemory import ClassicalState, cwrite
 from typing import Any, Tuple, List, Dict
+import numpy as np
 
 INIT_CHANNEL = "INIT_"
 class POMDPVertex:
@@ -44,6 +46,9 @@ class POMDPAction:
                     if symbol not in used_symbols:
                         self.symbols.append(symbol)
                         used_symbols.add(symbol)
+                        
+    def __eq__(self, value: object) -> bool:
+        return self.name == value.name
                         
     def optimize(self):
         new_instruction_sequence = []
@@ -210,6 +215,7 @@ class POMDP:
     def get_obs(self, state: POMDPVertex) -> ClassicalState:
         return state.classical_state
     
+    
     def serialize(self, problem_instance: Any, output_path: str):
         f = open(output_path, "w")
         f.write("BEGINPOMDP\n")
@@ -304,8 +310,39 @@ class POMDP:
         self.transition_matrix = new_transition_matrix
         return True
             
-            
-            
+class LightPOMDP:
+    def __init__(self, pomdp: POMDP) -> None:
+        
+        self.state_ids_to_vertex = dict()
+        for state in pomdp.states:
+            self.state_ids_to_vertex[state.id] = state
+        
+        self.initial_belief = Belief()
+        if "INIT_" in pomdp.transition_matrix[pomdp.initial_state]:
+            for (successor_state, probability) in pomdp.transition_matrix[pomdp.initial_state]["INIT_"].items():
+                self.initial_belief.add_probability(successor_state.id, probability)
+        else:
+            self.initial_belief.add_probability(pomdp.initial_state.id, 1.00)
+        
+        self.actions = pomdp.actions
+        
+        self.transition_matrix = dict()
+        
+        for (vertex, vertex_dict) in pomdp.transition_matrix.items():
+            if vertex.id not in self.transition_matrix.keys():
+                self.transition_matrix[vertex.id] = dict()
+            for (action_name, action_dict) in vertex_dict.items():
+                assert action_name not in self.transition_matrix[vertex.id].keys()
+                self.transition_matrix[vertex.id][action_name] = dict()
+                for (successor_v, probability) in action_dict.items():
+                    assert action_name not in self.transition_matrix[vertex.id][action_name].keys()
+                    self.transition_matrix[vertex.id][action_name][successor_v.id] = probability
+                    
+        self.observations = dict()
+        
+        for state in pomdp.states:
+            assert state.id not in self.observations.keys()
+            self.observations[state.id] = pomdp.get_obs(state)
 
 def create_new_vertex(all_vertices, quantum_state, classical_state):
     for v in all_vertices:
@@ -392,4 +429,78 @@ def build_pomdp(actions: List[POMDPAction],
 
     result = POMDP(initial_v, all_vertices, actions, graph)
     return result
+
+def get_optimal_guarantee_params(pomdp: LightPOMDP, current_belief, hamiltonian) -> Tuple[float, Dict[str, float]]:
+    pass
+
+def parametric_bellman_equation(pomdp: LightPOMDP, current_belief: Belief, horizon: int, hamiltonian: np.array) -> Tuple[AlgorithmNode, dict[str, float], float]:
+    halt_guarantee, p = get_optimal_guarantee_params(pomdp, current_belief, hamiltonian)
+    
+    if horizon == 0:
+        return (AlgorithmNode("halt"), p, halt_guarantee)
+    
+    all_algorithms = []
+    all_algorithms.append((AlgorithmNode("halt"), p, halt_guarantee))
+    
+    for action in pomdp.actions:
+        assert isinstance(action, POMDPAction)
+        action_name = action.name
+        # build next_beliefs, separate them by different observables
+        obs_to_next_beliefs: Dict[int, Belief] = dict()
+        
+        for (prob, current_v) in current_belief.probabilities:
+            if prob > 0:
+                for (successor_v, transition_prob) in pomdp.transition_matrix[current_v][action_name].items():
+                    assert transition_prob > 0
+                    obs_to_next_beliefs[pomdp.get_obs(successor_v)].add_probability(successor_v, prob*transition_prob)
+        
+        
+        assert not obs_to_next_beliefs.empty()
+        next_algorithms = []
+        next_parameters = []
+        guarantee = 0.0
+        for (obs_, next_belief) in obs_to_next_beliefs.items():
+            next_algorithm, next_parameters, next_guarantee = parametric_bellman_equation(pomdp, next_belief, horizon-1)
+            
+            next_algorithms.append(next_algorithm)
+            next_parameters.append(next_parameters)
+            guarantee += next_guarantee
+            
+        assert len(next_algorithms) == len(next_parameters)
+        assert 0 < len(next_algorithms) < 3
+        
+        
+        if len(next_algorithms) == 1:
+            binded_action = action.bind_symbols_from_dict(next_parameters[0])
+            new_algo_node = AlgorithmNode(binded_action.name, binded_action.instruction_sequence)
+            new_algo_node.next_ins = next_algorithms[0]
+            new_algo_node.depth = next_algorithms[0].depth +1
+            all_algorithms.append((new_algo_node, next_parameters, guarantee))
+        else:
+            raise Exception("Not implemented")
+    
+    best_guarantee_index = None
+    best_guarantee = None
+    shortest_algorithm = -1
+    
+    for (index, (alg_node, next_parameters, guarantee)) in enumerate(all_algorithms):
+        if (best_guarantee_index is None) or (best_guarantee < guarantee):
+            best_guarantee_index = index
+            best_guarantee = guarantee
+            shortest_algorithm = alg_node.depth
+        elif isclose(guarantee, best_guarantee, rel_tol=Precision.rel_tol):
+            # in case two algorithms offer the same guarantee we choose shortest algorithm
+            if alg_node.depth < shortest_algorithm:
+                best_guarantee_index = index
+                
+    return all_algorithms[best_guarantee_index]
+            
+            
+            
+
+        
+        
+            
+            
+    
 

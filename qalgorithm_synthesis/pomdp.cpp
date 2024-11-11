@@ -198,7 +198,7 @@ pair<Algorithm*, MyFloat> get_bellman_value(POMDP &pomdp, Belief &current_belief
                 for (auto &it_next_v: pomdp.probabilities[current_v][action]) {
                     if (it_next_v.second > zero) {
                         auto successor = it_next_v.first;
-                        obs_to_next_beliefs[pomdp.gamma[it_next_v.first]].add_val(successor,
+                        obs_to_next_beliefs[pomdp.gamma[successor]].add_val(successor,
                                                                                   prob.second * it_next_v.second);
                     }
                 }
@@ -212,7 +212,9 @@ pair<Algorithm*, MyFloat> get_bellman_value(POMDP &pomdp, Belief &current_belief
             MyFloat bellman_val;
 
             for(auto & obs_to_next_belief : obs_to_next_beliefs) {
-                auto temp = get_bellman_value(pomdp, obs_to_next_belief.second, horizon-1, opt_technique);
+                // getting the bellman value of one of the next beliefs
+                auto next_belief = obs_to_next_belief.second;
+                auto temp = get_bellman_value(pomdp, next_belief, horizon-1, opt_technique);
                 next_algorithms.push_back(temp.first);
                 bellman_val = bellman_val + temp.second;
             }
