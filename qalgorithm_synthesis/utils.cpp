@@ -155,6 +155,8 @@ void write_algorithm_file(Algorithm *algorithm, const string &output_path) {
 }
 
 
-
+string get_project_path() {
+    return "..";
+}
 
 

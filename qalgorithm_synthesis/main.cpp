@@ -6,6 +6,7 @@
 #include <cassert>
 #include <filesystem>  // C++17 and above
 
+
 // for convenience
 using json = nlohmann::json;
 
@@ -45,7 +46,8 @@ int main(int argc, char **argv) {
         int min_horizon = config_json["min_horizon"];
         int max_horizon = config_json["max_horizon"];
         string opt_technique = config_json["opt_technique"];
-        filesystem::path output_dir = config_json["output_dir"];
+        filesystem::path project_path = get_project_path();
+        filesystem::path output_dir = project_path / config_json["output_dir"];
         filesystem::path embeddings_file_ = "embeddings.json";
         filesystem::path embeddings_path  = output_dir / embeddings_file_;
         
