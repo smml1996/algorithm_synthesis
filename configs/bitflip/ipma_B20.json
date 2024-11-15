@@ -6,6 +6,14 @@
     "output_dir": "/Users/stefaniemuroyalei/Documents/algorithm_synthesis/results/bitflip/ipma/B20",
     "algorithms_file": "",
     "hardware": [
+        "fake_johannesburg",
+        "fake_almaden",
+        "fake_boeblingen",
+        "fake_poughkeepsie",
+        "fake_singapore",
         "fake_tokyo"
-    ]
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
 }

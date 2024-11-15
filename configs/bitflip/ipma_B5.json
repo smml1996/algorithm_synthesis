@@ -6,6 +6,23 @@
     "output_dir": "/Users/stefaniemuroyalei/Documents/algorithm_synthesis/results/bitflip/ipma/B5",
     "algorithms_file": "",
     "hardware": [
+        "fake_tenerife",
+        "fake_athens",
+        "fake_belem",
+        "fake_bogota",
+        "fake_burlington",
+        "fake_essex",
+        "fake_lima",
+        "fake_london",
+        "fake_manila",
+        "fake_ourense",
+        "fake_quito",
+        "fake_rome",
+        "fake_santiago",
+        "fake_vigo",
         "fake_yorktown"
-    ]
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
 }

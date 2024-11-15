@@ -6,6 +6,10 @@
     "output_dir": "/Users/stefaniemuroyalei/Documents/algorithm_synthesis/results/bitflip/cxh/B65",
     "algorithms_file": "",
     "hardware": [
+        "fake_brooklyn",
         "fake_manhattan"
-    ]
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
 }

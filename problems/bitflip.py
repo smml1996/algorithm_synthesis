@@ -897,8 +897,8 @@ if __name__ == "__main__":
     project_path = settings["PROJECT_PATH"]
     if arg_backend == "gen_configs":
         # step 0
-        generate_configs(experiment_name="bitflip", experiment_id=BitflipExperimentID.IPMA, min_horizon=4, max_horizon=5)
-        generate_configs(experiment_name="bitflip", experiment_id=BitflipExperimentID.CXH, min_horizon=4, max_horizon=5)
+        generate_configs(experiment_name="bitflip", experiment_id=BitflipExperimentID.IPMA, min_horizon=4, max_horizon=7)
+        generate_configs(experiment_name="bitflip", experiment_id=BitflipExperimentID.CXH, min_horizon=4, max_horizon=7)
     elif arg_backend == "embeddings":
         
         # generate paper embeddings
