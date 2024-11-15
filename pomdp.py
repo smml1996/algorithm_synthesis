@@ -1,6 +1,6 @@
 from cmath import isclose
 
-from sympy import Add, Symbol, linsolve
+from sympy import Add, Symbol, linsolve, pi
 from algorithm import AlgorithmNode
 from ibm_noise_models import Instruction, MeasChannel, NoiseModel, QuantumChannel
 from qmemory import get_seq_probability, handle_write
@@ -470,9 +470,8 @@ def get_optimal_guarantee_params(pomdp: LightPOMDP, current_belief, problem_inst
     linear_equations = []
     symbols_to_solve = set()
     for (symbol, expr) in exprs_per_symbol.items():
-        
-        pass
-        symbol_val = 0 # todo find this
+        fourier_series = get_fourier_series(symbol, expr)
+        symbol_val = find_expr_min()
         # fill linear equations we  must later solve
         linear_equations.append(expr - symbol_val)
         for s in expr.free_symbols:
