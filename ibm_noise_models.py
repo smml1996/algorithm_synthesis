@@ -747,6 +747,7 @@ class NoiseModel:
     instructions_to_channel: Dict[Instruction, QuantumChannel|MeasChannel]
     num_qubits: int
     qubit_to_indegree: Dict[int, int] # tells mutiqubit gates have as target a given qubit (key)
+    qubit_to_outdegree: Dict[int, int]
     def __init__(self, hardware_specification: HardwareSpec, thermal_relaxation=True) -> None:
         self.hardware_spec = hardware_specification
         ibm_noise_model = get_ibm_noise_model(hardware_specification, thermal_relaxation=thermal_relaxation)
@@ -756,6 +757,7 @@ class NoiseModel:
         self.num_qubits = len(ibm_noise_model.noise_qubits)
 
         self.qubit_to_indegree = dict()
+        self.qubit_to_outdegree = dict()
         # start translating quantum channels
         all_errors = ibm_noise_model.to_dict()
         assert len(all_errors.keys()) == 1
@@ -779,7 +781,10 @@ class NoiseModel:
                 assert op in [Op.CNOT, Op.CZ]
                 if target not in self.qubit_to_indegree.keys():
                     self.qubit_to_indegree[target] = 0
+                if control not in self.qubit_to_outdegree.keys():
+                    self.qubit_to_outdegree[control] = 0
                 self.qubit_to_indegree[target] += 1
+                self.qubit_to_outdegree[control] += 1
             else:
                 target = error_target_qubits[0]
                 target_qubits = [target]
@@ -821,6 +826,12 @@ class NoiseModel:
     def get_qubit_indegree(self, qubit) -> int:
         if qubit in self.qubit_to_indegree.keys():
             return self.qubit_to_indegree[qubit]
+        else:
+            return 0
+        
+    def get_qubit_outdegree(self, qubit) -> int:
+        if qubit in self.qubit_to_outdegree.keys():
+            return self.qubit_to_outdegree[qubit]
         else:
             return 0
         

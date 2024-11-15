@@ -56,7 +56,7 @@ def get_project_settings():
     return answer
 
 def get_embeddings_path(config):
-    return os.path.join(config["output_dir"], "embeddings.json")
+    return os.path.join(get_project_path(), config["output_dir"], "embeddings.json")
 
 def directory_exists(path):
     if not os.path.isdir(path):
@@ -67,8 +67,8 @@ def directory_exists(path):
 
 def generate_embeddings(**kwargs) -> Dict[Any, Any]:
     config = load_config_file(kwargs["config_path"], kwargs["experiment_enum"])
-        
-    directory_exists(config["output_dir"])
+    output_dir = os.path.join(get_project_path(), config["output_dir"])
+    directory_exists(output_dir)
         
     result = dict()
     c_embeddings = 0
@@ -115,12 +115,15 @@ def get_num_qubits_to_hardware(hardware_str=True, allowed_hardware=HardwareSpec)
     return s
 
 def get_configs_path():
-    project_settings = get_project_settings()
-    project_path = project_settings["PROJECT_PATH"]
+    project_path = get_project_path()
     return os.path.join(project_path, "configs")
 
+def get_project_path():
+    project_settings = get_project_settings()
+    return project_settings["PROJECT_PATH"]
+
+
 def get_config_path(experiment_name, experiment_id, batch_name):
-    
     configs_path = get_configs_path()
     experiment_path = os.path.join(configs_path, f"{experiment_name}")
     return os.path.join(experiment_path, f"{experiment_id.value}_{batch_name}.json")
@@ -131,7 +134,7 @@ def get_output_path(experiment_name, experiment_id, batch_name):
     directory_exists(os.path.join(project_path, "results"))
     directory_exists(os.path.join(project_path, "results", experiment_name))
     directory_exists(os.path.join(project_path, "results", experiment_name, experiment_id.value))
-    return os.path.join(project_path, "results", experiment_name, experiment_id.value,f"{batch_name}")
+    return os.path.join("results", experiment_name, experiment_id.value,f"{batch_name}")
 
 def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max_horizon, allowed_hardware=HardwareSpec, batches: Dict[str, List[HardwareSpec]]=None, opt_technique: str="max", reps=0, verbose=0):
     """_summary_

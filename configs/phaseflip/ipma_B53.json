@@ -1,0 +1,14 @@
+{
+    "name": "B53",
+    "experiment_id": "ipma",
+    "min_horizon": 4,
+    "max_horizon": 7,
+    "output_dir": "results/phaseflip/ipma/B53",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_rochester"
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
+}

@@ -21,7 +21,7 @@ from ibm_noise_models import Instruction, MeasChannel, NoiseModel, get_ibm_noise
 import numpy as np
 from math import pi   
 from enum import Enum
-from experiments_utils import ReadoutNoise, default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_config_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_settings
+from experiments_utils import ReadoutNoise, default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_config_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings
 import cProfile
 import pstats
 
@@ -363,7 +363,7 @@ def guard(vertex: POMDPVertex, embedding: Dict[int, int], action: POMDPAction):
 
 
 def parse_lambdas_file(config):
-    path = os.path.join(config["output_dir"], "lambdas.csv")
+    path = os.path.join(get_project_path(), config["output_dir"], "lambdas.csv")
     f = open(path)
     result = dict()
     for line in f.readlines()[1:]:
@@ -408,16 +408,17 @@ def generate_pomdps(config_path):
     assert isinstance(experiment_id, BitflipExperimentID)
     
     # the file that contains the time to generate the POMDP is in this folder
-    directory_exists(config["output_dir"])
+    output_dir = os.path.join(get_project_path(), config["output_dir"])
+    directory_exists(output_dir)
         
      # all pomdps will be outputed in this folder:
-    output_folder = os.path.join(config["output_dir"], "pomdps")
+    output_folder = os.path.join(output_dir, "pomdps")
     # check that there is a folder with the experiment id inside pomdps path
     directory_exists(output_folder)
 
     all_embeddings = load_embeddings(config=config)
     
-    times_file_path = os.path.join(config["output_dir"], 'pomdp_times.csv')
+    times_file_path = os.path.join(output_dir, 'pomdp_times.csv')
     times_file = open(times_file_path, "w")
     times_file.write("backend,embedding,time\n")
     for backend in HardwareSpec:
@@ -434,21 +435,22 @@ def generate_pomdps(config_path):
             #     print(f"Unexpected {err=}, {type(err)=}")
     times_file.close()
 
-def test_programs(config_path, shots=2000, factor=1):
-    config = load_config_file(config_path, BitflipExperimentID)
+def test_programs(config_path, experiment_obj, ibm_instance, shots=2000, factor=1):
+    config = load_config_file(config_path, experiment_obj)
+    output_dir = os.path.join(get_project_path(), config["output_dir"])
     experiment_id = config["experiment_id"]
-    if not os.path.exists(config["output_dir"]):
+    if not os.path.exists(output_dir):
         raise Exception("output_dir in config does not exists")
     
-    lambdas_path = os.path.join(config["output_dir"], 'lambdas.csv')
+    lambdas_path = os.path.join(output_dir, 'lambdas.csv')
     if not os.path.exists(lambdas_path):
         raise Exception(f"Guarantees not computed yet (file {lambdas_path} does not exists)")
     
-    algorithms_path = os.path.join(config["output_dir"], "algorithms")
+    algorithms_path = os.path.join(output_dir, "algorithms")
     if not os.path.exists(algorithms_path):
         raise Exception(f"Optimal algorithms not computed yet (directory algorithms{experiment_id.value}/ does not exists)")
     
-    output_path = os.path.join(config["output_dir"], "real_vs_computed.csv")
+    output_path = os.path.join(output_dir, "real_vs_computed.csv")
     output_file = open(output_path, "w")
     output_file.write("backend,horizon,lambda,acc,diff\n")
     
@@ -469,7 +471,7 @@ def test_programs(config_path, shots=2000, factor=1):
             for (index, embedding) in enumerate(embeddings):
                 lambdas_d = all_lambdas[backend.value][index]
                 m = embedding
-                ibm_bitflip_instance = IBMBitFlipInstance(m)
+                ibm_bitflip_instance = ibm_instance(m)
                 
                 for horizon in range(config["min_horizon"], config["max_horizon"]+1):
                     algorithm_path = os.path.join(algorithms_path, f"{backend.value}_{index}_{horizon}.json")
@@ -859,36 +861,6 @@ class Test:
                         pomdp1_file.close()
                         pomdp2_file.close()
     
-def generate_server_sbatchs():
-    f = open("server_script.sh", "w")
-    batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
-    for num_qubits in batches.keys():
-        f.write(f"sbatch sscript.sh {num_qubits}\n")
-    f.close()
-    
-def generate_server_synthesis_script():
-    f_ipma = open("../algorithm_synthesis/qalgorithm_synthesis/ipma_script.sh", "w")
-    f_cxh = open("../algorithm_synthesis/qalgorithm_synthesis/cxh.sh", "w")
-    batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
-    for num_qubits in batches.keys():
-        f_ipma.write(f"sbatch experiments_script.sh /nfs/scistore16/tomgrp/smuroyal/im_time_evolution/configs/ipma_b{num_qubits}.json\n")
-        f_cxh.write(f"sbatch experiments_script.sh /nfs/scistore16/tomgrp/smuroyal/im_time_evolution/configs/cxh_b{num_qubits}.json\n")
-        
-            
-    f_ipma.close()
-    f_cxh.close()
-    
-def generate_input_files_for_script():
-    batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
-    for num_qubits in batches.keys():
-        f_ipma = open(f"../algorithm_synthesis/qalgorithm_synthesis/inputs/ipma_b{num_qubits}.input", "w")
-        f_cxh = open(f"../algorithm_synthesis/qalgorithm_synthesis/inputs/cxh_b{num_qubits}.input", "w")
-        
-        f_ipma.write(f"/nfs/scistore16/tomgrp/smuroyal/im_time_evolution/configs/ipma_b{num_qubits}.json\n")
-        f_cxh.write(f"/nfs/scistore16/tomgrp/smuroyal/im_time_evolution/configs/cxh_b{num_qubits}.json\n")
-        f_ipma.close()
-        f_cxh.close()
-    
 if __name__ == "__main__":
     arg_backend = sys.argv[1]
     Precision.PRECISION = MAX_PRECISION
@@ -928,7 +900,7 @@ if __name__ == "__main__":
     elif arg_backend == "simulator_test":
         # step 4: simulate algorithms and compare accuracy with guarantees. Show that it is accurate
         config_path = sys.argv[2]
-        test_programs(config_path)
+        test_programs(config_path, BitflipExperimentID, IBMBitFlipInstance)
     
     elif arg_backend == "backends_vs":
         # simulate all synthesized algorithms in all backends

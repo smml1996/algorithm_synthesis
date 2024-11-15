@@ -3,7 +3,7 @@
     "experiment_id": "ipma",
     "min_horizon": 4,
     "max_horizon": 7,
-    "output_dir": "/Users/stefaniemuroyalei/Documents/algorithm_synthesis/results/bitflip/ipma/B53",
+    "output_dir": "results/bitflip/ipma/B53",
     "algorithms_file": "",
     "hardware": [
         "fake_rochester"
