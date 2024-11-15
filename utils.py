@@ -1,11 +1,13 @@
+from copy import deepcopy
 import os
-from cmath import cos, isclose
+from cmath import cos, isclose, sqrt
 from collections import deque
 from math import ceil, floor, sin
 from typing import *
 from enum import Enum
 import numpy as np
-from sympy import Symbol, expand_trig, simplify, symbols, trigsimp
+from scipy import integrate
+from sympy import Symbol, diff, expand_trig, fourier_series, pi, simplify, symbols, trigsimp
 
 CONFIG_KEYS = ["name", "experiment_id", "min_horizon", "max_horizon", "output_dir", "algorithms_file", "hardware"]
 
@@ -219,9 +221,112 @@ def replace_cos_sin_exprs(cost_function) -> Any:
         
     return cost_function
         
+def are_functions_equal(x, f, g, threshold=10**(-5)):
+    squared_error = (f - g)**2
+    P = 2*pi # period
+    mse = integrate(squared_error, (x, 0, P)) / P
+    return sqrt(mse) <= threshold
+
+class SinusoidalF(Enum):
+    SIN = "sin"
+    COS = "cos"
+
+def is_sinusoidal(f):
+    return f.has(cos) or f.has(sin)
+
+class MonotonicityType(Enum):
+    INCREASING = "increasing"
+    DESCREASING = "decreasing"
+    CONSTANT = "constant"
+    MANY = "many"
+
+class FourierTerm:
+    def __init__(self, coeff, f, x) -> None:
+        assert coeff != 0
+        self.x = x # f is dependent of this variable (f(x))
+        self.offset = 0
+        self.critical_points = []
+        
+        if is_sinusoidal(f):
+            self.amplitude = coeff
+            self.intervals = dict()
+            if f.has(cos):
+                self.sin_f = SinusoidalF.COS
+                assert not f.has(sin)
+                self.critical_points = [0, pi,  2*pi]
+                self.intervals[(0, pi)] = MonotonicityType.DESCREASING
+                self.intervals[(pi, 2*pi)] = MonotonicityType.INCREASING
+            else:
+                assert f.has(sin)
+                self.sin_f = SinusoidalF.SIN
+                self.critical_points = [pi/2, 3*pi/2]
+                self.intervals[(0, pi/2)] = MonotonicityType.INCREASING
+                self.intervals[(pi/2, 3*pi/2)] = MonotonicityType.DESCREASING
+                self.intervals[(3*pi/2, 2*pi)] = MonotonicityType.INCREASING
+            self.freq = f.args[0].coeff(x)
+            
+            # I am not expecting these functions in fourier series to have any offset
+            if f.args[0] - self.freq*x != 0:
+                raise Exception(f"Offset is not zero: {coeff*f}")
+            # since the derivate of cos is we check that cos 
+            first_derivative = diff(f, x)
+            for p in self.critical_points:
+                assert first_derivative.subs(x, p) == 0
+        else:
+            self.sin_f = None
+            self.freq = None
+            self.offset = coeff*f
+            
+    def get_monotonicity_type(self, x0, x1):
+        assert 0 <= x0 <= 2*pi
+        assert 0 <= x1 <= 2*pi
+        assert x0 <= x1
+        if self.offset != 0:
+            return MonotonicityType.CONSTANT
+        assert self.sin_f is not None
+        
+        for ((x0_, x1_), mon_type) in self.intervals.items():
+            if x0_ <= x0 and x1 <= x1_:
+                return mon_type
+        return MonotonicityType.MANY
+        
+    @property
+    def repr(self):
+        if self.sin_f == SinusoidalF.COS:
+            return self.amplitude*cos(self.freq*self.x)
+        if self.sin_f == SinusoidalF.SIN:
+            return self.amplitude*sin(self.freq*self.x)
+        return self.offset
+            
+class MyFourierSeries:
+    def __init__(self) -> None:
+        self.terms = None
+        self.intervals = dict()
+        
+    def add_term(self, term):
+        assert isinstance(term, FourierTerm)
+        if self.terms is None:
+            self.terms = []
+            self.intervals = deepcopy(term.intervals)
+            
+        else:
+            # update critical points
+            # update intervals
+            pass
+            
+        self.terms.append(term)  
+
+def get_fourier_series(symbol, expr):
+    series_ = fourier_series(expr, (symbol, 0, 2*pi))
+    
+    number_terms = 1
+    series = series_.truncate(number_terms)
+    while not are_functions_equal(expr, number_terms):
+        number_terms += 1
+        series = series_.truncate(number_terms)
         
     
-    
+    series.as_coefficients_dict()
     
 
             
