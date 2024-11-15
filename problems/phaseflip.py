@@ -303,10 +303,10 @@ def load_embeddings(config=None, config_path=None):
 
 def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: PhaseflipExperimentID):
     if experiment_id == PhaseflipExperimentID.IPMA:
-        if noise_model.basis_gates in [BasisGates.TYPE1]:
-            Z0 = POMDPAction("Z0", [Instruction(embedding[0], Op.U3, params=[pi, 2*pi, pi])])
+        if noise_model.basis_gates in [BasisGates.TYPE1, BasisGates.TYPE6]:
+            Z0 = POMDPAction("Z0", [Instruction(embedding[0], Op.U3, params=[0.0, 0.0, pi])])
         else:
-            Z0 = POMDPAction("Z0", [Instruction(embedding[0], Op.X)])
+            Z0 = POMDPAction("Z0", [Instruction(embedding[0], Op.SX), Instruction(embedding[0], Op.RZ, params=[pi]), Instruction(embedding[0], Op.SX)])
             
         if noise_model.basis_gates in [BasisGates.TYPE1, BasisGates.TYPE6]:
             H = POMDPAction("H", [
@@ -518,7 +518,7 @@ if __name__ == "__main__":
         batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=allowed_hardware)
         for num_qubits in batches.keys():
             generate_pomdps(get_config_path("phaseflip", PhaseflipExperimentID.IPMA, num_qubits))
-            generate_pomdps(get_config_path("phaseflip", PhaseflipExperimentID.CXH, num_qubits))
+            # generate_pomdps(get_config_path("phaseflip", PhaseflipExperimentID.CXH, num_qubits))
         
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)
     
