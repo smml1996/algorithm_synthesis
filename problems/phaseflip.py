@@ -329,14 +329,14 @@ def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], e
     else:
         assert experiment_id == PhaseflipExperimentID.CXH
         if noise_model.basis_gates in [BasisGates.TYPE1, BasisGates.TYPE6]:
-            H2 = POMDPAction("H2", [Instruction(embedding[2], Op.U2, params=[0.0, pi])])
+            H0 = POMDPAction("H0", [Instruction(embedding[0], Op.U2, params=[0.0, pi])])
             H1 = POMDPAction("H1", [Instruction(embedding[1], Op.U2, params=[0.0, pi])])
         else:
             assert noise_model.basis_gates in [BasisGates.TYPE2, BasisGates.TYPE3, BasisGates.TYPE4, BasisGates.TYPE7]
-            H2 = POMDPAction("H2", [
-                Instruction(embedding[2], Op.RZ, params=[pi/2]),
-                Instruction(embedding[2], Op.SX),
-                Instruction(embedding[2], Op.RZ, params=[pi/2])
+            H0 = POMDPAction("H0", [
+                Instruction(embedding[0], Op.RZ, params=[pi/2]),
+                Instruction(embedding[0], Op.SX),
+                Instruction(embedding[0], Op.RZ, params=[pi/2])
             ])
             H1 = POMDPAction("H1", [
                 Instruction(embedding[1], Op.RZ, params=[pi/2]),
@@ -347,7 +347,7 @@ def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], e
         P2 = POMDPAction("P2", [Instruction(embedding[2], Op.MEAS)])
         CX21 = POMDPAction("CX21", [Instruction(embedding[1], Op.CNOT, control=embedding[2])])
         CX01 = POMDPAction("CX01", [Instruction(embedding[1], Op.CNOT, control=embedding[0])])
-        return [H2, H1, CX21, CX01, P2]
+        return [H0, H1, CX21, CX01, P2]
     
 
 def guard(vertex: POMDPVertex, embedding: Dict[int, int], action: POMDPAction):
@@ -511,8 +511,8 @@ if __name__ == "__main__":
         # generate paper embeddings
         batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=allowed_hardware)
         for num_qubits in batches.keys():
-            generate_pomdps(get_config_path("phaseflip", PhaseflipExperimentID.IPMA, num_qubits))
-            # generate_pomdps(get_config_path("phaseflip", PhaseflipExperimentID.CXH, num_qubits))
+            # generate_pomdps(get_config_path("phaseflip", PhaseflipExperimentID.IPMA, num_qubits))
+            generate_pomdps(get_config_path("phaseflip", PhaseflipExperimentID.CXH, num_qubits))
         
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)
     
