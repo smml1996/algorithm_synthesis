@@ -25,6 +25,9 @@ from experiments_utils import ReadoutNoise, default_load_embeddings, directory_e
 import cProfile
 import pstats
 
+from bitflip import does_result_contains_d
+
+
 WITH_TERMALIZATION = False
 MAX_PRECISION = 10
 TIME_OUT = 10800 # (in seconds) i.e 3 hours
@@ -176,14 +179,6 @@ def get_selected_couplers(noise_model, target):
     couplers = noise_model.get_qubit_couplers(target)
     first_pair = (couplers[0], couplers[1]) # most noisy pair of couplers for this target
     return first_pair
-
-def does_result_contains_d(result, d):
-    for d_ in result:
-        controls1 = set([d[0], d[1]])
-        controls2 = set([d_[0], d_[1]])
-        if d_[2] == d[2] and controls1 == controls2:
-            return True
-    return False
 
 def get_hardware_embeddings(backend: HardwareSpec, **kwargs) -> List[Dict[int, int]]:
     experiment_id = kwargs["experiment_id"]

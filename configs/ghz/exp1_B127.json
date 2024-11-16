@@ -1,0 +1,14 @@
+{
+    "name": "B127",
+    "experiment_id": "exp1",
+    "min_horizon": 3,
+    "max_horizon": 4,
+    "output_dir": "results/ghz/exp1/B127",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_washington"
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
+}

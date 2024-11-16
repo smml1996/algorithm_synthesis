@@ -835,7 +835,7 @@ class NoiseModel:
         else:
             return 0
         
-    def get_qubit_couplers(self, target: int) -> List[int]:
+    def get_qubit_couplers(self, target: int, is_target=True) -> List[int]:
         ''' Returns a list of pairs (qubit_control, QuantumChannel) in which the instruction is a multiqubit gate whose target is the given qubit
         '''
         assert (target >= 0)
@@ -846,8 +846,24 @@ class NoiseModel:
             if is_multiqubit_gate(instruction.op):
                 assert isinstance(instruction.target, int)
                 assert isinstance(instruction.control, int)
-                if target == instruction.target:
-                    result.append((instruction.control, channel))
+                if is_target:
+                    if target == instruction.target:
+                        result.append((instruction.control, channel))
+                else:
+                    if target == instruction.control:
+                        result.append((instruction.target, channel))
+
+        result = sorted(result, key=lambda x : x[1].estimated_success_prob, reverse=False)
+        return result
+    
+    def get_most_noisy_couplers(self):
+        result = []
+        for (instruction, channel) in self.instructions_to_channel.items():
+            assert isinstance(instruction, Instruction)
+            if is_multiqubit_gate(instruction.op):
+                assert isinstance(instruction.target, int)
+                assert isinstance(instruction.control, int)
+                result.append(((instruction.control, instruction.target), channel))
 
         result = sorted(result, key=lambda x : x[1].estimated_success_prob, reverse=False)
         return result
