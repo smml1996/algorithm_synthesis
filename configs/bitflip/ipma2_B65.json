@@ -1,0 +1,15 @@
+{
+    "name": "B65",
+    "experiment_id": "ipma2",
+    "min_horizon": 4,
+    "max_horizon": 7,
+    "output_dir": "results/bitflip/ipma2/B65",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_brooklyn",
+        "fake_manhattan"
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
+}

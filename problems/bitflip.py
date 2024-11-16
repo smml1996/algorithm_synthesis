@@ -63,6 +63,7 @@ bell_state_pts = [bell0_real_rho, bell1_real_rho, bell2_real_rho, bell3_real_rho
 
 class BitflipExperimentID(Enum):
     IPMA = "ipma"
+    IPMA2 = "ipma2"
     CXH = "cxh"
 
 
@@ -131,7 +132,7 @@ class BitFlipInstance:
     
 
 # choosing embeddings
-def get_pivot_qubits(noise_model: NoiseModel):
+def get_pivot_qubits(noise_model: NoiseModel, only_most_noisy=False):
     result = set()
     noises = []
     if noise_model.hardware_spec == HardwareSpec.MELBOURNE:
@@ -146,20 +147,24 @@ def get_pivot_qubits(noise_model: NoiseModel):
 
     temp = sorted(noises, key=lambda x : x.success0)
     result.add(temp[0].target)
-    result.add(temp[len(temp)-1].target)
+    if not only_most_noisy:
+        result.add(temp[len(temp)-1].target)
 
     temp = sorted(noises, key=lambda x : x.success1)
     result.add(temp[0].target)
-    result.add(temp[len(temp)-1].target)
+    if not only_most_noisy:
+        result.add(temp[len(temp)-1].target)
 
     temp = sorted(noises, key=lambda x: x.acc_err) # accumulated error
     result.add(temp[0].target)
-    result.add(temp[len(temp)-1].target)
+    if not only_most_noisy:
+        result.add(temp[len(temp)-1].target)
 
     temp = sorted(noises, key=lambda x: x.diff)
     if temp[0].diff != temp[len(temp)-1].diff:
         result.add(temp[0].target)
-        result.add(temp[len(temp)-1].target)
+        if not only_most_noisy:
+            result.add(temp[len(temp)-1].target)
 
     temp = sorted(noises, key=lambda x: x.abs_diff)
     if temp[0].abs_diff != temp[len(temp)-1].abs_diff:
@@ -167,9 +172,11 @@ def get_pivot_qubits(noise_model: NoiseModel):
         assert (temp[0].abs_diff < temp[len(temp)-1].abs_diff)
     return result
 
-def get_selected_couplers(noise_model, target):
+def get_selected_couplers(noise_model, target, only_most_noisy=False):
     couplers = noise_model.get_qubit_couplers(target)
     first_pair = (couplers[0], couplers[1]) # most noisy pair of couplers for this target
+    if only_most_noisy:
+        return first_pair
     second_pair = (couplers[len(couplers) -1], couplers[len(couplers) -2]) # least noisy pair of couplers for this target
     return [first_pair, second_pair]
 
@@ -182,18 +189,33 @@ def does_result_contains_d(result, d):
     return False
 
 def get_hardware_embeddings(backend: HardwareSpec, **kwargs) -> List[Dict[int, int]]:
+    experiment_id = kwargs["experiment_id"]
     result = []
     noise_model = NoiseModel(backend, thermal_relaxation=WITH_TERMALIZATION)
-    if noise_model.num_qubits < 14:
-        pivot_qubits = set()
-        for qubit in range(noise_model.num_qubits):
-            if noise_model. get_qubit_indegree(qubit) > 1:
-                pivot_qubits.add(qubit)
+    if experiment_id in [BitflipExperimentID.IPMA, BitflipExperimentID.CXH]:
+        if noise_model.num_qubits < 14:
+            pivot_qubits = set()
+            for qubit in range(noise_model.num_qubits):
+                if noise_model. get_qubit_indegree(qubit) > 1:
+                    pivot_qubits.add(qubit)
+        else:
+            pivot_qubits = get_pivot_qubits(noise_model)
+        for target in pivot_qubits:
+            assert(isinstance(target, int))
+            for p in get_selected_couplers(noise_model, target):
+                d_temp = dict()
+                d_temp[0] = p[0][0]
+                d_temp[1] = p[1][0]
+                d_temp[2] = target
+                if not does_result_contains_d(result, d_temp):
+                    result.append(deepcopy(d_temp))
     else:
-        pivot_qubits = get_pivot_qubits(noise_model)
-    for target in pivot_qubits:
-        assert(isinstance(target, int))
-        for p in get_selected_couplers(noise_model, target):
+        assert experiment_id == BitflipExperimentID.IPMA2
+        assert noise_model.num_qubits >= 14
+        pivot_qubits = get_pivot_qubits(noise_model, only_most_noisy=True)
+        for target in pivot_qubits:
+            assert(isinstance(target, int))
+            p = get_selected_couplers(noise_model, target, only_most_noisy=True)
             d_temp = dict()
             d_temp[0] = p[0][0]
             d_temp[1] = p[1][0]
@@ -244,8 +266,6 @@ class IBMBitFlipInstance:
         accuracy = 0
         
         ibm_noise_model = get_ibm_noise_model(backend, thermal_relaxation=WITH_TERMALIZATION)
-
-        real_hardware_name = backend.value.lower().replace("fake", "ibm")
         
         if log is not None:
             log_file = open(log, "w")
@@ -316,6 +336,14 @@ def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], e
         CX02 = POMDPAction("CX02", [Instruction(embedding[2], Op.CNOT, control=embedding[0])])
         CX12 = POMDPAction("CX12", [Instruction(embedding[2], Op.CNOT, control=embedding[1])])
         return [CX02, CX12, P2, X0]
+    elif experiment_id == BitflipExperimentID.IPMA2:
+        if noise_model.basis_gates in [BasisGates.TYPE1]:
+            X0 = POMDPAction("X0", [Instruction(embedding[0], Op.U3, params=[pi, 2*pi, pi])])
+        else:
+            X0 = POMDPAction("X0", [Instruction(embedding[0], Op.X)])
+        CX = POMDPAction("CX", [Instruction(embedding[2], Op.CNOT, control=embedding[0]), Instruction(embedding[2], Op.CNOT, control=embedding[1])])
+        P2 = POMDPAction("P2", [Instruction(embedding[2], Op.MEAS)])
+        return [CX, P2, X0]
     else:
         assert experiment_id == BitflipExperimentID.CXH
         if noise_model.basis_gates in [BasisGates.TYPE1, BasisGates.TYPE6]:
@@ -867,34 +895,50 @@ if __name__ == "__main__":
     Precision.update_threshold()
     settings = get_project_settings()
     project_path = settings["PROJECT_PATH"]
+    ipma2_allowed_hardware = []
+    for hardware in HardwareSpec:
+        noise_model = NoiseModel(hardware, thermal_relaxation=WITH_TERMALIZATION)
+        if noise_model.num_qubits >= 14:
+            ipma2_allowed_hardware.append(hardware)
     if arg_backend == "gen_configs":
         # step 0
-        generate_configs(experiment_name="bitflip", experiment_id=BitflipExperimentID.IPMA, min_horizon=4, max_horizon=7)
-        generate_configs(experiment_name="bitflip", experiment_id=BitflipExperimentID.CXH, min_horizon=4, max_horizon=7)
+        # generate_configs(experiment_name="bitflip", experiment_id=BitflipExperimentID.IPMA, min_horizon=4, max_horizon=7)
+        # generate_configs(experiment_name="bitflip", experiment_id=BitflipExperimentID.CXH, min_horizon=4, max_horizon=7)
+        generate_configs(experiment_name="bitflip", experiment_id=BitflipExperimentID.IPMA2, min_horizon=4, max_horizon=7, allowed_hardware=ipma2_allowed_hardware)
     elif arg_backend == "embeddings":
-        
         # generate paper embeddings
-        batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
         
-        for num_qubits in batches.keys():
-            ipma_config_path = get_config_path("bitflip", BitflipExperimentID.IPMA, num_qubits)
-            generate_embeddings(config_path=ipma_config_path, experiment_enum=BitflipExperimentID, get_hardware_embeddings=get_hardware_embeddings)
+        # IPMA and CXH
+        # batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
+        # for num_qubits in batches.keys():
+        #     ipma_config_path = get_config_path("bitflip", BitflipExperimentID.IPMA, num_qubits)
+        #     generate_embeddings(config_path=ipma_config_path, experiment_enum=BitflipExperimentID, get_hardware_embeddings=get_hardware_embeddings,experiment_id=BitflipExperimentID.IPMA)
             
-            cxh_config_path = get_config_path("bitflip", BitflipExperimentID.CXH, num_qubits)
-            generate_embeddings(config_path=cxh_config_path, experiment_enum=BitflipExperimentID, get_hardware_embeddings=get_hardware_embeddings)
+        #     cxh_config_path = get_config_path("bitflip", BitflipExperimentID.CXH, num_qubits)
+        #     generate_embeddings(config_path=cxh_config_path, experiment_enum=BitflipExperimentID, get_hardware_embeddings=get_hardware_embeddings, experiment_id=BitflipExperimentID.CXH)
+        
+        # IPMA2
+        batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=ipma2_allowed_hardware)
+        for num_qubits in batches.keys():
+            ipma_config_path = get_config_path("bitflip", BitflipExperimentID.IPMA2, num_qubits)
+            generate_embeddings(config_path=ipma_config_path, experiment_enum=BitflipExperimentID, get_hardware_embeddings=get_hardware_embeddings, experiment_id=BitflipExperimentID.IPMA2)
     elif arg_backend == "all_pomdps":
         # TODO: clean me up
         # step 2: generate all pomdps
         # config_path = sys.argv[2]
         # generate_pomdps(config_path)
         
-        # generate paper embeddings
-        batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
-        for num_qubits in batches.keys():
-            generate_pomdps(get_config_path("bitflip", BitflipExperimentID.IPMA, num_qubits))
+        # IPMA and CXH
+        # batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
+        # for num_qubits in batches.keys():
+        #     generate_pomdps(get_config_path("bitflip", BitflipExperimentID.IPMA, num_qubits))
             
             # generate_pomdps(get_config_path("bitflip", BitflipExperimentID.CXH, num_qubits))
         
+        # IPMA 2
+        batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=ipma2_allowed_hardware)
+        for num_qubits in batches.keys():
+            generate_pomdps(get_config_path("bitflip", BitflipExperimentID.IPMA2, num_qubits))
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)
     
     elif arg_backend == "simulator_test":

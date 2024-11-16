@@ -1,0 +1,23 @@
+{
+    "name": "B27",
+    "experiment_id": "ipma2",
+    "min_horizon": 4,
+    "max_horizon": 7,
+    "output_dir": "results/bitflip/ipma2/B27",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_hanoi",
+        "fake_cairo",
+        "fake_mumbai",
+        "fake_kolkata",
+        "fake_auckland",
+        "fake_geneva",
+        "fake_montreal",
+        "fake_paris",
+        "fake_sydney",
+        "fake_toronto"
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
+}
