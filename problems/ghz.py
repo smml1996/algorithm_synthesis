@@ -57,7 +57,7 @@ class GHZInstance:
     def set_target_state(self):
         H0 = Instruction(self.embedding[0], Op.H).get_gate_data()
         CX01 = Instruction(self.embedding[1], Op.CNOT, self.embedding[0]).get_gate_data()
-        CX12 = Instruction(self.embedding[1], Op.CNOT, self.embedding[0]).get_gate_data()
+        CX12 = Instruction(self.embedding[2], Op.CNOT, self.embedding[1]).get_gate_data()
         qs = QuantumState(0, qubits_used=list(self.embedding.values()))
         qs = qmemory.handle_write(qs, H0)
         qs = qmemory.handle_write(qs, CX01)
