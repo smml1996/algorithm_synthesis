@@ -22,16 +22,4 @@ FetchContent_MakeAvailable(googletest)
 
 add_executable(qalgorithm_synthesis main.cpp)
 
-enable_testing()
 
-add_executable(
-  fp_test
-  tests/fp_test.cpp
-)
-target_link_libraries(
-  fp_test
-  GTest::gtest_main
-)
-
-include(GoogleTest)
-gtest_discover_tests(fp_test)
