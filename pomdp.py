@@ -155,17 +155,21 @@ class POMDPAction:
         assert index_ins < len(self.instruction_sequence)
 
         current_instruction = self.instruction_sequence[index_ins]
-        instruction_channel = noise_model.instructions_to_channel[current_instruction]
-
         temp_result = dict()
-        if current_instruction.is_meas_instruction():
-            # get successors for 0-measurements
-            self.__handle_measure_instruction(current_instruction, instruction_channel, current_vertex, is_meas1=False, result=temp_result)
-
-            # get successors for 1-measurements
-            self.__handle_measure_instruction(current_instruction, instruction_channel, current_vertex, is_meas1=True, result=temp_result)
+        if current_instruction.is_classical():
+            new_classical_state = cwrite(current_vertex.classical_state, current_instruction.op, current_instruction.target)
+            new_vertex = POMDPVertex(current_vertex.quantum_state, new_classical_state)
+            temp_result[new_vertex] = 1.0
         else:
-            self.__handle_unitary_instruction(current_instruction, instruction_channel, current_vertex, result=temp_result)
+            instruction_channel = noise_model.instructions_to_channel[current_instruction]
+            if current_instruction.is_meas_instruction():
+                # get successors for 0-measurements
+                self.__handle_measure_instruction(current_instruction, instruction_channel, current_vertex, is_meas1=False, result=temp_result)
+
+                # get successors for 1-measurements
+                self.__handle_measure_instruction(current_instruction, instruction_channel, current_vertex, is_meas1=True, result=temp_result)
+            else:
+                self.__handle_unitary_instruction(current_instruction, instruction_channel, current_vertex, result=temp_result)
 
         result = dict()
         for (successor, prob) in temp_result.items():

@@ -308,7 +308,9 @@ class Instruction:
             else:
                 new_params.append(p)
         return Instruction(self.target, self.op, self.control, params=new_params)
-        
+    
+    def is_classical(self):
+        return self.op in [Op.WRITE0, Op.WRITE1, Op.TOGGLE]
 
     def name(self, embedding):
         if self.name is not None:
@@ -819,10 +821,22 @@ class NoiseModel:
                         # create a perfect quantum channel for this operation
                         self.instructions_to_channel[instruction_] = QuantumChannel([], [], [qubit])
         self.report = report
+        self.digraph = self.get_digraph_()
         # if len(report.keys()) > 0:
         #     print(f"WARNING ({hardware_specification.value}) (qubits={self.num_qubits}) ({self.basis_gates.value}): no quantum channel found for {report}")
 
-    
+    def get_digraph_(self):
+        answer = dict()
+        for instruction in self.instructions_to_channel.keys():
+            if is_multiqubit_gate(instruction.op):
+                source = instruction.control
+                target = instruction.target
+                
+                if source not in answer.keys():
+                    answer[source] = set()
+                answer[source].add(target)
+        return answer
+            
     def get_qubit_indegree(self, qubit) -> int:
         if qubit in self.qubit_to_indegree.keys():
             return self.qubit_to_indegree[qubit]

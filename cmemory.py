@@ -44,6 +44,8 @@ def cwrite(classical_state: ClassicalState, op: Op, address: int) -> ClassicalSt
         result.insert(address, False)
     elif op == Op.WRITE1:
         result.insert(address, True)
+    elif op == Op.TOGGLE:
+        result.insert(address, not cread(classical_state, address))
     else:
         raise Exception(f"classical write doesnt defined op behaviour for {op}")
     return result

@@ -145,8 +145,10 @@ class QuantumState:
         answer = None
         for (index_, q) in enumerate(qubits_used):
             if q == index:
-                assert answer is None
-                answer = index_
+                return index_
+                # if answer is not None:
+                # assert answer is None
+                # answer = index_
         assert answer is not None
         return answer
     
@@ -201,18 +203,21 @@ class QuantumState:
         assert len(result) == initial_dim/2
         return result
 
-    def multi_partial_trace(self, rho=None, remove_indices: List[int]=[0], qubits_used=None) -> List[List[float]]:
+    def multi_partial_trace(self, rho=None, remove_indices: List[int]=[0], qubits_used_=None) -> List[List[float]]:
         if rho is None:
             rho = self.get_density_matrix()
 
-        if qubits_used is None:
+        if qubits_used_ is None:
             qubits_used = deepcopy(self.qubits_used)
-
+        else:
+            qubits_used = deepcopy(qubits_used_)
+    
         assert len(rho) == 2**(len(qubits_used)) 
 
-        remove_indices = sorted(remove_indices, reverse=True) # we remove higher indices first to avoid conflict
+        remove_indices = sorted(remove_indices, reverse=True) # we remove higher indices first to avoid conflict 
+        result = rho
         for index in remove_indices:
-            result = self.single_partial_trace(rho, index, qubits_used=qubits_used)
+            result = self.single_partial_trace(result, index, qubits_used=qubits_used)
             qubits_used.remove(index)
         return result
     

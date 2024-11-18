@@ -52,6 +52,7 @@ class Op(Enum):
     # ClassicalOp
     WRITE0 = "WRITE0"
     WRITE1 = "WRITE1"
+    TOGGLE = "TOGGLE"
 
     DELAY = "DELAY"
     CUSTOM = "CUSTOM"
