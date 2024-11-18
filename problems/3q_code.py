@@ -23,7 +23,14 @@ from math import pi
 from enum import Enum
 from experiments_utils import ReadoutNoise, default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_config_path, get_configs_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings
 
+from bitflip import MAX_PRECISION, get_hardware_embeddings as get_hardware_embeddings_z
+from phaseflip import get_hardware_embeddings as get_hardware_embeddings_x
+from ghz import get_hardware_embeddings as get_hardware_embeddings_ghz
+
 from ghz import GHZExperimentID, GHZInstance
+from bitflip import BitflipExperimentID
+from phaseflip import PhaseflipExperimentID
+
 
 WITH_TERMALIZATION = False
 MAX_PRECISION = 10
@@ -62,8 +69,15 @@ class ThreeQInstance:
         else:
             return 0
 
-
+def get_hardware_embeddings():
+    pass
 if __name__ == "__main__":
+    # we only compute on these hardware
+    allowed_hardware = []
+    for hardware in HardwareSpec:
+        noise_model = NoiseModel(hardware, thermal_relaxation=WITH_TERMALIZATION)
+        if noise_model.num_qubits >= 14:
+            allowed_hardware.append(hardware)
     
     # set up working directory
     project_path = get_project_path()
@@ -92,11 +106,10 @@ if __name__ == "__main__":
     
     # rows computations begins here
     for hardware_spec in HardwareSpec:
-        noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_TERMALIZATION)
+        embeddings = get_hardware_embeddings(hardware_spec)
         
-        ghz_embeddings = 1
-        z_pivot_qubits = 1
-        x_pivot_qubits = 1
+        
+        
     
     
     

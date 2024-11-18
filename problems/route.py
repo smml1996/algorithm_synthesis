@@ -247,7 +247,7 @@ def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], e
                 c0_instruction = Instruction(control, Op.WRITE0)
                 c1_instruction = Instruction(target, Op.WRITE1)
                 instruction_sequence = [q_instruction, c0_instruction, c1_instruction]
-                answer.append(POMDPAction(f"CX{v_control}_{v_target}", instruction_sequence))
+                answer.append(POMDPAction(f"CX{control}_{target}", instruction_sequence))
                 if target not in visited:
                     q.push((target, current_depth + 1))
                 visited.add(target)

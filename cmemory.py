@@ -1,5 +1,5 @@
 from typing import Dict
-from qpu_utils import Op
+from qpu_utils import Op, bin_to_int
 
 
 class ClassicalState:
@@ -28,7 +28,7 @@ class ClassicalState:
             answer.append(str(int(self.sparse_vector[key])))
         if len(answer) == 0:
             answer = ['0']
-        return "".join(answer)
+        return str(bin_to_int("".join(answer)))
     
     def __repr__(self):
         return str(self)
