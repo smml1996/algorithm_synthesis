@@ -119,6 +119,12 @@ class AlgorithmNode:
             "case1": case1,
         }
 
+    def has_meas_instruction(self) -> bool:
+        for instruction in self.instruction_sequence:
+            assert isinstance(instruction, Instruction)
+            if instruction.is_meas_instruction():
+                return True
+        return False
       
 def execute_algorithm(node: AlgorithmNode, qpu: QuantumCircuit, count_ins=0, cbits=None):
     if node is None:

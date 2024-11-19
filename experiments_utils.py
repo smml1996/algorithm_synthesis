@@ -1,16 +1,149 @@
 from contextlib import contextmanager
 from enum import Enum
 import json
+from math import ceil
 import os
 import signal
 import time
 from typing import Any, Callable, Dict, List
 
-from ibm_noise_models import HardwareSpec, NoiseModel, load_config_file
-from pomdp import POMDPAction, POMDPVertex, build_pomdp
+from algorithm import AlgorithmNode
+from ibm_noise_models import HardwareSpec, Instruction, NoiseModel, load_config_file
+from qpu_utils import Op
 from utils import find_enum_object
 import subprocess
 
+class BitflipExperimentID(Enum):
+    IPMA = "ipma"
+    IPMA2 = "ipma2"
+    CXH = "cxh"
+    
+    @property
+    def exp_name(self):
+        return "bitflip"
+    
+class PhaseflipExperimentID(Enum):
+    IPMA = "ipma"
+    CXH = "cxh"
+    @property
+    def exp_name(self):
+        return "phaseflip"
+
+class GHZExperimentID(Enum):
+    EXP1 = "exp1"
+    @property
+    def exp_name(self):
+        return "ghz"
+    
+def get_pomdp_path(config, hardware_spec, embedding_index):
+    return os.path.join(config["output_dir"], "pomdps", f"{hardware_spec.value}_{embedding_index}.txt")
+
+def get_default_ghz(noise_model, embedding) -> AlgorithmNode:
+    assert isinstance(noise_model, NoiseModel)
+    cx01_instruction = Instruction(embedding[1], Op.CNOT, control=embedding[0])
+    cx12_instruction = Instruction(embedding[2], Op.CNOT, control=embedding[1])
+    if (cx01_instruction in noise_model.instructions_to_channel.keys()) and (cx12_instruction in noise_model.instructions_to_channel.keys()) :
+    
+        node1 = AlgorithmNode("H0", [Instruction(embedding[0], Op.H)])
+        node2 = AlgorithmNode("CX01", [cx01_instruction])
+        node3 = AlgorithmNode("CX12", [cx12_instruction])
+        node1.next_ins = node2
+        node2.next_ins = node3    
+        return node1
+    else:
+        return None
+
+def get_custom_guarantee(algorithm_node: AlgorithmNode, pomdp_path, config):
+    project_settings = get_project_settings()
+    project_path = get_project_path()
+    algorithm_path = os.path.join(project_path, config["output_dir"], f"temp_algorithm.json")
+    algorithm_file = open(algorithm_path, "w")
+    algorithm_file.write(json.dumps(algorithm_node.serialize()))
+    algorithm_file.close()
+    pomdp_path = os.path.join(project_path, pomdp_path)
+    return get_markov_chain_results(project_settings, algorithm_path, pomdp_path)
+
+def get_meas_sequence(num_meas, meas_action, flip_action, total_meas, count_ones=0):
+    if ceil(total_meas/2.0) <= count_ones:
+        return AlgorithmNode(flip_action.name, flip_action.instruction_sequence)
+    if num_meas == 0:
+        return None
+    
+    head = AlgorithmNode(meas_action.name, meas_action.instruction_sequence)
+    head.case0 = get_meas_sequence(num_meas-1, meas_action, flip_action, total_meas, count_ones)
+    head.case1 = get_meas_sequence(num_meas-1, meas_action, flip_action, total_meas, count_ones+1)
+    return head
+   
+def get_default_flip_algorithm(noise_model, embedding, horizon, experiment_id, get_experiments_actions) -> AlgorithmNode:
+    if isinstance(experiment_id, BitflipExperimentID):
+        experiment_actions = get_experiments_actions(noise_model, embedding, experiment_id)
+        head = AlgorithmNode(experiment_actions[0].name, experiment_actions[0].instruction_sequence)
+        flip_action = experiment_actions[2]
+        meas_action = experiment_actions[1]
+    else:
+        assert isinstance(experiment_id, PhaseflipExperimentID)
+        experiment_actions = get_experiments_actions(noise_model, embedding, experiment_id)
+        flip_action = experiment_actions[1]
+        meas_action = experiment_actions[0]
+        head = AlgorithmNode(experiment_actions[2].name, experiment_actions[-1].instruction_sequence)
+    num_meas = horizon-2
+    
+    
+    head.next_ins = get_meas_sequence(num_meas, meas_action, flip_action, total_meas=num_meas)
+    return head
+        
+def get_default_algorithm(noise_model, embedding, experiment_id, get_experiments_actions):
+    if isinstance(experiment_id, GHZExperimentID):
+        return get_default_ghz(noise_model, embedding)
+    if isinstance(experiment_id, BitflipExperimentID):
+        return get_default_flip_algorithm(noise_model, embedding, 7, BitflipExperimentID.IPMA2, get_experiments_actions)
+    return get_default_flip_algorithm(noise_model, embedding, 7, PhaseflipExperimentID.IPMA, get_experiments_actions)
+    
+def get_embedding_index(hardware_spec, embedding, experiment_id, get_hardware_embeddings):
+    embeddings = get_hardware_embeddings(hardware_spec, experiment_id=experiment_id)
+    for (index, embedding_) in enumerate(embeddings):
+        if embedding_ == embedding:
+            return index
+    raise Exception("Embedding not found")
+
+def get_guarantee(batch, hardware_spec, embedding_index, horizon, experiment_id):
+    exp_name = experiment_id.exp_name
+    experiment_enum = type(experiment_id)
+        
+    config_path = get_config_path(exp_name, experiment_id, batch)
+    config = load_config_file(config_path, experiment_enum)
+    output_dir = os.path.join(get_project_path(), config["output_dir"])
+    lambdas_file_path = os.path.join(output_dir, "lambdas.csv")
+    lambdas_file = open(lambdas_file_path)
+    
+    lines = lambdas_file.readlines()[1:]
+    for line in lines:
+        elements = line.split(",")
+        hardware = elements[0]
+        embedding = int(elements[1])
+        horizon_ = int(elements[2])
+        guarantee = round(float(elements[3]),3)
+        if hardware == hardware_spec.value and embedding == embedding_index and horizon == horizon_:
+            return guarantee
+    return None
+
+def get_embedding_guarantee(batch, hardware_spec, embedding_index, experiment_id, horizon):        
+    return get_guarantee(batch, hardware_spec, embedding_index, horizon, experiment_id)
+
+def get_guarantees(noise_model: NoiseModel, batch: int, hardware_spec: HardwareSpec, embedding: Dict[int, int], experiment_id: Any, horizon: int, get_experiments_actions, get_hardware_embeddings):
+    exp_name = experiment_id.exp_name
+    config = load_config_file(get_config_path(exp_name, experiment_id, batch), type(experiment_id))
+    embedding_index = get_embedding_index(hardware_spec, embedding, experiment_id, get_hardware_embeddings)
+    my_guarantee = round(get_embedding_guarantee(batch, hardware_spec, embedding_index, experiment_id, horizon),3)
+    
+    default_algorithm = get_default_algorithm(noise_model, embedding, experiment_id, get_experiments_actions)
+    if default_algorithm is None:
+        # default_algorithm = my_algorithm
+        default_guarantee = -1
+    else:
+        pomdp_path = get_pomdp_path(config, hardware_spec, embedding_index)
+        default_guarantee = round(get_custom_guarantee(default_algorithm, pomdp_path, config),3)
+    return my_guarantee, default_guarantee
 
 class TimeoutException(Exception): pass
 
@@ -182,27 +315,6 @@ def generate_configs(experiment_name: str, experiment_id: Enum, min_horizon, max
             f = open(config_path, "w")
             json.dump(config, f, indent=4)
             f.close()
-            
-def generate_pomdp(experiment_id: Any, ProblemInstance,  hardware_spec: HardwareSpec, 
-                embedding: Dict[int, int], get_experiments_actions:Callable[[NoiseModel, Dict[int, int], Enum], List[POMDPAction]], 
-                guard: Callable[[POMDPVertex, Dict[int, int], POMDPAction], bool], 
-                max_horizon: int, thermal_relaxation: bool, 
-                pomdp_write_path: str, return_pomdp=False, **kwargs):
-    noise_model = NoiseModel(hardware_spec, thermal_relaxation=thermal_relaxation)
-    problem_instance = ProblemInstance(kwargs)
-    actions = get_experiments_actions(noise_model, embedding, experiment_id)
-    initial_distribution = []
-    for s in problem_instance.initial_state:
-        initial_distribution.append((s, 1/len(problem_instance.initial_state)))
-
-    start_time = time.time()
-    pomdp = build_pomdp(actions, noise_model, max_horizon, embedding, initial_distribution=initial_distribution, guard=guard)
-    pomdp.optimize_graph(problem_instance)
-    end_time = time.time()
-    if return_pomdp:
-        return pomdp
-    pomdp.serialize(problem_instance, pomdp_write_path)
-    return end_time-start_time
 
 def default_load_embeddings(config, ExperimentIDObj: Enum):
     
@@ -238,50 +350,7 @@ def default_load_embeddings(config, ExperimentIDObj: Enum):
     raise Exception(f"could not load embeddings file {embeddings_path}")
 
 
-def generate_pomdps(config_path: str, ProblemInstance: Any, ExperimentIdObj: Enum, 
-                    get_experiments_actions:Callable[[NoiseModel, Dict[int, int], Enum], List[POMDPAction]], 
-                    guard: Callable[[POMDPVertex, Dict[int, int], POMDPAction], bool],
-                    load_embeddings: Callable[[str, Enum], List[Dict[int, int]]]=default_load_embeddings, 
-                    thermal_relaxation=False, **kwargs):
-    config = load_config_file(config_path, ExperimentIdObj)
-    experiment_id = config["experiment_id"]
-    assert isinstance(experiment_id, ExperimentIdObj)
-    
-    max_horizon = config["max_horizon"]
-    assert isinstance(max_horizon, int)
-    
-    # the file that contains the time to generate the POMDP is in this folder
-    directory_exists(config["output_dir"])
-        
-     # all pomdps will be outputed in this folder:
-    output_folder = os.path.join(config["output_dir"], "pomdps")
-    # check that there is a folder with the experiment id inside pomdps path
-    directory_exists(output_folder)
-
-    all_embeddings = load_embeddings(config, ExperimentIdObj)
-    
-    times_file_path = os.path.join(config["output_dir"], 'pomdp_times.csv')
-    times_file = open(times_file_path, "w")
-    times_file.write("backend,embedding,time\n")
-    for backend in HardwareSpec:
-        if backend.value in config["hardware"]:
-            # try:
-            embeddings = all_embeddings[backend]["embeddings"]
-            for (index, m) in enumerate(embeddings):
-                print(kwargs)
-                kwargs['kwargs']["embedding"] = m
-                print(backend, index, m)
-                print("after",kwargs)
-                time_taken = generate_pomdp(experiment_id, ProblemInstance, backend, m, get_experiments_actions, guard, max_horizon, thermal_relaxation, f"{output_folder}/{backend.value}_{index}.txt", kwargs)
-                if time_taken is not None:
-                    times_file.write(f"{backend.name},{index},{time_taken}\n")
-                times_file.flush()
-            # except Exception as err:
-            #     print(f"Unexpected {err=}, {type(err)=}")
-    times_file.close()
-        
-    
-    
+# C++ code    
 def get_bellman_value(project_settings, config_path) -> float:
     # # Path to your executable and optional arguments
     executable_path = project_settings["CPP_EXEC_PATH"]
@@ -299,10 +368,12 @@ def get_markov_chain_results(project_settings, algorithm_path, pomdp_path) ->flo
     executable_path = project_settings["CPP_EXEC_PATH"]
     
     args = ["exact", algorithm_path, pomdp_path]
+    
     result = subprocess.run([executable_path] + args, capture_output=True, text=True)
     try:
         return float(result.stdout)
     except:
+        print("tried mc with args", args)
         print(result.stderr)
         raise Exception(f"Could not convert executable to float when running {args}")
 

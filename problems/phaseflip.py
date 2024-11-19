@@ -19,9 +19,9 @@ sys.path.append(os.getcwd()+"/..")
 from qstates import QuantumState
 from ibm_noise_models import Instruction, MeasChannel, NoiseModel, get_ibm_noise_model, HardwareSpec, ibm_simulate_circuit, load_config_file
 import numpy as np
-from math import pi   
+from math import ceil, pi   
 from enum import Enum
-from experiments_utils import ReadoutNoise, default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_config_path, get_configs_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings
+from experiments_utils import PhaseflipExperimentID, ReadoutNoise, default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_config_path, get_configs_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings
 import cProfile
 import pstats
 
@@ -63,10 +63,6 @@ bell3_real_rho = [
                 ]
         
 bell_state_pts = [bell0_real_rho, bell1_real_rho, bell2_real_rho, bell3_real_rho]
-
-class PhaseflipExperimentID(Enum):
-    IPMA = "ipma"
-    CXH = "cxh"
 
 
 class PhaseFlipInstance:
@@ -476,7 +472,28 @@ def test_programs(config_path, shots=2000, factor=1):
                     output_file.flush()
     output_file.close()
     
+def get_meas_sequence(num_meas, meas_sequence, flip_sequence, total_meas, count_ones=0):
+    if ceil(total_meas/2.0) < count_ones:
+        return AlgorithmNode("Z0", flip_sequence)
+    if num_meas == 0:
+        return None
     
+    head = AlgorithmNode("P2", meas_sequence)
+    head.case0 = get_meas_sequence(num_meas-1, meas_sequence, flip_sequence, total_meas, count_ones)
+    head.case1 = get_meas_sequence(num_meas-1, meas_sequence, flip_sequence, total_meas, count_ones+1)
+    return head
+    
+    
+def get_default_phaseflip(noise_model, embedding, horizon, experiment_id=PhaseflipExperimentID.IPMA) -> AlgorithmNode:
+    experiment_actions = get_experiments_actions(noise_model, embedding, experiment_id)
+    head = AlgorithmNode("H", experiment_actions[-1].instruction_sequence)
+    num_meas = horizon-2
+    Z_sequence = experiment_actions[1].instruction_sequence
+    meas_sequence = experiment_actions[0].instruction_sequence
+    head.next_ins = get_meas_sequence(num_meas, meas_sequence, Z_sequence, total_meas=num_meas)
+    return head
+
+
 if __name__ == "__main__":
     arg_backend = sys.argv[1]
     Precision.PRECISION = MAX_PRECISION
@@ -512,7 +529,7 @@ if __name__ == "__main__":
         batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=allowed_hardware)
         for num_qubits in batches.keys():
             # generate_pomdps(get_config_path("phaseflip", PhaseflipExperimentID.IPMA, num_qubits))
-            generate_pomdps(get_config_path("phaseflip", PhaseflipExperimentID.CXH, num_qubits))
+            generate_pomdps()
         
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)
     

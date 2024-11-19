@@ -21,15 +21,11 @@ from ibm_noise_models import Instruction, MeasChannel, NoiseModel, get_ibm_noise
 import numpy as np
 from math import pi   
 from enum import Enum
-from experiments_utils import ReadoutNoise, default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_config_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings
+from experiments_utils import GHZExperimentID, ReadoutNoise, default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_config_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings
 from bitflip import does_result_contains_d
 
 WITH_TERMALIZATION = False
-MAX_PRECISION = 10
-
-class GHZExperimentID(Enum):
-    EXP1 = "exp1"
-    
+MAX_PRECISION = 10    
 
 class GHZInstance:
     def __init__(self, embedding):
@@ -241,7 +237,7 @@ def generate_pomdps(config_path):
             # except Exception as err:
             #     print(f"Unexpected {err=}, {type(err)=}")
     times_file.close()
-    
+
 if __name__ == "__main__":
     arg_backend = sys.argv[1]
     Precision.PRECISION = MAX_PRECISION

@@ -32,9 +32,9 @@ from bitflip import BitflipExperimentID
 from phaseflip import PhaseflipExperimentID
 
 
-BFS_DISTANCE = 2
+BFS_DISTANCE = 3
 WITH_THERMALIZATION = False
-LIMIT_EMBEDDINGS = 2
+LIMIT_EMBEDDINGS = 4
 
 class RouteExperimentID(Enum):
     EXP1 = "exp1"

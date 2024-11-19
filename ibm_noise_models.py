@@ -926,11 +926,7 @@ class NoiseModel:
 NoiselessX = XGate(label="noiseless_x")
 NoiselessZ = ZGate(label="noiseless_z")
 NoiselessCX = CXGate(label="noiseless_cx")
-NoiselessSX = SXGate(label="noiseless_sx")
-
-                    
-                
-                
+NoiselessSX = SXGate(label="noiseless_sx")          
 
 def instruction_to_ibm(qc, instruction_sequence, noiseless=False):
     for instruction in instruction_sequence:
@@ -979,7 +975,8 @@ def instruction_to_ibm(qc, instruction_sequence, noiseless=False):
             else:
                 qc.rz(instruction.params[0], instruction.target)
         else:
-            raise Exception(f"Instruction {instruction.name} could not be translated to IBM instruction. Missing implementation.")
+            if not instruction.is_classical():
+                raise Exception(f"Instruction {instruction.name} could not be translated to IBM instruction. Missing implementation.")
     
 def ibm_simulate_circuit(qc: QuantumCircuit, noise_model, initial_layout, seed=1):
     # Create noisy simulator backend
