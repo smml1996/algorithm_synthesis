@@ -13,6 +13,36 @@ from qpu_utils import Op
 from utils import find_enum_object
 import subprocess
 
+bell0_real_rho = [
+                    [0.5, 0, 0, 0.5],
+                    [0, 0, 0, 0],
+                    [0, 0, 0, 0],
+                    [0.5, 0, 0, 0.5],
+                ]
+        
+bell1_real_rho = [
+                    [0, 0, 0, 0],
+                    [0, 0.5, 0.5, 0],
+                    [0, 0.5, 0.5, 0],
+                    [0, 0, 0, 0],
+                ]
+        
+bell2_real_rho = [
+                    [0.5, 0, 0, -0.5],
+                    [0, 0, 0, 0],
+                    [0, 0, 0, 0],
+                    [-0.5, 0, 0, 0.5],
+                ]
+        
+bell3_real_rho = [
+                    [0, 0, 0, 0],
+                    [0, 0.5, -0.5, 0],
+                    [0, -0.5, 0.5, 0],
+                    [0, 0, 0, 0],
+                ]
+        
+bell_state_pts = [bell0_real_rho, bell1_real_rho, bell2_real_rho, bell3_real_rho]
+
 class BitflipExperimentID(Enum):
     IPMA = "ipma"
     IPMA2 = "ipma2"

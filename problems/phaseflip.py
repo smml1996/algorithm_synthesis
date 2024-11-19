@@ -21,7 +21,7 @@ from ibm_noise_models import Instruction, MeasChannel, NoiseModel, get_ibm_noise
 import numpy as np
 from math import ceil, pi   
 from enum import Enum
-from experiments_utils import PhaseflipExperimentID, ReadoutNoise, default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_config_path, get_configs_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings
+from experiments_utils import PhaseflipExperimentID, ReadoutNoise, default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_config_path, get_configs_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings, bell_state_pts
 import cProfile
 import pstats
 
@@ -31,38 +31,6 @@ from bitflip import does_result_contains_d
 WITH_TERMALIZATION = False
 MAX_PRECISION = 10
 TIME_OUT = 10800 # (in seconds) i.e 3 hours
-
-EMBEDDINGS_FILE = "embeddings.json"
-
-bell0_real_rho = [
-                    [0.5, 0, 0, 0.5],
-                    [0, 0, 0, 0],
-                    [0, 0, 0, 0],
-                    [0.5, 0, 0, 0.5],
-                ]
-        
-bell1_real_rho = [
-                    [0, 0, 0, 0],
-                    [0, 0.5, 0.5, 0],
-                    [0, 0.5, 0.5, 0],
-                    [0, 0, 0, 0],
-                ]
-        
-bell2_real_rho = [
-                    [0.5, 0, 0, -0.5],
-                    [0, 0, 0, 0],
-                    [0, 0, 0, 0],
-                    [-0.5, 0, 0, 0.5],
-                ]
-        
-bell3_real_rho = [
-                    [0, 0, 0, 0],
-                    [0, 0.5, -0.5, 0],
-                    [0, -0.5, 0.5, 0],
-                    [0, 0, 0, 0],
-                ]
-        
-bell_state_pts = [bell0_real_rho, bell1_real_rho, bell2_real_rho, bell3_real_rho]
 
 
 class PhaseFlipInstance:
@@ -289,7 +257,7 @@ def load_embeddings(config=None, config_path=None):
                 assert hardware_spec.value not in data.keys()
         
         return result
-    raise Exception(f"could not load embeddings file {POMDP_OUTPUT_DIR}{EMBEDDINGS_FILE}")
+    raise Exception(f"could not load embeddings file {embeddings_path}")
 
 
 def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: PhaseflipExperimentID):
@@ -418,81 +386,6 @@ def generate_pomdps(config_path):
             #     print(f"Unexpected {err=}, {type(err)=}")
     times_file.close()
 
-def test_programs(config_path, shots=2000, factor=1):
-    config = load_config_file(config_path, PhaseflipExperimentID)
-    experiment_id = config["experiment_id"]
-    if not os.path.exists(config["output_dir"]):
-        raise Exception("output_dir in config does not exists")
-    
-    lambdas_path = os.path.join(config["output_dir"], 'lambdas.csv')
-    if not os.path.exists(lambdas_path):
-        raise Exception(f"Guarantees not computed yet (file {lambdas_path} does not exists)")
-    
-    algorithms_path = os.path.join(config["output_dir"], "algorithms")
-    if not os.path.exists(algorithms_path):
-        raise Exception(f"Optimal algorithms not computed yet (directory algorithms{experiment_id.value}/ does not exists)")
-    
-    output_path = os.path.join(config["output_dir"], "real_vs_computed.csv")
-    output_file = open(output_path, "w")
-    output_file.write("backend,horizon,lambda,acc,diff\n")
-    
-    all_embeddings = load_embeddings(config=config)
-    
-    all_lambdas = parse_lambdas_file(config) 
-    
-    for backend in HardwareSpec: 
-        if backend.value in config["hardware"]:
-            embeddings = all_embeddings[backend]["embeddings"]
-            noise_model = NoiseModel(backend, thermal_relaxation=WITH_TERMALIZATION)
-            # we need to be able to translate the actions to the actual instructions for the qpu
-            actions_to_instructions = dict()
-            actions = get_experiments_actions(noise_model, {0:0, 1:1, 2:2}, experiment_id)
-            for action in actions:
-                actions_to_instructions[action.name] = action.instruction_sequence
-            actions_to_instructions["halt"] = []
-            for (index, embedding) in enumerate(embeddings):
-                lambdas_d = all_lambdas[backend.value][index]
-                m = embedding
-                ibm_phaseflip_instance = IBMPhaseFlipInstance(m)
-                
-                for horizon in range(config["min_horizon"], config["max_horizon"]+1):
-                    algorithm_path = os.path.join(algorithms_path, f"{backend.value}_{index}_{horizon}.json")
-                    
-                    # load algorithm json
-                    f_algorithm = open(algorithm_path)
-                    algorithm = AlgorithmNode(serialized=json.load(f_algorithm), actions_to_instructions=actions_to_instructions)
-                    f_algorithm.close()  
-                            
-                    acc = 0
-                    for _ in range(factor):
-                        acc += ibm_phaseflip_instance.ibm_execute_my_algo(algorithm, backend)
-                    acc /= factor  
-                    acc = round(acc, 3)
-                    output_file.write(f"{backend}-{index},{horizon},{lambdas_d[horizon]},{acc},{round(lambdas_d[horizon]-acc,3)}\n")
-                    output_file.flush()
-    output_file.close()
-    
-def get_meas_sequence(num_meas, meas_sequence, flip_sequence, total_meas, count_ones=0):
-    if ceil(total_meas/2.0) < count_ones:
-        return AlgorithmNode("Z0", flip_sequence)
-    if num_meas == 0:
-        return None
-    
-    head = AlgorithmNode("P2", meas_sequence)
-    head.case0 = get_meas_sequence(num_meas-1, meas_sequence, flip_sequence, total_meas, count_ones)
-    head.case1 = get_meas_sequence(num_meas-1, meas_sequence, flip_sequence, total_meas, count_ones+1)
-    return head
-    
-    
-def get_default_phaseflip(noise_model, embedding, horizon, experiment_id=PhaseflipExperimentID.IPMA) -> AlgorithmNode:
-    experiment_actions = get_experiments_actions(noise_model, embedding, experiment_id)
-    head = AlgorithmNode("H", experiment_actions[-1].instruction_sequence)
-    num_meas = horizon-2
-    Z_sequence = experiment_actions[1].instruction_sequence
-    meas_sequence = experiment_actions[0].instruction_sequence
-    head.next_ins = get_meas_sequence(num_meas, meas_sequence, Z_sequence, total_meas=num_meas)
-    return head
-
 
 if __name__ == "__main__":
     arg_backend = sys.argv[1]
@@ -533,14 +426,4 @@ if __name__ == "__main__":
         
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)
     
-    elif arg_backend == "simulator_test":
-        # step 4: simulate algorithms and compare accuracy with guarantees. Show that it is accurate
-        config_path = sys.argv[2]
-        test_programs(config_path)
-    
-    elif arg_backend == "backends_vs":
-        # simulate all synthesized algorithms in all backends
-        experiment_id = sys.argv[2]
-    else:
-        raise Exception("argument does not run any procedure in this script")
         

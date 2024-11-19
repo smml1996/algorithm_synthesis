@@ -21,46 +21,13 @@ from ibm_noise_models import Instruction, MeasChannel, NoiseModel, get_ibm_noise
 import numpy as np
 from math import ceil, pi   
 from enum import Enum
-from experiments_utils import BitflipExperimentID, ReadoutNoise, default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_config_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings
+from experiments_utils import BitflipExperimentID, ReadoutNoise, default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_config_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings, bell_state_pts
 import cProfile
 import pstats
 
 WITH_TERMALIZATION = False
 MAX_PRECISION = 10
 TIME_OUT = 10800 # (in seconds) i.e 3 hours
-
-EMBEDDINGS_FILE = "embeddings.json"
-
-bell0_real_rho = [
-                    [0.5, 0, 0, 0.5],
-                    [0, 0, 0, 0],
-                    [0, 0, 0, 0],
-                    [0.5, 0, 0, 0.5],
-                ]
-        
-bell1_real_rho = [
-                    [0, 0, 0, 0],
-                    [0, 0.5, 0.5, 0],
-                    [0, 0.5, 0.5, 0],
-                    [0, 0, 0, 0],
-                ]
-        
-bell2_real_rho = [
-                    [0.5, 0, 0, -0.5],
-                    [0, 0, 0, 0],
-                    [0, 0, 0, 0],
-                    [-0.5, 0, 0, 0.5],
-                ]
-        
-bell3_real_rho = [
-                    [0, 0, 0, 0],
-                    [0, 0.5, -0.5, 0],
-                    [0, -0.5, 0.5, 0],
-                    [0, 0, 0, 0],
-                ]
-        
-bell_state_pts = [bell0_real_rho, bell1_real_rho, bell2_real_rho, bell3_real_rho]
-
 
 
 class BitFlipInstance:

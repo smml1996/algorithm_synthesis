@@ -7,8 +7,6 @@ from utils import Precision
 P0 = [[1, 0], [0, 0]]
 P1 = [[0, 0], [0, 1]]
 
-
-
 class Op(Enum):
     # PAULI GATES
     X = "X"
