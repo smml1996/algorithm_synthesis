@@ -21,7 +21,7 @@ from ibm_noise_models import Instruction, MeasChannel, NoiseModel, get_ibm_noise
 import numpy as np
 from math import ceil, pi   
 from enum import Enum
-from experiments_utils import BitflipExperimentID, ReadoutNoise, default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_config_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings, bell_state_pts
+from experiments_utils import BitflipExperimentID, ReadoutNoise, directory_exists, generate_configs, generate_embeddings, get_config_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings, bell_state_pts, parse_lambdas_file
 import cProfile
 import pstats
 
@@ -351,29 +351,6 @@ def guard(vertex: POMDPVertex, embedding: Dict[int, int], action: POMDPAction):
         pt1 = qs1.single_partial_trace(index=embedding[2])
         return is_matrix_in_list(pt1, bell_state_pts)
     return True
-
-
-def parse_lambdas_file(config):
-    path = os.path.join(get_project_path(), config["output_dir"], "lambdas.csv")
-    f = open(path)
-    result = dict()
-    for line in f.readlines()[1:]:
-        elements = line.split(",")
-        hardware = elements[0]
-        embedding_index = int(elements[1])
-        horizon = int(elements[2])
-        lambda_ = float(elements[3])
-
-        if hardware not in result.keys():
-            result[hardware] = dict()
-            
-        if embedding_index not in result[hardware].keys():
-            result[hardware][embedding_index] = dict()
-            
-        assert horizon not in result[hardware][embedding_index].keys()
-        result[hardware][embedding_index][horizon] = lambda_
-    f.close()
-    return result
 
 def generate_pomdp(experiment_id: BitflipExperimentID, hardware_spec: HardwareSpec, 
                 embedding: Dict[int, int], pomdp_write_path: str, return_pomdp=False):
