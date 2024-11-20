@@ -976,15 +976,15 @@ def instruction_to_ibm(qc, instruction_sequence, noiseless=False):
             if not instruction.is_classical():
                 raise Exception(f"Instruction {instruction.name} could not be translated to IBM instruction. Missing implementation.")
     
-def ibm_simulate_circuit(qc: QuantumCircuit, noise_model, initial_layout, optimization_level=0,seed=1):
+def ibm_simulate_circuit(qc: QuantumCircuit, noise_model, initial_layout, optimization_level=0,seed=1,coupling_map=None):
+    print(coupling_map)
     # Create noisy simulator backend
     sim_noise = AerSimulator(method ='statevector', noise_model=noise_model)
     # Transpile circuit for noisy basis gates
-    circ_tnoise = transpile(qc, sim_noise, optimization_level=optimization_level, initial_layout=initial_layout)
+    circ_tnoise = transpile(qc, sim_noise, optimization_level=optimization_level, initial_layout=initial_layout, coupling_map=coupling_map)
     # Run and get counts
     
     result = sim_noise.run(circ_tnoise, run_options={"seed_simulator": seed}).result()
-    
     return np.asarray(result.data()['res'])
 
 def get_num_qubits_to_hardware(with_thermalization: bool, hardware_str=True, allowed_hardware=HardwareSpec) -> Dict[int, HardwareSpec|str]:

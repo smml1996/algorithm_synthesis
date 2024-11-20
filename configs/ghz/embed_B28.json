@@ -1,12 +1,12 @@
 {
-    "name": "B53",
-    "experiment_id": "exp1",
+    "name": "B28",
+    "experiment_id": "embed",
     "min_horizon": 3,
     "max_horizon": 3,
-    "output_dir": "results/ghz/exp1/B53",
+    "output_dir": "results/ghz/embed/B28",
     "algorithms_file": "",
     "hardware": [
-        "fake_rochester"
+        "fake_cambridge"
     ],
     "opt_technique": "max",
     "verbose": 0,
