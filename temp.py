@@ -11,7 +11,7 @@ qc.cx(0,1)
 qc.cx(1,2)
 sim_noise = AerSimulator(method ='statevector', noise_model=noise_model)
 
-new_circuit = transpile(qc, sim_noise, optimization_level=3, initial_layout={})
+new_circuit = transpile(qc, sim_noise, optimization_level=3, initial_layout=[5,1,2])
 print(new_circuit)
 for data in new_circuit.data:
     print(data.operation)

@@ -21,8 +21,7 @@ from ibm_noise_models import Instruction, MeasChannel, NoiseModel, get_ibm_noise
 import numpy as np
 from math import pi   
 from enum import Enum
-from experiments_utils import GHZExperimentID, ReadoutNoise, default_load_embeddings, directory_exists, generate_configs, generate_embeddings, generate_pomdps, get_config_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings
-from bitflip import does_result_contains_d
+from experiments_utils import GHZExperimentID, generate_configs, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_num_qubits_to_hardware, get_project_settings
 
 WITH_TERMALIZATION = False
 MAX_PRECISION = 10    
@@ -124,6 +123,19 @@ def get_hardware_embeddings(backend: HardwareSpec, experiment_id) -> List[Dict[i
         raise Exception("Implement me")
 
 
+def get_coupling_map(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: GHZExperimentID):
+    if experiment_id == GHZExperimentID.EXP1:    
+        answer = []
+        for (v_control, control) in embedding.items():
+            for (v_target, target) in embedding.items():
+                if control!= target:
+                    instruction = Instruction(target, Op.CNOT, control=control)
+                    if instruction in noise_model.instructions_to_channel.keys():
+                        answer.append([control, target])
+        return answer
+    else:
+        raise Exception(f"No channels specified for experiment {experiment_id}")
+    
 def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: GHZExperimentID):
     if experiment_id == GHZExperimentID.EXP1:
         if noise_model.basis_gates in [BasisGates.TYPE1, BasisGates.TYPE6]:
@@ -161,6 +173,58 @@ def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], e
     else:
         raise Exception(f"No channels specified for experiment {experiment_id}")
 
+def get_allowed_hardware(experiment_id):
+    allowed_hardware = []
+    if experiment_id == GHZExperimentID.EXP1:
+        for hardware in HardwareSpec:
+            noise_model = NoiseModel(hardware, thermal_relaxation=WITH_TERMALIZATION)
+            if noise_model.num_qubits >= 14:
+                allowed_hardware.append(hardware)
+    elif experiment_id == GHZExperimentID.EMBED:
+        for hardware in HardwareSpec:
+            noise_model = NoiseModel(hardware, thermal_relaxation=WITH_TERMALIZATION)
+            qubit_choices = get_qubit_choices(noise_model)
+            if qubit_choices <= 10e9:
+                allowed_hardware.append(hardware)
+    return allowed_hardware
+      
+class IBMGHZInstance:
+    def __init__(self, embedding) -> None:
+        self.embedding = embedding
+        
+        new_embedding = dict()
+        values = sorted(self.embedding.values())
+        for (key, value) in self.embedding.items():
+            new_embedding[key] = get_index(value, values)
+        self.ghz_instance = GHZInstance(new_embedding)
+
+    @staticmethod
+    def prepare_initial_state(qc: QuantumCircuit, bell_index: int):
+        qc.h(0)
+        qc.cx(0, 1)
+        if bell_index == 1:
+            qc.x(0)
+        elif bell_index == 2:
+            qc.z(0)
+        elif bell_index == 3:
+            qc.x(0)
+            qc.z(0)
+        else:
+            assert(bell_index == 0)
+
+    def is_target_qs(self, state_vector):
+        assert len(state_vector) == 8 # 3 qubits
+        qs = None
+        for (index, amp) in enumerate(state_vector):
+            if not isclose(amp, 0.0, abs_tol=Precision.isclose_abstol):
+                if qs is None:
+                    qs = QuantumState(index, amp, qubits_used=list(self.embedding.keys()))
+                else:
+                    assert qs.get_amplitude(index) == 0.0
+                    qs.insert_amplitude(index, amp) 
+
+        return self.ghz_instance.get_reward((qs, None)) == 1.00    
+        
 if __name__ == "__main__":
     arg_backend = sys.argv[1]
     Precision.PRECISION = MAX_PRECISION
@@ -168,23 +232,26 @@ if __name__ == "__main__":
     settings = get_project_settings()
     project_path = settings["PROJECT_PATH"]
     
-    allowed_hardware = []
-    for hardware in HardwareSpec:
-        noise_model = NoiseModel(hardware, thermal_relaxation=WITH_TERMALIZATION)
-        if noise_model.num_qubits >= 14:
-            allowed_hardware.append(hardware)
     if arg_backend == "gen_configs":
         # step 0
-        generate_configs(experiment_id=GHZExperimentID.EXP1, min_horizon=3, max_horizon=4, allowed_hardware=allowed_hardware)
+        generate_configs(experiment_id=GHZExperimentID.EXP1, min_horizon=3, max_horizon=3, allowed_hardware=get_allowed_hardware(GHZExperimentID.EXP1))
+        generate_configs(experiment_id=GHZExperimentID.EMBED, min_horizon=3, max_horizon=3, allowed_hardware=get_allowed_hardware(GHZExperimentID.EMBED))
     elif arg_backend == "embeddings":
         # generate paper embeddings
-        batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=allowed_hardware)
-        for num_qubits in batches.keys():
-            generate_embeddings(GHZExperimentID.EXP1, num_qubits, get_hardware_embeddings=get_hardware_embeddings)
+        for experiment_id in GHZExperimentID:
+            batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=get_allowed_hardware(experiment_id))
+            for num_qubits in batches.keys():
+                generate_embeddings(GHZExperimentID.EXP1, num_qubits, get_hardware_embeddings=get_hardware_embeddings)
     elif arg_backend == "all_pomdps":
-        batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=allowed_hardware)
-        for num_qubits in batches.keys():
-            generate_pomdps(GHZExperimentID.EXP1, num_qubits, get_experiments_actions, GHZInstance)
+        for experiment_id in GHZExperimentID:
+            allowed_hardware = get_allowed_hardware(experiment_id)
+            batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=allowed_hardware)
+            for num_qubits in batches.keys():
+                generate_pomdps(GHZExperimentID.EXP1, num_qubits, get_experiments_actions, GHZInstance)
+    elif arg_backend == "mc_exp1":
+
+        for optimization_level in [0,1,2,3]:
+            generate_mc_guarantees_file(GHZExperimentID.EXP1, get_allowed_hardware(GHZExperimentID.EXP1), get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION, optimization_level=optimization_level, IBMInstanceObj=IBMGHZInstance, file_posfix=f"exp1{optimization_level}", factor=8, get_coupling_map=get_coupling_map)
 
         
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)

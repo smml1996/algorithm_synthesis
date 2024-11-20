@@ -2,7 +2,7 @@
     "name": "B16",
     "experiment_id": "exp1",
     "min_horizon": 3,
-    "max_horizon": 4,
+    "max_horizon": 3,
     "output_dir": "results/ghz/exp1/B16",
     "algorithms_file": "",
     "hardware": [
