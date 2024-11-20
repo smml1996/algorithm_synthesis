@@ -21,7 +21,7 @@ from ibm_noise_models import Instruction, MeasChannel, NoiseModel, get_ibm_noise
 import numpy as np
 from math import pi   
 from enum import Enum
-from experiments_utils import GHZExperimentID, ReadoutNoise, default_load_embeddings, directory_exists, generate_configs, generate_embeddings, get_config_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings
+from experiments_utils import GHZExperimentID, ReadoutNoise, default_load_embeddings, directory_exists, generate_configs, generate_embeddings, generate_pomdps, get_config_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings
 from bitflip import does_result_contains_d
 
 WITH_TERMALIZATION = False
@@ -188,56 +188,6 @@ def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], e
     else:
         raise Exception(f"No channels specified for experiment {experiment_id}")
 
-def generate_pomdp(experiment_id: GHZExperimentID, hardware_spec: HardwareSpec, 
-                embedding: Dict[int, int], pomdp_write_path: str, return_pomdp=False):
-    noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_TERMALIZATION)
-    ghz_instance = GHZInstance(embedding)
-    actions = get_experiments_actions(noise_model, embedding, experiment_id)
-    initial_distribution = []
-    assert len(ghz_instance.initial_state) == 1
-    initial_distribution.append((ghz_instance.initial_state[0], 1.0))
-    start_time = time.time()
-    pomdp = build_pomdp(actions, noise_model, 4, embedding, initial_distribution=initial_distribution, guard=default_guard)
-    pomdp.optimize_graph(ghz_instance)
-    end_time = time.time()
-    if return_pomdp:
-        return pomdp
-    pomdp.serialize(ghz_instance, pomdp_write_path)
-    return end_time-start_time
-
-def generate_pomdps(config_path):
-    config = load_config_file(config_path, GHZExperimentID)
-    experiment_id = config["experiment_id"]
-    assert isinstance(experiment_id, GHZExperimentID)
-    
-    # the file that contains the time to generate the POMDP is in this folder
-    output_dir = os.path.join(get_project_path(), config["output_dir"])
-    directory_exists(output_dir)
-        
-     # all pomdps will be outputed in this folder:
-    output_folder = os.path.join(output_dir, "pomdps")
-    # check that there is a folder with the experiment id inside pomdps path
-    directory_exists(output_folder)
-
-    all_embeddings = load_embeddings(config=config)
-    times_file_path = os.path.join(output_dir, 'pomdp_times.csv')
-    times_file = open(times_file_path, "w")
-    times_file.write("backend,embedding,time\n")
-    for backend in HardwareSpec:
-        if backend.value in config["hardware"]:
-            # try:
-            embeddings = all_embeddings[backend]["embeddings"]
-            
-            for (index, m) in enumerate(embeddings):
-                print(backend, index, m)
-                time_taken = generate_pomdp(experiment_id, backend, m, f"{output_folder}/{backend.value}_{index}.txt")
-                if time_taken is not None:
-                    times_file.write(f"{backend.name},{index},{time_taken}\n")
-                times_file.flush()
-            # except Exception as err:
-            #     print(f"Unexpected {err=}, {type(err)=}")
-    times_file.close()
-
 if __name__ == "__main__":
     arg_backend = sys.argv[1]
     Precision.PRECISION = MAX_PRECISION
@@ -250,20 +200,18 @@ if __name__ == "__main__":
         noise_model = NoiseModel(hardware, thermal_relaxation=WITH_TERMALIZATION)
         if noise_model.num_qubits >= 14:
             allowed_hardware.append(hardware)
-            
     if arg_backend == "gen_configs":
         # step 0
-        generate_configs(experiment_name="ghz", experiment_id=GHZExperimentID.EXP1, min_horizon=3, max_horizon=4, allowed_hardware=allowed_hardware)
+        generate_configs(experiment_id=GHZExperimentID.EXP1, min_horizon=3, max_horizon=4, allowed_hardware=allowed_hardware)
     elif arg_backend == "embeddings":
         # generate paper embeddings
         batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=allowed_hardware)
         for num_qubits in batches.keys():
-            ipma_config_path = get_config_path("ghz", GHZExperimentID.EXP1, num_qubits)
-            generate_embeddings(config_path=ipma_config_path, experiment_enum=GHZExperimentID, get_hardware_embeddings=get_hardware_embeddings)
+            generate_embeddings(GHZExperimentID.EXP1, num_qubits, get_hardware_embeddings=get_hardware_embeddings)
     elif arg_backend == "all_pomdps":
         batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=allowed_hardware)
         for num_qubits in batches.keys():
-            generate_pomdps(get_config_path("ghz", GHZExperimentID.EXP1, num_qubits))
+            generate_pomdps(GHZExperimentID.EXP1, num_qubits, get_experiments_actions, GHZInstance)
 
         
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)

@@ -366,17 +366,16 @@ if __name__ == "__main__":
     Precision.update_threshold()
     
     if arg_backend == "gen_configs":
-        generate_configs("H2", H2ExperimentID.P0_CliffordT, 4, 5, allowed_hardware=P0_ALLOWED_HARDWARE)
+        generate_configs(H2ExperimentID.P0_CliffordT, 4, 5, allowed_hardware=P0_ALLOWED_HARDWARE)
         
-        generate_configs("H2", H2ExperimentID.P0_Rotation, 4, 5, allowed_hardware=P0_ALLOWED_HARDWARE)
+        generate_configs(H2ExperimentID.P0_Rotation, 4, 5, allowed_hardware=P0_ALLOWED_HARDWARE)
     if arg_backend == "embeddings":
         batches = get_num_qubits_to_hardware(WITH_THERMALIZATION, allowed_hardware=P0_ALLOWED_HARDWARE)
         statistics = dict()
         for num_qubits in batches.keys():
             for experiment_id in H2ExperimentID:
-                config_path = get_config_path("H2", experiment_id, num_qubits)
-                print(config_path)
-                generate_embeddings(config_path=config_path, experiment_enum=H2ExperimentID, experiment_id=experiment_id, get_hardware_embeddings=get_hardware_embeddings, statistics=statistics)
+                config_path = get_config_path(experiment_id, num_qubits)
+                generate_embeddings(experiment_id, num_qubits, get_hardware_embeddings)
 
     if arg_backend == "all_pomdps":
         batches = get_num_qubits_to_hardware(WITH_THERMALIZATION, allowed_hardware=P0_ALLOWED_HARDWARE)

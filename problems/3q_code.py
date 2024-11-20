@@ -309,8 +309,7 @@ def get_actions_to_instructions(noise_model, embedding, experiment_id):
 def load_algorithm(batch, hardware_spec, noise_model, embedding_index, experiment_id, embedding):
     horizon = get_horizon(experiment_id)
     experiment_obj = type(experiment_id)
-    exp_name = experiment_id.value
-    config_path = get_config_path(exp_name, experiment_id, batch)
+    config_path = get_config_path(experiment_id, batch)
     config = load_config_file(config_path, experiment_obj)
     output_dir = os.path.join(get_project_path(), config["output_dir"])
     algorithms_path = os.path.join(output_dir, "algorithms")

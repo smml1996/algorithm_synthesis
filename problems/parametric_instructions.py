@@ -713,7 +713,7 @@ if __name__ == "__main__":
                 for (horizon, reps) in zip(horizons, reps_values):
                     # experiment_id/hardware_spec-embeddingIndex-reps/{{results}}
                     batches = get_experiment_batches(experiment_id, reps=reps)
-                    generate_configs("param_ins", experiment_id, min_horizon=horizon, max_horizon=horizon, allowed_hardware=HardwareSpec, batches=batches, opt_technique=opt_technique, reps=reps)
+                    generate_configs(experiment_id, min_horizon=horizon, max_horizon=horizon, allowed_hardware=HardwareSpec, batches=batches, opt_technique=opt_technique, reps=reps)
         
     elif arg_backend == "embeddings":
         settings = get_project_settings()
@@ -725,7 +725,7 @@ if __name__ == "__main__":
                     statistics_file.write("hardware_spec,address,instruction,succ_prob,least_noisy\n")
                     batches = get_experiment_batches(experiment_id, reps=reps)
                     for batch_name in batches.keys():
-                        config_path = get_config_path("param_ins", experiment_id, batch_name)
+                        config_path = get_config_path(experiment_id, batch_name)
                         config = load_config_file(config_path, ParamInsExperimentId)
                         directory_exists(config["output_dir"])
                         assert len(config["hardware"]) == 1
@@ -742,7 +742,7 @@ if __name__ == "__main__":
         experiment_id = ParamInsExperimentId.H2Mol_Q1
         batches = get_experiment_batches(experiment_id)
         for batch_name in batches.keys():
-            config_path = get_config_path("param_ins", experiment_id, batch_name)
+            config_path = get_config_path(experiment_id, batch_name)
             config = load_config_file(config_path, ParamInsExperimentId)
             directory_exists(config["output_dir"])
             assert isinstance(int, config["reps"])
@@ -753,7 +753,7 @@ if __name__ == "__main__":
             results_summary_file.write(line)
             
             # generate embeddings
-            generate_embeddings(config_path=config_path, experiment_enum=ParamInsExperimentId, experiment_id=ParamInsExperimentId.H2Mol_Q1, get_hardware_embeddings=get_hardware_embeddings)
+            generate_embeddings(ParamInsExperimentId.H2Mol_Q1, batch_name, get_hardware_embeddings)
             
             output_folder = os.path.join(config["output_dir"], "pomdps")
             # check that there is a folder with the experiment id inside pomdps path
@@ -817,7 +817,7 @@ if __name__ == "__main__":
         batches = get_experiment_batches(experiment_id)
         for batch_name in batches.keys():
             print(batch_name)
-            config_path = get_config_path("param_ins", experiment_id, batch_name)
+            config_path = get_config_path(experiment_id, batch_name)
             config = load_config_file(config_path, ParamInsExperimentId)
             
             directory_exists(os.path.join(config["output_dir"], "pomdps"))

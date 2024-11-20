@@ -21,7 +21,7 @@ from ibm_noise_models import Instruction, MeasChannel, NoiseModel, get_ibm_noise
 import numpy as np
 from math import ceil, pi   
 from enum import Enum
-from experiments_utils import PhaseflipExperimentID, ReadoutNoise, directory_exists, generate_configs, generate_embeddings, get_config_path, get_configs_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings, bell_state_pts
+from experiments_utils import PhaseflipExperimentID, ReadoutNoise, bitflips_guard, directory_exists, generate_configs, generate_embeddings, generate_pomdps, get_config_path, get_configs_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings, bell_state_pts
 import cProfile
 import pstats
 
@@ -144,8 +144,7 @@ def get_selected_couplers(noise_model, target):
     first_pair = (couplers[0], couplers[1]) # most noisy pair of couplers for this target
     return first_pair
 
-def get_hardware_embeddings(backend: HardwareSpec, **kwargs) -> List[Dict[int, int]]:
-    experiment_id = kwargs["experiment_id"]
+def get_hardware_embeddings(backend: HardwareSpec, experiment_id) -> List[Dict[int, int]]:
     result = []
     noise_model = NoiseModel(backend, thermal_relaxation=WITH_TERMALIZATION)
     assert noise_model.num_qubits >= 14
@@ -172,7 +171,7 @@ class IBMPhaseFlipInstance:
         self.phaseflip_instance = PhaseFlipInstance(new_embedding)
 
     @staticmethod
-    def prepare_bell_state(qc: QuantumCircuit, bell_index: int):
+    def prepare_initial_state(qc: QuantumCircuit, bell_index: int):
         qc.h(0)
         qc.cx(0, 1)
         if bell_index == 1:
@@ -195,70 +194,7 @@ class IBMPhaseFlipInstance:
                 else:
                     assert qs.get_amplitude(index) == 0.0
                     qs.insert_amplitude(index, amp) 
-
         return self.phaseflip_instance.is_target_qs((qs, None))
-    
-    def ibm_execute_my_algo(self, alg, backend, log=None):
-        accuracy = 0
-        
-        ibm_noise_model = get_ibm_noise_model(backend, thermal_relaxation=WITH_TERMALIZATION)
-        
-        if log is not None:
-            log_file = open(log, "w")
-
-        for bell_state_index in range(4):
-            qr = QuantumRegister(3)
-            cr = ClassicalRegister(3)
-            qc = QuantumCircuit(qr, cr)
-            initial_layout = {qr[0]: self.embedding[0], qr[1]:self.embedding[1], qr[2]:self.embedding[2]}
-            IBMPhaseFlipInstance.prepare_bell_state(qc, bell_state_index)
-            assert isinstance(alg, AlgorithmNode)
-            execute_algorithm(alg, qc, cbits=cr)
-            qc.save_statevector('res', pershot=True)
-            state_vs = ibm_simulate_circuit(qc, ibm_noise_model, initial_layout)
-            for state in state_vs:
-                if self.is_target_qs(state):
-                    accuracy += 1
-        if log is not None:
-            log_file.close()
-        return round(accuracy/(1024*4), 3)
-
-def load_embeddings(config=None, config_path=None):
-    if config is None:
-        assert config_path is not None
-        config = load_config_file(config_path, PhaseflipExperimentID)
-    
-    embeddings_path = get_embeddings_path(config)
-    
-    experiment_id = config["experiment_id"]
-    assert isinstance(experiment_id, PhaseflipExperimentID)
-    
-    with open(embeddings_path, 'r') as file:
-        result = dict()
-        data = json.load(file)
-        result["count"] = data["count"]
-
-        for hardware_spec in HardwareSpec:
-            if (hardware_spec.value in config["hardware"]):
-                result[hardware_spec] = dict()
-                result[hardware_spec]["count"] = data[hardware_spec.value]["count"]
-                result[hardware_spec]["embeddings"] = []
-
-                for embedding in data[hardware_spec.value]["embeddings"]:
-                    d = dict()
-                    for (key, value) in embedding.items():
-                        d[int(key)] = int(value)
-                    if experiment_id == PhaseflipExperimentID.CXH:
-                        temp = d[2]
-                        d[2] = d[1]
-                        d[1] = temp
-                    result[hardware_spec]["embeddings"].append(d)
-            else:
-                assert hardware_spec.value not in data.keys()
-        
-        return result
-    raise Exception(f"could not load embeddings file {embeddings_path}")
-
 
 def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: PhaseflipExperimentID):
     if experiment_id == PhaseflipExperimentID.IPMA:
@@ -312,79 +248,6 @@ def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], e
         CX21 = POMDPAction("CX21", [Instruction(embedding[1], Op.CNOT, control=embedding[2])])
         CX01 = POMDPAction("CX01", [Instruction(embedding[1], Op.CNOT, control=embedding[0])])
         return [H0, H1, CX21, CX01, P2]
-    
-
-def guard(vertex: POMDPVertex, embedding: Dict[int, int], action: POMDPAction):
-    if action.instruction_sequence[0].op != Op.MEAS:
-        return True
-    assert isinstance(vertex, POMDPVertex)
-    assert isinstance(embedding, dict)
-    assert isinstance(action, POMDPAction)
-    qs = vertex.quantum_state
-    meas_instruction = Instruction(embedding[2], Op.MEAS)
-    qs0 = qmemory.handle_write(qs, meas_instruction.get_gate_data(is_meas_0=True))
-    qs1 = qmemory.handle_write(qs, meas_instruction.get_gate_data(is_meas_0=False))
-
-    if qs0 is not None:
-        pt0 = qs0.single_partial_trace(index=embedding[2])
-        if not is_matrix_in_list(pt0, bell_state_pts):
-            return False
-    
-    if qs1 is not None:
-        pt1 = qs1.single_partial_trace(index=embedding[2])
-        return is_matrix_in_list(pt1, bell_state_pts)
-    return True
-
-def generate_pomdp(experiment_id: PhaseflipExperimentID, hardware_spec: HardwareSpec, 
-                embedding: Dict[int, int], pomdp_write_path: str, return_pomdp=False):
-    noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_TERMALIZATION)
-    phaseflip_instance = PhaseFlipInstance(embedding)
-    actions = get_experiments_actions(noise_model, embedding, experiment_id)
-    initial_distribution = []
-    for s in phaseflip_instance.initial_state:
-        initial_distribution.append((s, 0.25))
-
-    start_time = time.time()
-    pomdp = build_pomdp(actions, noise_model, 7, embedding, initial_distribution=initial_distribution, guard=guard) # WARNING: 7 is the horizon for which we are interested in this particular experiment for the phaseflip problem
-    pomdp.optimize_graph(phaseflip_instance)
-    end_time = time.time()
-    if return_pomdp:
-        return pomdp
-    pomdp.serialize(phaseflip_instance, pomdp_write_path)
-    return end_time-start_time
-    
-def generate_pomdps(config_path):
-    config = load_config_file(config_path, PhaseflipExperimentID)
-    experiment_id = config["experiment_id"]
-    assert isinstance(experiment_id, PhaseflipExperimentID)
-    
-    # the file that contains the time to generate the POMDP is in this folder
-    output_dir = os.path.join(get_project_path(), config["output_dir"])
-    directory_exists(output_dir)
-        
-     # all pomdps will be outputed in this folder:
-    output_folder = os.path.join(output_dir, "pomdps")
-    # check that there is a folder with the experiment id inside pomdps path
-    directory_exists(output_folder)
-
-    all_embeddings = load_embeddings(config=config)
-    
-    times_file_path = os.path.join(output_dir, 'pomdp_times.csv')
-    times_file = open(times_file_path, "w")
-    times_file.write("backend,embedding,time\n")
-    for backend in HardwareSpec:
-        if backend.value in config["hardware"]:
-            # try:
-            embeddings = all_embeddings[backend]["embeddings"]
-            for (index, m) in enumerate(embeddings):
-                print(backend, index, m)
-                time_taken = generate_pomdp(experiment_id, backend, m, f"{output_folder}/{backend.value}_{index}.txt")
-                if time_taken is not None:
-                    times_file.write(f"{backend.name},{index},{time_taken}\n")
-                times_file.flush()
-            # except Exception as err:
-            #     print(f"Unexpected {err=}, {type(err)=}")
-    times_file.close()
 
 
 if __name__ == "__main__":
@@ -401,28 +264,26 @@ if __name__ == "__main__":
             allowed_hardware.append(hardware)
     if arg_backend == "gen_configs":
         # step 0
-        generate_configs(experiment_name="phaseflip", experiment_id=PhaseflipExperimentID.IPMA, min_horizon=4, max_horizon=7, allowed_hardware=allowed_hardware)
-        generate_configs(experiment_name="phaseflip", experiment_id=PhaseflipExperimentID.CXH, min_horizon=4, max_horizon=7, allowed_hardware=allowed_hardware)
+        generate_configs(experiment_id=PhaseflipExperimentID.IPMA, min_horizon=4, max_horizon=7, allowed_hardware=allowed_hardware)
+        generate_configs(experiment_id=PhaseflipExperimentID.CXH, min_horizon=4, max_horizon=7, allowed_hardware=allowed_hardware)
     elif arg_backend == "embeddings":
         # generate paper embeddings
         batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=allowed_hardware)
         for num_qubits in batches.keys():
-            ipma_config_path = get_config_path("phaseflip", PhaseflipExperimentID.IPMA, num_qubits)
-            generate_embeddings(config_path=ipma_config_path, experiment_enum=PhaseflipExperimentID, get_hardware_embeddings=get_hardware_embeddings, experiment_id=PhaseflipExperimentID.IPMA)
+            ipma_config_path = get_config_path(PhaseflipExperimentID.IPMA, num_qubits)
+            generate_embeddings(PhaseflipExperimentID.IPMA, num_qubits, get_hardware_embeddings)
             
-            cxh_config_path = get_config_path("phaseflip", PhaseflipExperimentID.CXH, num_qubits)
-            generate_embeddings(config_path=cxh_config_path, experiment_enum=PhaseflipExperimentID, get_hardware_embeddings=get_hardware_embeddings, experiment_id=PhaseflipExperimentID.CXH)
+            cxh_config_path = get_config_path( PhaseflipExperimentID.CXH, num_qubits)
+            generate_embeddings(PhaseflipExperimentID.CXH, num_qubits, get_hardware_embeddings)
     elif arg_backend == "all_pomdps":
         # TODO: clean me up
         # step 2: generate all pomdps
         # config_path = sys.argv[2]
         # generate_pomdps(config_path)
-        
-        # generate paper embeddings
         batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=allowed_hardware)
         for num_qubits in batches.keys():
-            # generate_pomdps(get_config_path("phaseflip", PhaseflipExperimentID.IPMA, num_qubits))
-            generate_pomdps()
+            generate_pomdps(PhaseflipExperimentID.IPMA, num_qubits, get_experiments_actions, PhaseFlipInstance, bitflips_guard)
+            
         
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)
     

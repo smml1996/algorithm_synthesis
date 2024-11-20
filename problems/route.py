@@ -349,13 +349,13 @@ if __name__ == "__main__":
             allowed_hardware.append(hardware)
     if arg_backend == "gen_configs":
         # step 0
-        generate_configs(experiment_name="route", experiment_id=RouteExperimentID.EXP1, min_horizon=BFS_DISTANCE, max_horizon=BFS_DISTANCE, allowed_hardware=allowed_hardware)
+        generate_configs(experiment_id=RouteExperimentID.EXP1, min_horizon=BFS_DISTANCE, max_horizon=BFS_DISTANCE, allowed_hardware=allowed_hardware)
     elif arg_backend == "embeddings":
         # generate paper embeddings
         batches = get_num_qubits_to_hardware(WITH_THERMALIZATION, allowed_hardware=allowed_hardware)
         for num_qubits in batches.keys():
-            exp1_config_path = get_config_path("route", RouteExperimentID.EXP1, num_qubits)
-            generate_embeddings(config_path=exp1_config_path, experiment_enum=RouteExperimentID, get_hardware_embeddings=get_hardware_embeddings, experiment_id=RouteExperimentID.EXP1)
+            exp1_config_path = get_config_path(RouteExperimentID.EXP1, num_qubits)
+            generate_embeddings(RouteExperimentID.EXP1, num_qubits, get_hardware_embeddings)
     elif arg_backend == "pomdp":
         config_path = sys.argv[2]
         generate_pomdps(config_path)
@@ -363,7 +363,7 @@ if __name__ == "__main__":
         # generate paper embeddings
         batches = get_num_qubits_to_hardware(WITH_THERMALIZATION, allowed_hardware=allowed_hardware)
         for num_qubits in batches.keys():
-            generate_pomdps(get_config_path("route", RouteExperimentID.EXP1, num_qubits))    
+            generate_pomdps(get_config_path( RouteExperimentID.EXP1, num_qubits))    
 
                 
 

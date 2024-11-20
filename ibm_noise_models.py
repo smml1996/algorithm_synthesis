@@ -87,8 +87,6 @@ def load_config_file(path: str, experimentID: Enum):
         result["hardware"] = [x.value for x in HardwareSpec]
     result["experiment_id"] = experiment_id
     f.close()
-    
-    print(result)
     return result
 
 def get_ibm_noise_model(hardware_spec: HardwareSpec, thermal_relaxation=True) -> IBMNoiseModel:
