@@ -79,6 +79,7 @@ class PhaseflipExperimentID(Enum):
 
 class GHZExperimentID(Enum):
     EXP1 = "exp1"
+    EMBED = "embed"
     @property
     def exp_name(self):
         return "ghz"
@@ -342,15 +343,14 @@ def get_default_flip_algorithm(noise_model, embedding, horizon, experiment_id, g
         meas_action = experiment_actions[0]
         head = AlgorithmNode(experiment_actions[2].name, experiment_actions[-1].instruction_sequence)
         
-        num_meas = horizon-1
+        num_meas = horizon-2
     
     
     head.next_ins = get_meas_sequence(num_meas, meas_action, flip_action, total_meas=num_meas)
     return head
         
 def get_default_algorithm(noise_model, embedding, experiment_id, get_experiments_actions, horizon):
-    if isinstance(experiment_id, GHZExperimentID):
-        return get_default_ghz(noise_model, embedding)
+    assert type(experiment_id) != GHZExperimentID
     if isinstance(experiment_id, BitflipExperimentID):
         return get_default_flip_algorithm(noise_model, embedding, horizon, BitflipExperimentID.IPMA2, get_experiments_actions)
     return get_default_flip_algorithm(noise_model, embedding, horizon, PhaseflipExperimentID.IPMA, get_experiments_actions)
@@ -391,17 +391,25 @@ def get_custom_guarantee(algorithm_node: AlgorithmNode, pomdp_path, config):
     print("********")
     return get_markov_chain_results(project_settings, algorithm_path, pomdp_path)
 
-def get_guarantees(noise_model: NoiseModel, batch: int, hardware_spec: HardwareSpec, embedding: Dict[int, int], experiment_id: Any, horizon: int, get_experiments_actions, get_hardware_embeddings=None, embedding_index=None):
+def get_guarantees(noise_model: NoiseModel, batch: int, hardware_spec: HardwareSpec, embedding: Dict[int, int], experiment_id: Any, horizon: int, get_experiments_actions, get_hardware_embeddings=None, embedding_index=None, optimization_level=1, IBMInstanceObj=None):
     config = load_config_file(get_config_path(experiment_id, batch), type(experiment_id))
     if embedding_index is None:
         embedding_index = get_embedding_index(hardware_spec, embedding, experiment_id, get_hardware_embeddings)
     my_guarantee = round(get_embedding_guarantee(batch, hardware_spec, embedding_index, horizon, experiment_id),3)
     
-    default_algorithm = get_default_algorithm(noise_model, embedding, experiment_id, get_experiments_actions, horizon)
-    if default_algorithm is None:
-        # default_algorithm = my_algorithm
-        default_guarantee = -1
+    if type(experiment_id)  == GHZExperimentID:
+        qr = QuantumRegister(3)
+        qc = QuantumCircuit(qr)
+        qc.h(0)
+        qc.cx(0,1)
+        qc.cx(1,0)
+        if experiment_id == GHZExperimentID.EXP1:
+            ibm_embedding = embedding
+        else:
+            ibm_embedding = {}
+        default_guarantee = round(get_qc_simulated_acc(qc, qr, ibm_embedding, hardware_spec, IBMInstanceObj, optimization_level=optimization_level, factor=2))
     else:
+        default_algorithm = get_default_algorithm(noise_model, embedding, experiment_id, get_experiments_actions, horizon)
         pomdp_path = get_pomdp_path(config, hardware_spec, embedding_index)
         default_guarantee = round(get_custom_guarantee(default_algorithm, pomdp_path, config),3)
     return my_guarantee, default_guarantee
@@ -413,7 +421,9 @@ def generate_mc_guarantees_file(experiment_id, allowed_hardware: List[HardwareSp
         "horizon",
         "my_guarantee",
         "baseline_guarantee",
-        "diff"
+        "diff",
+        "best_baseline",
+        "diff_best"
     ]
     
     project_path = get_project_path()
@@ -425,13 +435,15 @@ def generate_mc_guarantees_file(experiment_id, allowed_hardware: List[HardwareSp
     for (batch, hardware_specs) in batches.items():
         config_path = get_config_path(experiment_id, batch)
         config = load_config_file(config_path, type(experiment_id))
-        for horizon in range(config["min_horizon"], config["max_horizon"]+1):
-            for hardware_spec in hardware_specs:
-                noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_THERMALIZATION)
-                embeddings = get_hardware_embeddings(hardware_spec, experiment_id)
-                for (embedding_index, embedding) in enumerate(embeddings):
+        for hardware_spec in hardware_specs:
+            noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_THERMALIZATION)
+            embeddings = get_hardware_embeddings(hardware_spec, experiment_id)
+            for (embedding_index, embedding) in enumerate(embeddings):
+                best_baseline = 0
+                for horizon in range(config["min_horizon"], config["max_horizon"]+1):
                     my_guarantee, baseline_guarantee = get_guarantees(noise_model, batch, hardware_spec, embedding, experiment_id, horizon, get_experiments_actions, embedding_index=embedding_index)
-                    columns = [hardware_spec.value, embedding_index, horizon, my_guarantee, baseline_guarantee, my_guarantee - baseline_guarantee]
+                    best_baseline = max(baseline_guarantee, best_baseline)
+                    columns = [hardware_spec.value, embedding_index, horizon, my_guarantee, baseline_guarantee, my_guarantee - baseline_guarantee,  best_baseline, my_guarantee - best_baseline]
                     columns = [str(x) for x in columns]
                     outputfile.write(",".join(columns) + "\n")
                     
@@ -536,6 +548,20 @@ def bitflips_guard(vertex: POMDPVertex, embedding: Dict[int, int], action: POMDP
 
 
 ##### simulations ######
+def get_qc_simulated_acc(qc: QuantumCircuit, qr: QuantumRegister, embedding, backend: HardwareSpec, IBMProblemInstance, with_thermalization=False, optimization_level=0, factor=1):
+    
+    ibm_noise_model = get_ibm_noise_model(backend, thermal_relaxation=with_thermalization)
+    ibm_problem_instance = IBMProblemInstance(embedding)
+    initial_layout = dict()
+    for (key, val) in ibm_problem_instance.embedding.items():
+        initial_layout[qr[key]] = val
+    qc.save_statevector('res', pershot=True)
+    for i in range(factor):
+        state_vs = ibm_simulate_circuit(qc, ibm_noise_model, initial_layout, optimization_level=optimization_level)
+        for state in state_vs:
+            if ibm_problem_instance.is_target_qs(state):
+                accuracy += 1
+    return round(accuracy/(1024*factor), 3)
 
 def get_ibm_simulated_acc(alg: AlgorithmNode, embedding, backend: HardwareSpec, IBMProblemInstance,init_states=[0], with_thermalization=False):
     accuracy = 0

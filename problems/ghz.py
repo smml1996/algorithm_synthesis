@@ -98,57 +98,30 @@ def is_repeated_embedding(all_embeddings, current) -> bool:
             return True
     return False
      
-def get_hardware_embeddings(backend: HardwareSpec, **kwargs) -> List[Dict[int, int]]:
+def get_hardware_embeddings(backend: HardwareSpec, experiment_id) -> List[Dict[int, int]]:
     result = []
     noise_model = NoiseModel(backend, thermal_relaxation=WITH_TERMALIZATION)
-    assert noise_model.num_qubits >= 14
-    couplers = noise_model.get_most_noisy_couplers()
-    for (coupler, prob_) in couplers:
-        if len(result) == 3:
-            break
-        third_qubit = get_valid_third(noise_model, coupler)
-        if third_qubit is not None:
-            d_temp = dict()
-            d_temp[0] = coupler[0]
-            d_temp[1] = coupler[1]
-            d_temp[2] = third_qubit
-            assert third_qubit != coupler[0]
-            assert third_qubit != coupler[1]
-            assert coupler[0] != coupler[1]
-            if not is_repeated_embedding(result, d_temp):
-                result.append(deepcopy(d_temp))
-    return result   
-        
-        
-def load_embeddings(config=None, config_path=None):
-    if config is None:
-        assert config_path is not None
-        config = load_config_file(config_path, GHZExperimentID)
     
-    embeddings_path = get_embeddings_path(config)
-    experiment_id = config["experiment_id"]
-    assert isinstance(experiment_id, GHZExperimentID)
-    
-    with open(embeddings_path, 'r') as file:
-        result = dict()
-        data = json.load(file)
-        result["count"] = data["count"]
-
-        for hardware_spec in HardwareSpec:
-            if (hardware_spec.value in config["hardware"]):
-                result[hardware_spec] = dict()
-                result[hardware_spec]["count"] = data[hardware_spec.value]["count"]
-                result[hardware_spec]["embeddings"] = []
-
-                for embedding in data[hardware_spec.value]["embeddings"]:
-                    d = dict()
-                    for (key, value) in embedding.items():
-                        d[int(key)] = int(value)
-                    result[hardware_spec]["embeddings"].append(d)
-            else:
-                assert hardware_spec.value not in data.keys()
-        return result
-    raise Exception(f"could not load embeddings file {POMDP_OUTPUT_DIR}{EMBEDDINGS_FILE}")
+    if experiment_id == GHZExperimentID.EXP1:
+        assert noise_model.num_qubits >= 14
+        couplers = noise_model.get_most_noisy_couplers()
+        for (coupler, prob_) in couplers:
+            if len(result) == 3:
+                break
+            third_qubit = get_valid_third(noise_model, coupler)
+            if third_qubit is not None:
+                d_temp = dict()
+                d_temp[0] = coupler[0]
+                d_temp[1] = coupler[1]
+                d_temp[2] = third_qubit
+                assert third_qubit != coupler[0]
+                assert third_qubit != coupler[1]
+                assert coupler[0] != coupler[1]
+                if not is_repeated_embedding(result, d_temp):
+                    result.append(deepcopy(d_temp))
+        return result   
+    else:
+        raise Exception("Implement me")
 
 
 def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: GHZExperimentID):

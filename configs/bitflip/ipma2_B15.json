@@ -1,7 +1,7 @@
 {
     "name": "B15",
     "experiment_id": "ipma2",
-    "min_horizon": 4,
+    "min_horizon": 1,
     "max_horizon": 7,
     "output_dir": "results/bitflip/ipma2/B15",
     "algorithms_file": "",

@@ -21,7 +21,7 @@ from ibm_noise_models import Instruction, MeasChannel, NoiseModel, get_ibm_noise
 import numpy as np
 from math import ceil, pi   
 from enum import Enum
-from experiments_utils import PhaseflipExperimentID, ReadoutNoise, bitflips_guard, directory_exists, generate_configs, generate_embeddings, generate_pomdps, get_config_path, get_configs_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings, bell_state_pts
+from experiments_utils import PhaseflipExperimentID, ReadoutNoise, bitflips_guard, directory_exists, generate_configs, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_config_path, get_configs_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings, bell_state_pts
 import cProfile
 import pstats
 
@@ -264,8 +264,8 @@ if __name__ == "__main__":
             allowed_hardware.append(hardware)
     if arg_backend == "gen_configs":
         # step 0
-        generate_configs(experiment_id=PhaseflipExperimentID.IPMA, min_horizon=4, max_horizon=7, allowed_hardware=allowed_hardware)
-        generate_configs(experiment_id=PhaseflipExperimentID.CXH, min_horizon=4, max_horizon=7, allowed_hardware=allowed_hardware)
+        generate_configs(experiment_id=PhaseflipExperimentID.IPMA, min_horizon=1, max_horizon=7, allowed_hardware=allowed_hardware)
+        # generate_configs(experiment_id=PhaseflipExperimentID.CXH, min_horizon=4, max_horizon=7, allowed_hardware=allowed_hardware)
     elif arg_backend == "embeddings":
         # generate paper embeddings
         batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=allowed_hardware)
@@ -283,7 +283,8 @@ if __name__ == "__main__":
         batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=allowed_hardware)
         for num_qubits in batches.keys():
             generate_pomdps(PhaseflipExperimentID.IPMA, num_qubits, get_experiments_actions, PhaseFlipInstance, bitflips_guard)
-            
+    elif arg_backend == "mc_ipma":
+        generate_mc_guarantees_file(PhaseflipExperimentID.IPMA, allowed_hardware, get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION) 
         
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)
     

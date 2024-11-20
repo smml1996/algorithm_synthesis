@@ -644,7 +644,7 @@ if __name__ == "__main__":
         # step 0
         # generate_configs(experiment_id=BitflipExperimentID.IPMA, min_horizon=4, max_horizon=7)
         # generate_configs(experiment_id=BitflipExperimentID.CXH, min_horizon=4, max_horizon=7)
-        generate_configs(experiment_id=BitflipExperimentID.IPMA2, min_horizon=4, max_horizon=7, allowed_hardware=ipma2_allowed_hardware)
+        generate_configs(experiment_id=BitflipExperimentID.IPMA2, min_horizon=1, max_horizon=7, allowed_hardware=ipma2_allowed_hardware)
     elif arg_backend == "embeddings":
         # generate paper embeddings
         
