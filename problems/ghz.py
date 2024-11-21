@@ -1,5 +1,5 @@
 import os, sys
-sys.path.append(os.getcwd()+"/..")
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from cmath import isclose
 from copy import deepcopy
@@ -13,14 +13,13 @@ from pomdp import POMDPAction
 import qmemory
 from qpu_utils import Op, BasisGates
 from utils import Queue, get_index, Precision
-sys.path.append(os.getcwd()+"/..")
 
 from qstates import QuantumState
-from ibm_noise_models import Instruction, NoiseModel, HardwareSpec
+from ibm_noise_models import Instruction, NoiseModel, HardwareSpec, load_config_file
 import numpy as np
 from math import pi   
 from enum import Enum
-from experiments_utils import GHZExperimentID, generate_configs, generate_diff_algorithms_file, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_num_qubits_to_hardware, get_project_settings
+from experiments_utils import GHZExperimentID, generate_configs, generate_diff_algorithms_file, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_best_lambda_per_hardware, get_config_path, get_experiment_name_path, get_num_qubits_to_hardware, get_project_settings, get_simulated_guarantee, parse_lambdas_file
 
 WITH_TERMALIZATION = False
 MAX_PRECISION = 10    
@@ -159,6 +158,13 @@ def get_coupling_map(noise_model: NoiseModel, embedding: Dict[int,int], experime
                     if instruction in noise_model.instructions_to_channel.keys():
                         answer.append([control, target])
         return answer
+    elif experiment_id == GHZExperimentID.EMBED:
+        answer = []
+        graph = noise_model.digraph
+        for (v, successors) in graph.items():
+            for succ in successors:
+                answer.append([v, succ])
+        return answer
     else:
         raise Exception(f"No channels specified for experiment {experiment_id}")
     
@@ -221,20 +227,6 @@ class IBMGHZInstance:
             new_embedding[key] = get_index(value, values)
         self.ghz_instance = GHZInstance(new_embedding)
 
-    @staticmethod
-    def prepare_initial_state(qc: QuantumCircuit, bell_index: int):
-        qc.h(0)
-        qc.cx(0, 1)
-        if bell_index == 1:
-            qc.x(0)
-        elif bell_index == 2:
-            qc.z(0)
-        elif bell_index == 3:
-            qc.x(0)
-            qc.z(0)
-        else:
-            assert(bell_index == 0)
-
     def is_target_qs(self, state_vector):
         assert len(state_vector) == 8 # 3 qubits
         qs = None
@@ -281,9 +273,36 @@ if __name__ == "__main__":
     elif arg_backend == "mc_exp1":
         # for optimization_level in [0,1,2,3]:
         #     generate_mc_guarantees_file(GHZExperimentID.EXP1, get_allowed_hardware(GHZExperimentID.EXP1), get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION, optimization_level=optimization_level, IBMInstanceObj=IBMGHZInstance, file_posfix=f"exp1{optimization_level}", factor=8, get_coupling_map=get_coupling_map)
-            
         generate_mc_guarantees_file(GHZExperimentID.EMBED, get_allowed_hardware(GHZExperimentID.EXP1), get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION, optimization_level=3, IBMInstanceObj=IBMGHZInstance, file_posfix=f"embed1{3}", factor=8)
     elif arg_backend == "alg_exp1":
         generate_diff_algorithms_file(GHZExperimentID.EXP1, get_allowed_hardware(GHZExperimentID.EXP1), get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
+    elif arg_backend == "embed_prob_guarantees":
+        experiment_id = GHZExperimentID.EMBED
+        allowed_hardware = get_allowed_hardware(experiment_id)
+        horizon = 3
+        output_dir = get_experiment_name_path(experiment_id)
+        output_file_path = os.path.join(output_dir, "guarantees_embed.csv")
+        output_file = open(output_file_path, "w")
         
-    # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)
+        columns = ["hardware", "my_guarantee", "ibm_simulated", "diff"]
+        output_file.write(",".join(columns) + "\n")
+        
+        batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=allowed_hardware)
+
+        for (num_qubits, hardware_specs) in batches.items():
+            config_path = get_config_path(experiment_id, num_qubits)
+            config = load_config_file(config_path, type(experiment_id))
+            hardware_to_best = get_best_lambda_per_hardware(config)
+            assert len(hardware_specs) == len(hardware_to_best.keys())
+            
+            for hardware_spec in hardware_specs:
+                noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_TERMALIZATION)
+                hardware = hardware_spec.value
+                my_guarantee = hardware_to_best[hardware_spec]
+                ibm_simulated = get_simulated_guarantee(noise_model, hardware_spec, {0:0, 1:1, 2:2}, experiment_id,optimization_level=2, IBMInstanceObj=IBMGHZInstance, get_coupling_map=get_coupling_map)
+                diff = round(my_guarantee-ibm_simulated, 3)
+                column = [hardware_spec.value, my_guarantee, ibm_simulated, diff]
+                column = [str(c) for c in column]
+                output_file.write(",".join(column) + "\n")
+            output_file.flush()
+            

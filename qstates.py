@@ -17,7 +17,7 @@ class QuantumState:
         if init_basis is not None:
             self.insert_amplitude(init_basis, init_amplitude)
         if len(qubits_used) == 0:
-            raise Exception("no indices of qubits specified!")
+            print("WARNING: no indices of qubits specified!")
         self.qubits_used = sorted(qubits_used, reverse=False) # addresses of qubits that are used, we need this to build efficiently density matrices that contain only these qubits
         
 

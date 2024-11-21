@@ -977,7 +977,6 @@ def instruction_to_ibm(qc, instruction_sequence, noiseless=False):
                 raise Exception(f"Instruction {instruction.name} could not be translated to IBM instruction. Missing implementation.")
     
 def ibm_simulate_circuit(qc: QuantumCircuit, noise_model, initial_layout, optimization_level=0,seed=1,coupling_map=None):
-    print(coupling_map)
     # Create noisy simulator backend
     sim_noise = AerSimulator(method ='statevector', noise_model=noise_model)
     # Transpile circuit for noisy basis gates

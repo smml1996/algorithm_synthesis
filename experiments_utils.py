@@ -119,7 +119,7 @@ def generate_configs(experiment_id: Enum, min_horizon, max_horizon, allowed_hard
             config["experiment_id"] = f"{experiment_id.value}"
             config["min_horizon"] = min_horizon
             config["max_horizon"] = max_horizon
-            config["output_dir"] = get_output_path(experiment_name, experiment_id, batch_name)
+            config["output_dir"] = get_output_path(experiment_id, batch_name)
             config["algorithms_file"] = ""
             config["hardware"] = hardware_specs_str
             config["opt_technique"] = opt_technique
@@ -234,6 +234,7 @@ def get_project_settings():
         if elements[2] == "None":
             raise Exception("please set properly a project path in .settings file.")
     return answer
+    
 
 def directory_exists(path):
     if not os.path.isdir(path):
@@ -256,13 +257,16 @@ def get_config_path(experiment_id, batch_name):
     experiment_path = os.path.join(configs_path, f"{experiment_name}")
     return os.path.join(experiment_path, f"{experiment_id.value}_{batch_name}.json")
 
-def get_output_path(experiment_name, experiment_id, batch_name):
+def get_output_path(experiment_id, batch_name):
+    experiment_path = get_experiment_name_path(experiment_id)
+    return os.path.join(experiment_path, experiment_id.value,f"{batch_name}")
+
+def get_experiment_name_path(experiment_id):
     project_settings = get_project_settings()
     project_path = project_settings["PROJECT_PATH"]
     directory_exists(os.path.join(project_path, "results"))
-    directory_exists(os.path.join(project_path, "results", experiment_name))
-    directory_exists(os.path.join(project_path, "results", experiment_name, experiment_id.value))
-    return os.path.join("results", experiment_name, experiment_id.value,f"{batch_name}")
+    directory_exists(os.path.join(project_path, "results", experiment_id.exp_name))
+    return os.path.join(project_path, "results", experiment_id.exp_name)
 
 def get_pomdp_path(config, hardware_spec, embedding_index):
     return os.path.join(config["output_dir"], "pomdps", f"{hardware_spec.value}_{embedding_index}.txt")
@@ -391,23 +395,31 @@ def get_custom_guarantee(algorithm_node: AlgorithmNode, pomdp_path, config):
     print("********")
     return get_markov_chain_results(project_settings, algorithm_path, pomdp_path)
 
+def get_simulated_guarantee(noise_model: NoiseModel, hardware_spec: HardwareSpec, embedding: Dict[int, int], experiment_id: Any, optimization_level=1, IBMInstanceObj=None, factor=1, get_coupling_map=None):
+    qr = QuantumRegister(3)
+    qc = QuantumCircuit(qr)
+    qc.h(0)
+    qc.cx(0,1)
+    qc.cx(1,2)
+    if experiment_id == GHZExperimentID.EXP1:
+        ibm_embedding = embedding
+    else:
+        assert experiment_id == GHZExperimentID.EMBED
+        ibm_embedding = {}
+    coupling_map = None
+    if get_coupling_map is not None:
+        coupling_map = get_coupling_map(noise_model, embedding, experiment_id)
+    default_guarantee = round(get_qc_simulated_acc(qc, qr, ibm_embedding, hardware_spec, IBMInstanceObj, optimization_level=optimization_level, factor=factor, coupling_map=coupling_map),3)
+    return default_guarantee
+        
 def get_guarantees(noise_model: NoiseModel, batch: int, hardware_spec: HardwareSpec, embedding: Dict[int, int], experiment_id: Any, horizon: int, get_experiments_actions, get_hardware_embeddings=None, embedding_index=None, optimization_level=1, IBMInstanceObj=None, factor=1, get_coupling_map=None):
     config = load_config_file(get_config_path(experiment_id, batch), type(experiment_id))
     if embedding_index is None:
         embedding_index = get_embedding_index(hardware_spec, embedding, experiment_id, get_hardware_embeddings)
     my_guarantee = round(get_embedding_guarantee(batch, hardware_spec, embedding_index, horizon, experiment_id),3)
     
-    if type(experiment_id)  == GHZExperimentID:
-        qr = QuantumRegister(3)
-        qc = QuantumCircuit(qr)
-        qc.h(0)
-        qc.cx(0,1)
-        qc.cx(1,2)
-        if experiment_id == GHZExperimentID.EXP1:
-            ibm_embedding = embedding
-        else:
-            ibm_embedding = {}
-        default_guarantee = round(get_qc_simulated_acc(qc, qr, ibm_embedding, hardware_spec, IBMInstanceObj, optimization_level=optimization_level, factor=factor, coupling_map=get_coupling_map(noise_model, embedding, experiment_id)),3)
+    if type(experiment_id)  == GHZExperimentID:        
+        default_guarantee = get_simulated_guarantee(noise_model, hardware_spec, embedding, experiment_id, optimization_level=optimization_level, IBMInstanceObj=IBMInstanceObj, factor=factor, get_coupling_map=get_coupling_map)
     else:
         default_algorithm = get_default_algorithm(noise_model, embedding, experiment_id, get_experiments_actions, horizon)
         pomdp_path = get_pomdp_path(config, hardware_spec, embedding_index)
@@ -474,6 +486,19 @@ def parse_lambdas_file(config):
         result[hardware][embedding_index][horizon] = lambda_
     f.close()
     return result
+
+def get_best_lambda_per_hardware(config):
+    all_lambdas = parse_lambdas_file(config)
+    answer = dict() # maps hardware to embedding
+    for (hardware, embeddings_dict) in all_lambdas.items():
+        hardware_spec = find_enum_object(hardware, HardwareSpec)
+        assert hardware_spec not in answer.keys()
+        answer[hardware_spec] = 0
+        for (embedding_index, horizon_dict) in embeddings_dict.items():
+            for (horizon, lambda_) in horizon_dict.items():
+                answer[hardware_spec] = max(answer[hardware_spec], lambda_)
+    return answer
+        
 
 ### POMDPS ####
 def generate_pomdp(experiment_id: GHZExperimentID, hardware_spec: HardwareSpec, 
@@ -553,10 +578,14 @@ def bitflips_guard(vertex: POMDPVertex, embedding: Dict[int, int], action: POMDP
 def get_qc_simulated_acc(qc: QuantumCircuit, qr: QuantumRegister, embedding, backend: HardwareSpec, IBMProblemInstance, with_thermalization=False, optimization_level=0, factor=1, coupling_map=None):
 
     ibm_noise_model = get_ibm_noise_model(backend, thermal_relaxation=with_thermalization)
-    ibm_problem_instance = IBMProblemInstance(embedding)
-    initial_layout = dict()
-    for (key, val) in ibm_problem_instance.embedding.items():
-        initial_layout[qr[key]] = val
+    if len(embedding.keys()) == 0:
+        initial_layout = None
+        ibm_problem_instance = IBMProblemInstance({0:0, 1:1, 2:2})
+    else:
+        ibm_problem_instance = IBMProblemInstance(embedding)
+        initial_layout = dict()
+        for (key, val) in ibm_problem_instance.embedding.items():
+            initial_layout[qr[key]] = val
     qc.save_statevector('res', pershot=True)
     accuracy = 0.0
     for _ in range(factor):
