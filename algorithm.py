@@ -50,20 +50,29 @@ class AlgorithmNode:
                 self.next_ins = None
                 if serialized['case0'] != "None":
                     self.is_meas = True
-                    self.case0 = AlgorithmNode(serialized=serialized['case0'], actions_to_instructions=actions_to_instructions)
+                    if serialized["case0"]["action"] == "halt":
+                        self.case0 = None
+                    else:
+                        self.case0 = AlgorithmNode(serialized=serialized['case0'], actions_to_instructions=actions_to_instructions)
                 else:
                     self.case0 = None
 
                 if serialized['case1'] != "None":
                     self.is_meas = True
-                    self.case1 = AlgorithmNode(serialized=serialized['case1'], actions_to_instructions=actions_to_instructions)
+                    if serialized["case1"]["action"] == "halt":
+                        self.case1 = None
+                    else:
+                        self.case1 = AlgorithmNode(serialized=serialized['case1'], actions_to_instructions=actions_to_instructions)
                 else:
                     self.case1 = None
                 
             else:
                 assert serialized['case0'] == "None"
                 assert serialized['case1'] == "None"
-                self.next_ins = AlgorithmNode(serialized=serialized['next'], actions_to_instructions=actions_to_instructions)
+                if serialized['next']["action"] == "halt":
+                    self.next_ins = None
+                else:
+                    self.next_ins = AlgorithmNode(serialized=serialized['next'], actions_to_instructions=actions_to_instructions)
                 self.case0 = None
                 self.case1 = None
                 self.is_meas = False
@@ -125,6 +134,12 @@ class AlgorithmNode:
             if instruction.is_meas_instruction():
                 return True
         return False
+    
+    def get_meas_target(self) -> int:
+        for instruction in self.instruction_sequence:
+            if instruction.is_meas_instruction():
+                return instruction.target
+        return None
       
 def execute_algorithm(node: AlgorithmNode, qpu: QuantumCircuit, count_ins=0, cbits=None):
     if node is None:
@@ -141,4 +156,51 @@ def execute_algorithm(node: AlgorithmNode, qpu: QuantumCircuit, count_ins=0, cbi
         with else0_:
             execute_algorithm(node.case1, qpu, count_ins+1, cbits=cbits)
         return 1
+    
+def get_algorithm(current_node, tabs="\t", count_ifs = 0):
+    if current_node is None:
+        return f"{tabs}pass\n"
+    assert isinstance(current_node, AlgorithmNode)
+    result = f"{tabs}{current_node.action_name}\n"
+    # for instruction in current_node.instruction_sequence:
+    #     result += f"{tabs}instruction_to_ibm(qc, basis_gates, {current_node.instruction}, {current_node.target}, {current_node.control})\n"
+
+
+    if current_node.is_meas:
+        is_terminal = (current_node.case0 is None) and (current_node.case1 is None)
+        if not is_terminal:
+            
+            result += f"{tabs}with qc.if_test((cbits[{current_node.get_meas_target()}], 0)) as else{count_ifs}_:\n"
+            alg0 = get_algorithm(current_node.case0, tabs= f"{tabs}\t", count_ifs=count_ifs+1)
+            result += alg0
+            alg1 = get_algorithm(current_node.case1, tabs=f"{tabs}\t", count_ifs=count_ifs+1)
+            result += f"{tabs}with else{count_ifs}_:\n"
+            result += alg1
+    else:
+        is_terminal = current_node.next_ins is None
+        if not is_terminal:
+            next_algorithm = get_algorithm(current_node.next_ins, tabs, count_ifs)
+            result += next_algorithm
+    return result
+
+def dump_algorithms(algorithms: List[AlgorithmNode], output_path, comments=None):
+    file = open(output_path, "w")
+    file.write("import os, sys\n")
+    file.write("sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))\n")
+    file.write("from qiskit import QuantumCircuit, ClassicalRegister\n")
+    file.write("from ibm_noise_models import Instruction, instruction_to_ibm\n\n")
+    assert (comments is None) or (len(comments) == len(algorithms))
+    for (index, algorithm) in enumerate(algorithms):
+        assert isinstance(algorithm, AlgorithmNode)
+        file.write(f"def algorithm{index}(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):\n")
+        if comments is not None:
+            initial_comment = comments[index]
+            file.write(f"\t\'\'\'{initial_comment}\'\'\'\n")
+        file.write(get_algorithm(algorithm))
+        file.write("\n\n")
+
+    file.write("algorithms = []\n")
+    for i in range(len(algorithms)):
+        file.write(f"algorithms.append(algorithm{i})\n")
+    file.close()
     

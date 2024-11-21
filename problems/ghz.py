@@ -21,7 +21,7 @@ from ibm_noise_models import Instruction, MeasChannel, NoiseModel, get_ibm_noise
 import numpy as np
 from math import pi   
 from enum import Enum
-from experiments_utils import GHZExperimentID, generate_configs, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_num_qubits_to_hardware, get_project_settings
+from experiments_utils import GHZExperimentID, generate_configs, generate_diff_algorithms_file, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_num_qubits_to_hardware, get_project_settings
 
 WITH_TERMALIZATION = False
 MAX_PRECISION = 10    
@@ -252,6 +252,7 @@ if __name__ == "__main__":
 
         for optimization_level in [0,1,2,3]:
             generate_mc_guarantees_file(GHZExperimentID.EXP1, get_allowed_hardware(GHZExperimentID.EXP1), get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION, optimization_level=optimization_level, IBMInstanceObj=IBMGHZInstance, file_posfix=f"exp1{optimization_level}", factor=8, get_coupling_map=get_coupling_map)
-
+    elif arg_backend == "alg_exp1":
+        generate_diff_algorithms_file(GHZExperimentID.EXP1, get_allowed_hardware(GHZExperimentID.EXP1), get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
         
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)

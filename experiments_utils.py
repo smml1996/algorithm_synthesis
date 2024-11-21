@@ -9,7 +9,7 @@ from typing import Any, Callable, Dict, List
 
 from qiskit import ClassicalRegister, QuantumCircuit, QuantumRegister
 
-from algorithm import AlgorithmNode, execute_algorithm
+from algorithm import AlgorithmNode, dump_algorithms, execute_algorithm
 from ibm_noise_models import HardwareSpec, Instruction, NoiseModel, get_ibm_noise_model, ibm_simulate_circuit, load_config_file
 from pomdp import POMDPAction, POMDPVertex, build_pomdp, default_guard
 import qmemory
@@ -643,3 +643,49 @@ def compare_with_simulated(experiment_id, batch_name, ibm_instance, get_experime
                     output_file.write(f"{backend}-{index},{horizon},{lambdas_d[horizon]},{acc},{round(lambdas_d[horizon]-acc,3)}\n")
                     output_file.flush()
     output_file.close()
+    
+###### algorithm analysis ####
+
+def generate_diff_algorithms_file(experiment_id, allowed_hardware, get_hardware_embeddings, get_experiments_actions, with_thermalization=False):
+    project_path = get_project_path()
+    outputdir_path = os.path.join(project_path, "results", experiment_id.exp_name)
+    all_algorithms = dict()
+    comments = dict()
+
+    batches = get_num_qubits_to_hardware(with_thermalization, allowed_hardware=allowed_hardware)
+    for (batch, hardware_specs) in batches.items():
+        config_path = get_config_path(experiment_id, batch)
+        config = load_config_file(config_path, type(experiment_id))
+        all_algorithms_path = os.path.join(project_path, config["output_dir"], "algorithms")
+        min_horizon = config["min_horizon"]
+        max_horizon = config["max_horizon"]
+        for hardware_spec in hardware_specs:
+            embeddings = get_hardware_embeddings(hardware_spec, experiment_id)
+            noise_model = NoiseModel(hardware_spec, thermal_relaxation=with_thermalization)
+                
+            for (index, embedding) in enumerate(embeddings):
+                actions_to_instructions = dict()
+                actions = get_experiments_actions(noise_model, embedding, experiment_id)
+                for action in actions:
+                    actions_to_instructions[action.name] = action.instruction_sequence
+                actions_to_instructions["halt"] = []
+                for horizon in range(min_horizon, max_horizon+1):
+                    if horizon not in all_algorithms:
+                        all_algorithms[horizon] = []
+                        comments[horizon] = []
+                    
+                    algorithm_path = os.path.join(all_algorithms_path, f"{hardware_spec.value}_{index}_{horizon}.json")
+                    f_algorithm = open(algorithm_path)
+                    algorithm = AlgorithmNode(serialized=json.load(f_algorithm), actions_to_instructions=actions_to_instructions)
+                    f_algorithm.close()
+                    if not (algorithm in all_algorithms[horizon]):
+                        all_algorithms[horizon].append(algorithm)
+                        comments[horizon].append(hardware_spec.value+'-'+str(index))
+                    else:
+                        for (index_old_alg, old_alg) in enumerate(all_algorithms[horizon]):
+                            if old_alg == algorithm:
+                                comments[horizon][index_old_alg] = f"{comments[horizon][index_old_alg]},{hardware_spec.value}-{index}"
+                                break
+    for horizon in all_algorithms.keys():
+        output_path = os.path.join(outputdir_path, f"diff{horizon}_algs.py")
+        dump_algorithms(all_algorithms[horizon], output_path, comments=comments[horizon])
