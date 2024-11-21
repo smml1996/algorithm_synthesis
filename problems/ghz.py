@@ -7,17 +7,16 @@ import time
 from typing import Any, Dict, List
 import json
 
-from qiskit import ClassicalRegister, QuantumCircuit, QuantumRegister
-from algorithm import AlgorithmNode, execute_algorithm
+from qiskit import QuantumCircuit
 from cmemory import ClassicalState
-from pomdp import POMDP, POMDPAction, POMDPVertex, build_pomdp, default_guard
+from pomdp import POMDPAction
 import qmemory
-from qpu_utils import GateData, Op, BasisGates
-from utils import are_matrices_equal, find_enum_object, get_index, is_matrix_in_list, Precision
+from qpu_utils import Op, BasisGates
+from utils import Queue, get_index, Precision
 sys.path.append(os.getcwd()+"/..")
 
 from qstates import QuantumState
-from ibm_noise_models import Instruction, MeasChannel, NoiseModel, get_ibm_noise_model, HardwareSpec, ibm_simulate_circuit, load_config_file
+from ibm_noise_models import Instruction, NoiseModel, HardwareSpec
 import numpy as np
 from math import pi   
 from enum import Enum
@@ -96,7 +95,23 @@ def is_repeated_embedding(all_embeddings, current) -> bool:
         if temp_s == current_set:
             return True
     return False
-     
+
+def are_adjacent_qubits(graph, qubit1, qubit2, qubit3):
+    q = Queue()
+    q.push(qubit1)
+    visited = set()
+    visited.add(qubit1)
+    while not q.is_empty():
+        current = q.pop()
+        if current in graph.keys():
+            for succ in graph[current]:
+                if succ not in visited:
+                    if succ == qubit2 or succ == qubit3:
+                        visited.add(succ)
+                        q.push(succ)
+    return (qubit2 in visited) and (qubit3 in visited)
+
+
 def get_hardware_embeddings(backend: HardwareSpec, experiment_id) -> List[Dict[int, int]]:
     result = []
     noise_model = NoiseModel(backend, thermal_relaxation=WITH_TERMALIZATION)
@@ -117,11 +132,22 @@ def get_hardware_embeddings(backend: HardwareSpec, experiment_id) -> List[Dict[i
                 assert third_qubit != coupler[1]
                 assert coupler[0] != coupler[1]
                 if not is_repeated_embedding(result, d_temp):
-                    result.append(deepcopy(d_temp))
-        return result   
+                    result.append(deepcopy(d_temp))  
     else:
-        raise Exception("Implement me")
-
+        for qubit1 in range(noise_model.num_qubits):
+            for qubit2 in range(noise_model.num_qubits):
+                for qubit3 in range(noise_model.num_qubits):
+                    current_set = {qubit1, qubit2, qubit3}
+                    if len(current_set) == 3:
+                        if are_adjacent_qubits(noise_model.digraph, qubit1, qubit2, qubit3):
+                                d_temp = dict()
+                                d_temp[0] = qubit1
+                                d_temp[1] = qubit2
+                                d_temp[2] = qubit3
+                                if not is_repeated_embedding(result, d_temp):
+                                    result.append(deepcopy(d_temp))                
+    return result
+            
 
 def get_coupling_map(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: GHZExperimentID):
     if experiment_id == GHZExperimentID.EXP1:    
@@ -137,7 +163,8 @@ def get_coupling_map(noise_model: NoiseModel, embedding: Dict[int,int], experime
         raise Exception(f"No channels specified for experiment {experiment_id}")
     
 def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: GHZExperimentID):
-    if experiment_id == GHZExperimentID.EXP1:
+    assert len(embedding.keys()) == 3
+    if experiment_id in [GHZExperimentID.EXP1, GHZExperimentID.EMBED]:
         if noise_model.basis_gates in [BasisGates.TYPE1, BasisGates.TYPE6]:
             H0 = POMDPAction("H0", [Instruction(embedding[0], Op.U2, params=[0.0, pi])])
             H1 = POMDPAction("H1", [Instruction(embedding[1], Op.U2, params=[0.0, pi])])
@@ -181,11 +208,7 @@ def get_allowed_hardware(experiment_id):
             if noise_model.num_qubits >= 14:
                 allowed_hardware.append(hardware)
     elif experiment_id == GHZExperimentID.EMBED:
-        for hardware in HardwareSpec:
-            noise_model = NoiseModel(hardware, thermal_relaxation=WITH_TERMALIZATION)
-            qubit_choices = get_qubit_choices(noise_model)
-            if qubit_choices <= 10e9:
-                allowed_hardware.append(hardware)
+        allowed_hardware = HardwareSpec
     return allowed_hardware
       
 class IBMGHZInstance:
@@ -238,20 +261,28 @@ if __name__ == "__main__":
         generate_configs(experiment_id=GHZExperimentID.EMBED, min_horizon=3, max_horizon=3, allowed_hardware=get_allowed_hardware(GHZExperimentID.EMBED))
     elif arg_backend == "embeddings":
         # generate paper embeddings
-        for experiment_id in GHZExperimentID:
-            batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=get_allowed_hardware(experiment_id))
-            for num_qubits in batches.keys():
-                generate_embeddings(GHZExperimentID.EXP1, num_qubits, get_hardware_embeddings=get_hardware_embeddings)
+
+        # experiment_id = GHZExperimentID.EXP1
+        # batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=get_allowed_hardware(experiment_id))
+        # for num_qubits in batches.keys():
+        #     generate_embeddings(experiment_id, num_qubits, get_hardware_embeddings=get_hardware_embeddings)
+        
+        experiment_id = GHZExperimentID.EMBED
+        batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=get_allowed_hardware(experiment_id))
+        for num_qubits in batches.keys():
+            generate_embeddings(experiment_id, num_qubits, get_hardware_embeddings=get_hardware_embeddings)
+                
     elif arg_backend == "all_pomdps":
         for experiment_id in GHZExperimentID:
             allowed_hardware = get_allowed_hardware(experiment_id)
             batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=allowed_hardware)
             for num_qubits in batches.keys():
-                generate_pomdps(GHZExperimentID.EXP1, num_qubits, get_experiments_actions, GHZInstance)
+                generate_pomdps(experiment_id, num_qubits, get_experiments_actions, GHZInstance)
     elif arg_backend == "mc_exp1":
-
-        for optimization_level in [0,1,2,3]:
-            generate_mc_guarantees_file(GHZExperimentID.EXP1, get_allowed_hardware(GHZExperimentID.EXP1), get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION, optimization_level=optimization_level, IBMInstanceObj=IBMGHZInstance, file_posfix=f"exp1{optimization_level}", factor=8, get_coupling_map=get_coupling_map)
+        # for optimization_level in [0,1,2,3]:
+        #     generate_mc_guarantees_file(GHZExperimentID.EXP1, get_allowed_hardware(GHZExperimentID.EXP1), get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION, optimization_level=optimization_level, IBMInstanceObj=IBMGHZInstance, file_posfix=f"exp1{optimization_level}", factor=8, get_coupling_map=get_coupling_map)
+            
+        generate_mc_guarantees_file(GHZExperimentID.EMBED, get_allowed_hardware(GHZExperimentID.EXP1), get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION, optimization_level=3, IBMInstanceObj=IBMGHZInstance, file_posfix=f"embed1{3}", factor=8)
     elif arg_backend == "alg_exp1":
         generate_diff_algorithms_file(GHZExperimentID.EXP1, get_allowed_hardware(GHZExperimentID.EXP1), get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
         
