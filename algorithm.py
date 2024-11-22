@@ -8,7 +8,8 @@ class AlgorithmNode:
     instructions: Instruction
 
     def __init__(self, action_name: str=None, instruction_sequence=None, next_ins=None, case0=None, case1=None,
-                 count_meas=0, serialized=None, actions_to_instructions=None) -> None:
+                 count_meas=0, serialized=None, actions_to_instructions=None, noiseless=False) -> None:
+        self.noiseless = noiseless
         if serialized is None:
             assert action_name is not None
             assert isinstance(action_name, str)
@@ -144,14 +145,13 @@ class AlgorithmNode:
 def execute_algorithm(node: AlgorithmNode, qpu: QuantumCircuit, count_ins=0, cbits=None):
     if node is None:
         return count_ins
-    
-    instruction_to_ibm(qpu, node.instruction_sequence)
+    instruction_to_ibm(qpu, node.instruction_sequence, noiseless=node.noiseless)
     if node.next_ins is not None:
         assert node.case0 is None
         assert node.case1 is None
         return execute_algorithm(node.next_ins, qpu, count_ins+1, cbits=cbits)
-    elif node.is_meas:
-        with qpu.if_test((cbits[node.last_target], 0)) as else0_:
+    elif node.has_meas_instruction():
+        with qpu.if_test((cbits[node.get_meas_target()], 0)) as else0_:
             execute_algorithm(node.case0, qpu, count_ins+1, cbits=cbits)
         with else0_:
             execute_algorithm(node.case1, qpu, count_ins+1, cbits=cbits)

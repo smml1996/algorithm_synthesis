@@ -329,13 +329,16 @@ def get_meas_sequence(num_meas, meas_action, flip_action, total_meas, count_ones
     head.case1 = get_meas_sequence(num_meas-1, meas_action, flip_action, total_meas, count_ones+1)
     return head
    
-def get_default_flip_algorithm(noise_model, embedding, horizon, experiment_id, get_experiments_actions) -> AlgorithmNode:
+def get_default_flip_algorithm(noise_model, embedding, horizon, experiment_id, get_experiments_actions, target_qubit=None) -> AlgorithmNode:
     if isinstance(experiment_id, BitflipExperimentID):
         experiment_actions = get_experiments_actions(noise_model, embedding, experiment_id)
         flip_action = experiment_actions[2]
         meas_action = experiment_actions[1]
         if experiment_id == BitflipExperimentID.IPMA2:
-            head = AlgorithmNode(experiment_actions[0].name, experiment_actions[0].instruction_sequence)
+            if target_qubit is None:
+                head = AlgorithmNode(experiment_actions[0].name, experiment_actions[0].instruction_sequence)
+            else:
+                head = AlgorithmNode("XS", [Instruction(target_qubit, Op.X)], noiseless=True)
             num_meas = horizon - 2 # the initial CX and the flip instruction needed at the end in case we detect an odd parity
         else:
             raise Exception("Implement me")
@@ -345,7 +348,10 @@ def get_default_flip_algorithm(noise_model, embedding, horizon, experiment_id, g
         experiment_actions = get_experiments_actions(noise_model, embedding, experiment_id)
         flip_action = experiment_actions[1]
         meas_action = experiment_actions[0]
-        head = AlgorithmNode(experiment_actions[2].name, experiment_actions[-1].instruction_sequence)
+        if target_qubit is None:
+            head = AlgorithmNode(experiment_actions[2].name, experiment_actions[-1].instruction_sequence)
+        else:
+            head = AlgorithmNode("XS", [Instruction(target_qubit, Op.X)], noiseless=True)
         
         num_meas = horizon-2
     
@@ -353,11 +359,11 @@ def get_default_flip_algorithm(noise_model, embedding, horizon, experiment_id, g
     head.next_ins = get_meas_sequence(num_meas, meas_action, flip_action, total_meas=num_meas)
     return head
         
-def get_default_algorithm(noise_model, embedding, experiment_id, get_experiments_actions, horizon):
+def get_default_algorithm(noise_model, embedding, experiment_id, get_experiments_actions, horizon, target_qubit=None):
     assert type(experiment_id) != GHZExperimentID
     if isinstance(experiment_id, BitflipExperimentID):
-        return get_default_flip_algorithm(noise_model, embedding, horizon, BitflipExperimentID.IPMA2, get_experiments_actions)
-    return get_default_flip_algorithm(noise_model, embedding, horizon, PhaseflipExperimentID.IPMA, get_experiments_actions)
+        return get_default_flip_algorithm(noise_model, embedding, horizon, BitflipExperimentID.IPMA2, get_experiments_actions, target_qubit=target_qubit)
+    return get_default_flip_algorithm(noise_model, embedding, horizon, PhaseflipExperimentID.IPMA, get_experiments_actions, target_qubit=target_qubit)
 
 ###### guarantees #####
 def get_embedding_guarantee(batch, hardware_spec, embedding_index, horizon, experiment_id):

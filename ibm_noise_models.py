@@ -8,7 +8,7 @@ from qiskit import QuantumCircuit, transpile
 from qiskit.providers.fake_provider import *
 from qiskit_aer.noise import NoiseModel as IBMNoiseModel
 from qiskit_aer import AerSimulator
-from qiskit.extensions import XGate, ZGate, CXGate, UGate, SXGate, RZGate
+from qiskit.extensions import XGate, ZGate, CXGate, UGate, SXGate, RZGate, CCXGate, CZGate, CCZGate, HGate
 from qpu_utils import *
 import json
 
@@ -424,7 +424,6 @@ class Instruction:
                 Instruction(self.target, Op.SX),
                 Instruction(self.target, Op.RZ, params=[pi/2])]
             if self.op == Op.U3:
-                print("params", self.params)
                 ry_symbols = None
                 rz_symbols2 = None
                 rz_symbols1 = None
@@ -924,7 +923,10 @@ class NoiseModel:
 NoiselessX = XGate(label="noiseless_x")
 NoiselessZ = ZGate(label="noiseless_z")
 NoiselessCX = CXGate(label="noiseless_cx")
-NoiselessSX = SXGate(label="noiseless_sx")          
+NoiselessSX = SXGate(label="noiseless_sx")   
+NoiselessCCX = CCXGate(label="noiseless_ccx")     
+NoiselessCCZ = CCZGate(label="noiseless_ccz")  
+NoiselessH = HGate(label="noiseless_h")
 
 def instruction_to_ibm(qc, instruction_sequence, noiseless=False):
     for instruction in instruction_sequence:
@@ -972,9 +974,14 @@ def instruction_to_ibm(qc, instruction_sequence, noiseless=False):
                 qc.append(NoiselessRZ, [instruction.params[0], instruction.target])
             else:
                 qc.rz(instruction.params[0], instruction.target)
+        elif instruction.op == Op.H:
+            if noiseless:
+                qc.append(NoiselessH, [instruction.target])
+            else:
+                qc.h(instruction.target)
         else:
             if not instruction.is_classical():
-                raise Exception(f"Instruction {instruction.name} could not be translated to IBM instruction. Missing implementation.")
+                raise Exception(f"Instruction {instruction.op} could not be translated to IBM instruction. Missing implementation.")
     
 def ibm_simulate_circuit(qc: QuantumCircuit, noise_model, initial_layout, optimization_level=0,seed=1,coupling_map=None):
     # Create noisy simulator backend

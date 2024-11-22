@@ -1,3 +1,4 @@
+from cmath import isclose
 import os, sys
 sys.path.append(os.getcwd()+"/..")
 from typing import Dict, List, Tuple
@@ -7,8 +8,7 @@ from qiskit import ClassicalRegister, QuantumCircuit, QuantumRegister
 from algorithm import AlgorithmNode, execute_algorithm
 from pomdp import POMDPAction
 from qpu_utils import Op
-from utils import Queue, are_matrices_equal
-sys.path.append(os.getcwd()+"/..")
+from utils import Precision, Queue, are_matrices_equal
 
 from qstates import QuantumState
 from ibm_noise_models import Instruction, NoiseModel, get_ibm_noise_model, HardwareSpec, ibm_simulate_circuit, load_config_file
@@ -24,6 +24,7 @@ from phaseflip import PhaseflipExperimentID
 import bitflip
 import phaseflip
 import ghz
+from ibm_noise_models import NoiselessCCZ, NoiselessCCX, NoiselessX, NoiselessCX
 
 WITH_TERMALIZATION = False
 MAX_PRECISION = 10
@@ -230,7 +231,7 @@ def get_possible_routes(graph, current_qubit, target_qubit, current_depth)-> Lis
   
 def get_hardware_embeddings(hardware_spec):
     answer = []
-    ghz_embeddings = get_hardware_embeddings_ghz(hardware_spec)
+    ghz_embeddings = get_hardware_embeddings_ghz(hardware_spec, GHZExperimentID.EXP1)
     embeddings_bitflip = get_hardware_embeddings_z(hardware_spec, experiment_id=BitflipExperimentID.IPMA2)
     
     for ghz_embedding in ghz_embeddings:
@@ -249,18 +250,26 @@ def get_hardware_embeddings(hardware_spec):
     return answer[:LIMIT_EMBEDDINGS]
 
 def get_horizon(experiment_id) -> int:
-    if isinstance(experiment_id, GHZInstance):
+    if isinstance(experiment_id, GHZExperimentID):
         return 3
     return 7
 
 
 def get_actions(noise_model, embedding, experiment_id) -> List[POMDPAction]:
     if isinstance(experiment_id, GHZExperimentID):
-        return ghz.get_experiments_actions(noise_model, embedding, experiment_id)
+        actions = []
+        assert len(embedding.keys()) == 3
+        for control in range(3):
+            assert embedding[control] == control
+            actions.append(POMDPAction(f"H{control}", [Instruction(control, Op.H)]))
+            for target in range(3):
+                if control != target:
+                    actions.append(POMDPAction(f"CX{control}{target}", [Instruction(target, Op.CNOT, control=control)]))
+        return actions
     if isinstance(experiment_id, BitflipExperimentID):
         return bitflip.get_experiments_actions(noise_model, embedding, experiment_id)
     assert isinstance(experiment_id, PhaseflipExperimentID)
-    return bitflip.get_experiments_actions(noise_model, embedding, experiment_id)
+    return phaseflip.get_experiments_actions(noise_model, embedding, experiment_id)
 
 def is_only_detect(algorithm_node: AlgorithmNode, actions_to_instructions) -> bool:
     if algorithm_node is None:
@@ -271,29 +280,26 @@ def is_only_detect(algorithm_node: AlgorithmNode, actions_to_instructions) -> bo
     if algorithm_node.instruction_sequence == actions_to_instructions["X0"]:
         return False
     
-    return is_only_detect(algorithm_node.next_ins) and is_only_detect(algorithm_node.case0) and is_only_detect(algorithm_node.case1)
+    return is_only_detect(algorithm_node.next_ins, actions_to_instructions) and is_only_detect(algorithm_node.case0, actions_to_instructions) and is_only_detect(algorithm_node.case1, actions_to_instructions)
 
 def modify_to_detect(algorithm_node: AlgorithmNode, target_qubit, actions_to_instructions, is_prev_meas=False, found_flip=False) -> None:
+    assert isinstance(target_qubit, int)
     if not (algorithm_node is None):
         if algorithm_node.has_meas_instruction():
-            algorithm_node.case0 = modify_to_detect(algorithm_node.case0, embedding, actions_to_instructions, is_prev_meas=True, found_flip=found_flip)
-            algorithm_node.case1 = modify_to_detect(algorithm_node.case1, embedding, actions_to_instructions, is_prev_meas=True, found_flip=found_flip)
+            algorithm_node.case0 = modify_to_detect(algorithm_node.case0, target_qubit, actions_to_instructions, is_prev_meas=True, found_flip=found_flip)
+            algorithm_node.case1 = modify_to_detect(algorithm_node.case1, target_qubit, actions_to_instructions, is_prev_meas=True, found_flip=found_flip)
+            return algorithm_node
         elif algorithm_node.instruction_sequence == actions_to_instructions["Z0"] or algorithm_node.instruction_sequence == actions_to_instructions["X0"]:
-            new_node = AlgorithmNode(algorithm_node.name, [Instruction(target_qubit, Op.WRITE1)])
-            new_node.next_ins = modify_to_detect(algorithm_node.next_ins, embedding, actions_to_instructions, is_prev_meas=False, found_flip=True)
+            new_node = AlgorithmNode(algorithm_node.action_name, [Instruction(target_qubit, Op.X)], noiseless=True)
+            new_node.next_ins = modify_to_detect(algorithm_node.next_ins, target_qubit, actions_to_instructions, is_prev_meas=False, found_flip=True)
             return new_node
         else:
-            assert algorithm_node.action_name == "halt"
-            if is_prev_meas:
-                assert not found_flip
-                return AlgorithmNode("d0", [Instruction(target_qubit, Op.WRITE0)])
-            else:
-                assert found_flip
-                return algorithm_node
+            algorithm_node.next_ins = modify_to_detect(algorithm_node.next_ins, target_qubit, actions_to_instructions, is_prev_meas=False, found_flip=found_flip)
+            return algorithm_node
     else:
         if is_prev_meas:
             assert not found_flip
-            return AlgorithmNode("d0", [Instruction(target_qubit, Op.WRITE0)])
+            return None
         else:
             assert found_flip
             return algorithm_node
@@ -306,7 +312,7 @@ def get_actions_to_instructions(noise_model, embedding, experiment_id):
     actions_to_instructions["halt"] = []
     return actions_to_instructions
 
-def load_algorithm(batch, hardware_spec, noise_model, embedding_index, experiment_id, embedding):
+def load_algorithm(batch, hardware_spec, noise_model, embedding_index, experiment_id, embedding, target_qubit=None):
     horizon = get_horizon(experiment_id)
     experiment_obj = type(experiment_id)
     config_path = get_config_path(experiment_id, batch)
@@ -316,25 +322,33 @@ def load_algorithm(batch, hardware_spec, noise_model, embedding_index, experimen
     algorithm_path = os.path.join(algorithms_path, f"{hardware_spec.value}_{embedding_index}_{horizon}.json")
     
     actions_to_instructions = get_actions_to_instructions(noise_model, embedding, experiment_id)
-                    
+    if "Z0" not in actions_to_instructions.keys():
+        actions_to_instructions["Z0"] = None
+    if "X0" not in actions_to_instructions.keys():
+        actions_to_instructions["X0"] = None
     # load algorithm json
     f_algorithm = open(algorithm_path)
     algorithm = AlgorithmNode(serialized=json.load(f_algorithm), actions_to_instructions=actions_to_instructions)
     f_algorithm.close()  
     if not isinstance(experiment_id, GHZExperimentID):
-        algorithm = modify_to_detect(algorithm, actions_to_instructions)
+        assert target_qubit is not None
+        algorithm = modify_to_detect(algorithm, target_qubit, actions_to_instructions)
         assert is_only_detect(algorithm, actions_to_instructions)
     return algorithm
 
 class AlgorithmGluer:
+    def get_syndrome_qubits(self, noise_model):
+        answer = []
+        for i in range(noise_model.num_qubits):
+            if not (i in self.used_qubits.keys()):
+                answer.append(i)
+                if len(answer) == 4:
+                    return answer
+        raise Exception(f"Not enough qubits to run {self.hardware_spec}")
     
     def __init__(self, noise_model, embeddings, batch, hardware_spec, embedding_indices, is_default=False) -> None:
         self.counter_vars = 0
-        self.all_embeddings = embeddings
-        qubit1 = embeddings["ghz"][0]
-        qubit2 = embeddings["ghz"][1]
-        qubit3 = embeddings["ghz"][2]
-        
+        self.all_embeddings = embeddings        
         self.final_embedding = dict()
         self.used_qubits = dict()
         self.counter = 0
@@ -344,8 +358,8 @@ class AlgorithmGluer:
         self.address_space["meas13"] = dict()
         
         for name in ["ghz", "meas12", "meas13"]:
-            for (key, value) in self.embeddings[name]:
-                if value in self.used_qubits:
+            for (key, value) in self.all_embeddings[name].items():
+                if value in self.used_qubits.keys():
                     final_key = self.used_qubits[value]
                 else:
                     final_key = self.counter
@@ -354,40 +368,64 @@ class AlgorithmGluer:
                     self.used_qubits[value] = final_key
                 assert key not in self.address_space[name]
                 self.address_space[name][key] = final_key
+                
+        syndrome_qubits = self.get_syndrome_qubits(noise_model)
+        assert len(syndrome_qubits) == 4
         
+        for qubit in syndrome_qubits:
+            assert qubit not in self.used_qubits.keys()
+            final_key = self.counter
+            self.counter += 1
+            self.final_embedding[final_key] = qubit
+            self.used_qubits[qubit] = final_key
+
+            
+        self.qubitbf12 = self.used_qubits[syndrome_qubits[0]]
+        self.qubitbf13 = self.used_qubits[syndrome_qubits[1]]
+        self.qubitpf12 = self.used_qubits[syndrome_qubits[2]]
+        self.qubitpf13 = self.used_qubits[syndrome_qubits[3]]
         if is_default:
             self.ghz = get_default_algorithm(noise_model, self.address_space["ghz"], GHZExperimentID.EXP1)
             if self.ghz is None:
                 self.ghz = load_algorithm(batch, hardware_spec, noise_model, embedding_indices["ghz"], GHZExperimentID.EXP1, self.address_space["ghz"])
-            self.bf12 = get_default_algorithm(noise_model, self.address_space["meas12"], BitflipExperimentID.IPMA2)
-            self.bf13 = get_default_algorithm(noise_model, self.address_space["meas13"], BitflipExperimentID.IPMA2)
-            self.pf12 = get_default_algorithm(noise_model, self.address_space["meas12"], PhaseflipExperimentID.IPMA)
-            self.pf13 = get_default_algorithm(noise_model, self.address_space["meas13"], PhaseflipExperimentID.IPMA)
+            self.bf12 = get_default_algorithm(noise_model, self.address_space["bf_meas12"], BitflipExperimentID.IPMA2, target_qubit=self.qubitbf12)
+            self.bf13 = get_default_algorithm(noise_model, self.address_space["bf_meas13"], BitflipExperimentID.IPMA2, target_qubit=self.qubitbf13)
+            self.pf12 = get_default_algorithm(noise_model, self.address_space["pf_meas12"], PhaseflipExperimentID.IPMA, target_qubit=self.qubitpf12)
+            self.pf13 = get_default_algorithm(noise_model, self.address_space["pf_meas13"], PhaseflipExperimentID.IPMA, target_qubit=self.qubitpf13)
         else:
             self.ghz = load_algorithm(batch, hardware_spec, noise_model, embedding_indices["ghz"], GHZExperimentID.EXP1, self.address_space["ghz"])
-            self.bf12 = load_algorithm(batch, hardware_spec, noise_model, embedding_indices["meas12"], BitflipExperimentID.IPMA2, self.address_space["bf_meas12"])
-            self.bf13 = load_algorithm(batch, hardware_spec, noise_model, embedding_indices["meas13"], BitflipExperimentID.IPMA2, self.address_space["bf_meas13"])
-            self.pf12 = load_algorithm(batch, hardware_spec, noise_model, embedding_indices["meas12"], PhaseflipExperimentID.IPMA, self.address_space["pf_meas12"])
-            self.pf13 = load_algorithm(batch, hardware_spec, noise_model, embedding_indices["meas13"], PhaseflipExperimentID.IPMA, self.address_space["pf_meas13"])
-            
-        raw_routing12_1, raw_routing12_2 = find_routings(noise_model, qubit1, qubit2, embeddings["meas12"][0], embeddings["meas12"][1])
-        raw_routing13_1, raw_routing13_2 = find_routings(noise_model, qubit1, qubit3, embeddings["meas13"][0], embeddings["meas13"][1])
-        
-        for qubit in raw_routing12_1 + raw_routing12_2 + raw_routing13_1 + raw_routing13_2:
-            if not (qubit in self.used_qubits):
-                final_key = self.counter
-                self.final_embedding[final_key] = qubit
-                self.counter+=1
-                self.used_qubits[qubit] = final_key
-                
-        self.routing12, self.routing12_dagger = get_final_routing_algorithm(raw_routing12_1, raw_routing12_2, self.used_qubits)
-        
-        
-        self.routing13, self.routing13_dagger = get_final_routing_algorithm(raw_routing13_1, raw_routing13_2, self.used_qubits)
+            self.bf12 = load_algorithm(batch, hardware_spec, noise_model, embedding_indices["bf_meas12"], BitflipExperimentID.IPMA2, self.address_space["meas12"], target_qubit=self.qubitbf12)
+            self.bf13 = load_algorithm(batch, hardware_spec, noise_model, embedding_indices["bf_meas13"], BitflipExperimentID.IPMA2, self.address_space["meas13"], target_qubit=self.qubitbf13)
+            self.pf12 = load_algorithm(batch, hardware_spec, noise_model, embedding_indices["pf_meas12"], PhaseflipExperimentID.IPMA, self.address_space["meas12"], target_qubit=self.qubitpf12)
+            self.pf13 = load_algorithm(batch, hardware_spec, noise_model, embedding_indices["pf_meas13"], PhaseflipExperimentID.IPMA, self.address_space["meas13"], target_qubit=self.qubitpf13)
             
     @property
     def num_qubits(self):
         return len(self.final_embedding.keys())
+    
+    def is_target_qs(self, state_vector):
+        qs = None
+        for (index, amp) in enumerate(state_vector):
+            if not isclose(amp, 0.0, abs_tol=Precision.isclose_abstol):
+                if qs is None:
+                    qs = QuantumState(index, amp, qubits_used=list(self.final_embedding.keys()))
+                else:
+                    assert qs.get_amplitude(index) == 0.0
+                    qs.insert_amplitude(index, amp) 
+        remove_indices = [x for x in range(3, len(self.final_embedding.keys()))]
+        rho = qs.multi_partial_trace(remove_indices=remove_indices)
+        assert len(rho) == 8
+        assert len(rho[0]) == 8
+        
+        for i in range(len(rho)):
+            for j in range(len(rho)):
+                if (i == 0 and j ==0) or (i==0 and j == 7) or (i==7 and j ==0) or (i == 7 and j == 7):
+                    if not isclose(rho[i][j], 1.0, abs_tol=Precision.isclose_abstol):
+                        return False
+                else:
+                    if not isclose(rho[i][j], 0.0, abs_tol=Precision.isclose_abstol):
+                        return False
+        return True
     
     def algorithm(self, qubit, error, qc, cbits):
         # ghz algorithm
@@ -403,25 +441,83 @@ class AlgorithmGluer:
             qc.x(new_virtual_address)
             qc.z(new_virtual_address)
             
+        qubit0 = self.address_space["ghz"][0]
+        qubit1 = self.address_space["ghz"][1]
+        qubit2 = self.address_space["ghz"][2]
+        
+            
         # bitflip measurement 1-2
-        execute_algorithm(self.routing12, qc, cbits=cbits)
+        bf12_0 = self.address_space["meas12"][0]
+        bf12_1 = self.address_space["meas12"][1]
+        assert bf12_0 != bf12_1
+        if qubit0 != bf12_0:
+            qc.append(NoiselessCX, [qubit0, bf12_0])
+        if qubit1 != bf12_1:
+            qc.append(NoiselessCX, [qubit1, bf12_1])
         execute_algorithm(self.bf12, qc, cbits=cbits)
-        execute_algorithm(self.routing12_dagger, qc, cbits=cbits)
+        if qubit0 != bf12_0:
+            qc.append(NoiselessCX, [qubit0, bf12_0])
+        if qubit1 != bf12_1:
+            qc.append(NoiselessCX, [qubit1, bf12_1])
         
         # bitflip measurement 1-3
-        execute_algorithm(self.routing13, qc, cbits=cbits)
+        bf13_0 = self.address_space["meas13"][0]
+        bf13_1 = self.address_space["meas13"][1]
+        assert bf13_0 != bf13_1
+        if qubit0 != bf13_0:
+            qc.append(NoiselessCX, [qubit0, bf13_0])
+        if qubit2 != bf13_1:
+            qc.append(NoiselessCX, [qubit2, bf13_1])
         execute_algorithm(self.bf13, qc, cbits=cbits)
-        execute_algorithm(self.routing13_dagger, qc, cbits=cbits)
+        if qubit0 != bf13_0:
+            qc.append(NoiselessCX, [qubit0, bf13_0])
+        if qubit2 != bf13_1:
+            qc.append(NoiselessCX, [qubit2, bf13_1])
+        
+        ## correcting bitflips
+        qc.append(NoiselessCCX, [self.qubitbf12, self.qubitbf13, self.address_space["ghz"][0]])
+        
+        qc.append(NoiselessX, [self.qubitbf13])
+        qc.append(NoiselessCCX, [self.qubitbf12, self.qubitbf13, self.address_space["ghz"][1]])
+        qc.append(NoiselessX, [self.qubitbf13])
+        
+        qc.append(NoiselessX, [self.qubitbf12])
+        qc.append(NoiselessCCX, [self.qubitbf12, self.qubitbf13, self.address_space["ghz"][1]])
+        qc.append(NoiselessX, [self.qubitbf12])
         
         # phaseflip measurement 1-2
-        execute_algorithm(self.routing12, qc, cbits=cbits)
+        if qubit0 != bf12_0:
+            qc.append(NoiselessCX, [qubit0, bf12_0])
+        if qubit1 != bf12_1:
+            qc.append(NoiselessCX, [qubit1, bf12_1])
         execute_algorithm(self.pf12, qc, cbits=cbits)
-        execute_algorithm(self.routing12_dagger, qc, cbits=cbits)
+        if qubit0 != bf12_0:
+            qc.append(NoiselessCX, [qubit0, bf12_0])
+        if qubit1 != bf12_1:
+            qc.append(NoiselessCX, [qubit1, bf12_1])
         
         # phaseflip measurement 1-3
-        execute_algorithm(self.routing13, qc, cbits=cbits)
+        if qubit0 != bf13_0:
+            qc.append(NoiselessCX, [qubit0, bf13_0])
+        if qubit2 != bf13_1:
+            qc.append(NoiselessCX, [qubit2, bf13_1])
         execute_algorithm(self.pf13, qc, cbits=cbits)
-        execute_algorithm(self.routing13_dagger, qc, cbits=cbits)
+        if qubit0 != bf13_0:
+            qc.append(NoiselessCX, [qubit0, bf13_0])
+        if qubit2 != bf13_1:
+            qc.append(NoiselessCX, [qubit2, bf13_1])
+        
+        ## correcting phaseflips
+        qc.append(NoiselessCCZ, [self.qubitpf12, self.qubitpf13, self.address_space["ghz"][0]])
+        
+        qc.append(NoiselessX, [self.qubitpf13])
+        qc.append(NoiselessCCZ, [self.qubitpf12, self.qubitpf13, self.address_space["ghz"][1]])
+        qc.append(NoiselessX, [self.qubitpf13])
+        
+        qc.append(NoiselessX, [self.qubitpf12])
+        qc.append(NoiselessCCZ, [self.qubitpf12, self.qubitpf13, self.address_space["ghz"][1]])
+        qc.append(NoiselessX, [self.qubitpf12])
+        
         
 
 def ibm_simulate_algorithms(noise_model, embeddings, batch, hardware_spec, embedding_indices, is_default) -> float:
@@ -439,9 +535,10 @@ def ibm_simulate_algorithms(noise_model, embeddings, batch, hardware_spec, embed
     for qubit in range (0, 3):
         for error in [Op.X, Op.Z, Op.Y, Op.I]:
             procedure.algorithm(qubit, error, qc, cbits=cr)
-            qc.save_state_vector('res', pershot=True)
+            qc.save_statevector('res', pershot=True)
             state_vs = ibm_simulate_circuit(qc, ibm_noise_model, initial_layout)
-            for state in state_vs:
+            for (index,state) in enumerate(state_vs):
+                print(f"{index+1}/{len(state_vs)}")
                 if procedure.is_target_qs(state):
                     accuracy += 1
     
@@ -457,6 +554,8 @@ def get_experiment_id(name):
     return PhaseflipExperimentID.IPMA
     
 if __name__ == "__main__":
+    Precision.PRECISION = MAX_PRECISION
+    Precision.update_threshold()
     # we only compute on these hardware
     allowed_hardware = []
     for hardware in HardwareSpec:
@@ -501,7 +600,7 @@ if __name__ == "__main__":
             noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_TERMALIZATION)
             embeddings = get_hardware_embeddings(hardware_spec)
             for embedding in embeddings:
-                my_ghz, default_ghz = get_guarantees(noise_model, num_qubits, hardware_spec, embedding["ghz"], GHZExperimentID.EXP1, 3, ghz.get_experiments_actions, ghz.get_hardware_embeddings)
+                my_ghz, default_ghz = get_guarantees(noise_model, num_qubits, hardware_spec, embedding["ghz"], GHZExperimentID.EXP1, 3, ghz.get_experiments_actions, ghz.get_hardware_embeddings, IBMInstanceObj=ghz.IBMGHZInstance)
                 embedding_indices = dict()
                 for (name1, name2) in [("ghz", "ghz"), ("bf_meas12","meas12"), ("bf_meas13","meas13"), ("pf_meas12", "meas12"), ("pf_meas13", "meas13")]:
                     if name1 == "ghz":
@@ -526,9 +625,9 @@ if __name__ == "__main__":
                 
                 my_phaseflip13, default_phaseflip13, = get_guarantees(noise_model, num_qubits, hardware_spec, embedding["meas13"], PhaseflipExperimentID.IPMA, 7, phaseflip.get_experiments_actions, phaseflip.get_hardware_embeddings)
                 
-                my_acc = None # ibm_simulate_algorithms(noise_model, embedding, num_qubits, hardware_spec, embedding_indices, is_default=False)
-                default_acc = None #ibm_simulate_algorithms(noise_model, embedding, num_qubits, hardware_spec, embedding_indices, is_default=True)
-                diff = None # my_acc - default_acc
+                my_acc = ibm_simulate_algorithms(noise_model, embedding, num_qubits, hardware_spec, embedding_indices, is_default=False)
+                default_acc = ibm_simulate_algorithms(noise_model, embedding, num_qubits, hardware_spec, embedding_indices, is_default=True)
+                diff = my_acc - default_acc
                 
                 line_elements = [
                 hardware_spec.value,
@@ -559,8 +658,3 @@ if __name__ == "__main__":
             
     output_file.close()
         
-        
-        
-    
-    
-    
