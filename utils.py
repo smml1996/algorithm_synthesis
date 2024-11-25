@@ -152,4 +152,18 @@ def np_get_ground_state(eigenvalues, eigenvectors):
             result.append(eigenvector)
     return r_eigenvalue, result
 
+def remove_char_at_indices(s: str, remove_indices: List[int]) -> str:
+    answer = ""
+    for (index, c) in enumerate(s):
+        if not (index in remove_indices):
+            answer += c
+    return answer
+
+def are_all_indices_equal(s1, s2, indices: List[int]) -> bool:
+    
+    for index in indices:
+        if s1[index] != s2[index]:
+            return False
+        
+    return True
             

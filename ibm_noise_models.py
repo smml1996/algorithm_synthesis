@@ -920,13 +920,13 @@ class NoiseModel:
         return qubits_and_noises
             
             
-NoiselessX = XGate(label="noiseless_x")
-NoiselessZ = ZGate(label="noiseless_z")
-NoiselessCX = CXGate(label="noiseless_cx")
-NoiselessSX = SXGate(label="noiseless_sx")   
-NoiselessCCX = CCXGate(label="noiseless_ccx")     
-NoiselessCCZ = CCZGate(label="noiseless_ccz")  
-NoiselessH = HGate(label="noiseless_h")
+NoiselessX = XGate(label="x_")
+NoiselessZ = ZGate(label="z_")
+NoiselessCX = CXGate(label="cx_")
+NoiselessSX = SXGate(label="sx_")   
+NoiselessCCX = CCXGate(label="ccx_")     
+NoiselessCCZ = CCZGate(label="ccz_")  
+NoiselessH = HGate(label="h_")
 
 def instruction_to_ibm(qc, instruction_sequence, noiseless=False):
     for instruction in instruction_sequence:

@@ -7,6 +7,8 @@ from qpu_utils import Precision, get_complex, int_to_bin, bin_to_int
 from scipy.linalg import expm
 from qiskit.quantum_info import SparsePauliOp
 
+from utils import are_all_indices_equal, remove_char_at_indices
+
 class QuantumState:
     sparse_vector : Dict # map basis states to sympy-Symbolic
     substitutions: List = []
@@ -129,7 +131,6 @@ class QuantumState:
             for _ in range(2**len(self.qubits_used)):
                 temp.append(0.0)
             result.append(temp)
-
         for virtual_row in range(2**len(self.qubits_used)): # the virtual row is only proportial to the size of the qubits that are actually used
             physical_row = self._get_physical_basis(virtual_row) # this is the real basis
             for virtual_col in range(2**len(self.qubits_used)):
@@ -146,9 +147,6 @@ class QuantumState:
         for (index_, q) in enumerate(qubits_used):
             if q == index:
                 return index_
-                # if answer is not None:
-                # assert answer is None
-                # answer = index_
         assert answer is not None
         return answer
     
@@ -186,14 +184,14 @@ class QuantumState:
                 temp.append(0)                
             result.append(temp)
         for ket in range(initial_dim):
-            bin_ket = int_to_bin(ket, zero_padding=initial_dim) # this is the original ket, we get the binary representation
-            assert len(bin_ket) == initial_dim
+            bin_ket = int_to_bin(ket, zero_padding=len(qubits_used)) # this is the original ket, we get the binary representation
+            assert len(bin_ket) == len(qubits_used)
             assert isinstance(bin_ket, str)
             bin_new_ket = bin_ket[:index] + bin_ket[index+1:] # now we create a binary string without the bit that we want to remove (located at index)
             assert len(bin_ket) == len(bin_new_ket) + 1
             index_new_ket = bin_to_int(bin_new_ket) # index of the row in the result(-ing density matrix)
             for bra in range(initial_dim):
-                bin_bra = int_to_bin(bra, zero_padding=initial_dim) # original bra
+                bin_bra = int_to_bin(bra, zero_padding=len(qubits_used)) # original bra
                 bin_new_bra = bin_bra[:index] + bin_bra[index+1:] # remove the bit in the index we dont want
                 index_new_bra = bin_to_int(bin_new_bra) # index of the row in the result(-ing density matrix)   
 
@@ -204,22 +202,36 @@ class QuantumState:
         return result
 
     def multi_partial_trace(self, rho=None, remove_indices: List[int]=[0], qubits_used_=None) -> List[List[float]]:
-        if rho is None:
-            rho = self.get_density_matrix()
-
+        # if rho is None:
+        #     rho = self.get_density_matrix()
         if qubits_used_ is None:
             qubits_used = deepcopy(self.qubits_used)
         else:
             qubits_used = deepcopy(qubits_used_)
     
-        assert len(rho) == 2**(len(qubits_used)) 
-
-        remove_indices = sorted(remove_indices, reverse=True) # we remove higher indices first to avoid conflict 
-        result = rho
+        # assert len(rho) == 2**(len(qubits_used)) 
+        initial_dim = 2**len(qubits_used)
+        final_dim = 2 **(len(qubits_used) - len(remove_indices))
+        
+        real_indices = []
         for index in remove_indices:
-            result = self.single_partial_trace(result, index, qubits_used=qubits_used)
-            qubits_used.remove(index)
+            real_indices.append(QuantumState._get_real_index(qubits_used, index))
+            
+        result = np.zeros((final_dim, final_dim))
+        for ket in self.sparse_vector.keys():
+            bin_ket = int_to_bin(ket, zero_padding=len(qubits_used))
+            bin_new_ket = remove_char_at_indices(bin_ket, real_indices)
+            index_new_ket = bin_to_int(bin_new_ket) # index of the row in the result(-ing density matrix)
+            for bra in self.sparse_vector.keys():
+                current_val = (self.get_amplitude(ket) * conjugate(self.get_amplitude(bra))).real
+                bin_bra = int_to_bin(bra, zero_padding=len(qubits_used)) # original bra
+                bin_new_bra = remove_char_at_indices(bin_bra, real_indices)
+                index_new_bra = bin_to_int(bin_new_bra)        
+                if are_all_indices_equal(bin_ket, bin_bra, real_indices):
+                    result[index_new_ket][index_new_bra] += current_val
         return result
+                
+        
     
     def get_trace(self, rho: List[List[float]]):
         result = 0

@@ -76,6 +76,12 @@ class PhaseflipExperimentID(Enum):
     @property
     def exp_name(self):
         return "phaseflip"
+    
+class ResetExperimentID(Enum):
+    main = "main"
+    @property
+    def exp_name(self):
+        return "reset"
 
 class GHZExperimentID(Enum):
     EXP1 = "exp1"
@@ -112,6 +118,7 @@ def generate_configs(experiment_id: Enum, min_horizon, max_horizon, allowed_hard
     if batches is None:
         batches = get_num_qubits_to_hardware(hardware_str=True, allowed_hardware=allowed_hardware)
     
+    project_path = get_project_path()
     for (batch_name, hardware_specs_str) in batches.items():
         if len(hardware_specs_str) > 0:
             config = dict()
@@ -154,14 +161,13 @@ def generate_embeddings(experiment_id, batch, get_hardware_embeddings) -> Dict[A
     f.write(json.dumps(result))
     f.close()
     
-def load_embeddings(config=None, config_path=None):
+def load_embeddings(config=None, config_path=None, ExperimentIdObj=None):
     if config is None:
         assert config_path is not None
-        config = load_config_file(config_path, GHZExperimentID)
+        assert ExperimentIdObj is not None
+        config = load_config_file(config_path, ExperimentIdObj)
     
     embeddings_path = get_embeddings_path(config)
-    experiment_id = config["experiment_id"]
-    assert isinstance(experiment_id, GHZExperimentID)
     
     with open(embeddings_path, 'r') as file:
         result = dict()
@@ -258,7 +264,9 @@ def get_config_path(experiment_id, batch_name):
     return os.path.join(experiment_path, f"{experiment_id.value}_{batch_name}.json")
 
 def get_output_path(experiment_id, batch_name):
+    project_path = get_project_path()
     experiment_path = get_experiment_name_path(experiment_id)
+    directory_exists(os.path.join(project_path, experiment_path, experiment_id.value))
     return os.path.join(experiment_path, experiment_id.value,f"{batch_name}")
 
 def get_experiment_name_path(experiment_id):
@@ -266,7 +274,7 @@ def get_experiment_name_path(experiment_id):
     project_path = project_settings["PROJECT_PATH"]
     directory_exists(os.path.join(project_path, "results"))
     directory_exists(os.path.join(project_path, "results", experiment_id.exp_name))
-    return os.path.join(project_path, "results", experiment_id.exp_name)
+    return os.path.join("results", experiment_id.exp_name)
 
 def get_pomdp_path(config, hardware_spec, embedding_index):
     return os.path.join(config["output_dir"], "pomdps", f"{hardware_spec.value}_{embedding_index}.txt")
@@ -360,7 +368,15 @@ def get_default_flip_algorithm(noise_model, embedding, horizon, experiment_id, g
     return head
         
 def get_default_algorithm(noise_model, embedding, experiment_id, get_experiments_actions, horizon, target_qubit=None):
-    assert type(experiment_id) != GHZExperimentID
+    if isinstance(experiment_id, GHZExperimentID):
+        cx01_instruction = Instruction(embedding[1], Op.CNOT, control=embedding[0])
+        cx12_instruction = Instruction(embedding[2], Op.CNOT, control=embedding[1])
+        node1 = AlgorithmNode("H0", [Instruction(embedding[0], Op.H)])
+        node2 = AlgorithmNode("CX01", [cx01_instruction])
+        node3 = AlgorithmNode("CX12", [cx12_instruction])
+        node1.next_ins = node2
+        node2.next_ins = node3    
+        return node1
     if isinstance(experiment_id, BitflipExperimentID):
         return get_default_flip_algorithm(noise_model, embedding, horizon, BitflipExperimentID.IPMA2, get_experiments_actions, target_qubit=target_qubit)
     return get_default_flip_algorithm(noise_model, embedding, horizon, PhaseflipExperimentID.IPMA, get_experiments_actions, target_qubit=target_qubit)
@@ -516,8 +532,8 @@ def generate_pomdp(experiment_id: GHZExperimentID, hardware_spec: HardwareSpec,
     problem_instance = ProblemInstanceObj(embedding)
     actions = get_experiments_actions(noise_model, embedding, experiment_id)
     initial_distribution = []
-    assert len(problem_instance.initial_state) == 1
-    initial_distribution.append((problem_instance.initial_state[0], 1.0))
+    for initial_state in problem_instance.initial_state:
+        initial_distribution.append((initial_state, 1/len(problem_instance.initial_state)))
     start_time = time.time()
     pomdp = build_pomdp(actions, noise_model, horizon, embedding, initial_distribution=initial_distribution, guard=guard)
     if optimize_graph:
@@ -596,7 +612,8 @@ def get_qc_simulated_acc(qc: QuantumCircuit, qr: QuantumRegister, embedding, bac
     accuracy = 0.0
     for _ in range(factor):
         state_vs = ibm_simulate_circuit(qc, ibm_noise_model, initial_layout, optimization_level=optimization_level, coupling_map=coupling_map)
-        assert len(state_vs) == 1024
+        # assert len(state_vs) == 1024
+        assert len(state_vs) == 1
         for state in state_vs:
             if ibm_problem_instance.is_target_qs(state):
                 accuracy += 1
