@@ -3,7 +3,7 @@
     "experiment_id": "main",
     "min_horizon": 2,
     "max_horizon": 7,
-    "output_dir": "/Users/stefaniemuroyalei/Documents/algorithm_synthesis/results/reset/main/B15",
+    "output_dir": "results/reset/main/B15",
     "algorithms_file": "",
     "hardware": [
         "fake_melbourne"
