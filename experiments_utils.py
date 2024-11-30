@@ -140,6 +140,13 @@ def generate_configs(experiment_id: Enum, min_horizon, max_horizon, allowed_hard
 
 ###### embeddings #########
 
+def get_default_embedding(num_keys: int) -> Dict[int, int]:
+    answer = dict()
+    
+    for i in range(num_keys):
+        answer[i] = i
+    return answer
+
 def generate_embeddings(experiment_id, batch, get_hardware_embeddings) -> Dict[Any, Any]:
     config_path = get_config_path(experiment_id, batch)
     config = load_config_file(config_path, type(experiment_id))
@@ -338,33 +345,42 @@ def get_meas_sequence(num_meas, meas_action, flip_action, total_meas, count_ones
     return head
    
 def get_default_flip_algorithm(noise_model, embedding, horizon, experiment_id, get_experiments_actions, target_qubit=None) -> AlgorithmNode:
+    experiment_actions = get_experiments_actions(noise_model, embedding, experiment_id)
     if isinstance(experiment_id, BitflipExperimentID):
-        experiment_actions = get_experiments_actions(noise_model, embedding, experiment_id)
         flip_action = experiment_actions[2]
         meas_action = experiment_actions[1]
         if experiment_id == BitflipExperimentID.IPMA2:
             if target_qubit is None:
                 head = AlgorithmNode(experiment_actions[0].name, experiment_actions[0].instruction_sequence)
             else:
-                head = AlgorithmNode("XS", [Instruction(target_qubit, Op.X)], noiseless=True)
+                raise Exception("fix line below")
+                # head = AlgorithmNode("XS", [Instruction(target_qubit, Op.X)], noiseless=True)
             num_meas = horizon - 2 # the initial CX and the flip instruction needed at the end in case we detect an odd parity
         else:
             raise Exception("Implement me")
             num_meas = horizon - 3 # the two initial CX and the flip instruction needed at the end in case we detect an odd parity
+    elif experiment_id == ResetExperimentID.main:
+        assert target_qubit is None
+        num_meas = horizon-1
+        meas_action = experiment_actions[0]
+        flip_action = experiment_actions[1]
     else:
         assert isinstance(experiment_id, PhaseflipExperimentID)
-        experiment_actions = get_experiments_actions(noise_model, embedding, experiment_id)
         flip_action = experiment_actions[1]
         meas_action = experiment_actions[0]
         if target_qubit is None:
             head = AlgorithmNode(experiment_actions[2].name, experiment_actions[-1].instruction_sequence)
         else:
+            raise Exception("fix line below")
             head = AlgorithmNode("XS", [Instruction(target_qubit, Op.X)], noiseless=True)
         
         num_meas = horizon-2
     
-    
-    head.next_ins = get_meas_sequence(num_meas, meas_action, flip_action, total_meas=num_meas)
+    if type(experiment_id) in [PhaseflipExperimentID, BitflipExperimentID]:
+        head.next_ins = get_meas_sequence(num_meas, meas_action, flip_action, total_meas=num_meas)
+    else:
+        assert experiment_id == ResetExperimentID.main
+        return get_meas_sequence(num_meas, meas_action, flip_action, total_meas=num_meas)
     return head
         
 def get_default_algorithm(noise_model, embedding, experiment_id, get_experiments_actions, horizon, target_qubit=None):
@@ -379,7 +395,7 @@ def get_default_algorithm(noise_model, embedding, experiment_id, get_experiments
         return node1
     if isinstance(experiment_id, BitflipExperimentID):
         return get_default_flip_algorithm(noise_model, embedding, horizon, BitflipExperimentID.IPMA2, get_experiments_actions, target_qubit=target_qubit)
-    return get_default_flip_algorithm(noise_model, embedding, horizon, PhaseflipExperimentID.IPMA, get_experiments_actions, target_qubit=target_qubit)
+    return get_default_flip_algorithm(noise_model, embedding, horizon, experiment_id, get_experiments_actions, target_qubit=target_qubit)
 
 ###### guarantees #####
 def get_embedding_guarantee(batch, hardware_spec, embedding_index, horizon, experiment_id):
@@ -438,6 +454,7 @@ def get_guarantees(noise_model: NoiseModel, batch: int, hardware_spec: HardwareS
     config = load_config_file(get_config_path(experiment_id, batch), type(experiment_id))
     if embedding_index is None:
         embedding_index = get_embedding_index(hardware_spec, embedding, experiment_id, get_hardware_embeddings)
+        print("embedding index", embedding_index)
     my_guarantee = round(get_embedding_guarantee(batch, hardware_spec, embedding_index, horizon, experiment_id),3)
     
     if type(experiment_id)  == GHZExperimentID:        
@@ -461,7 +478,7 @@ def generate_mc_guarantees_file(experiment_id, allowed_hardware: List[HardwareSp
     ]
     
     project_path = get_project_path()
-    outputfile_path = os.path.join(project_path, "results", experiment_id.exp_name, f"mc_guarantees_{file_posfix}.csv")
+    outputfile_path = os.path.join(project_path, "results", experiment_id.exp_name, experiment_id.value, f"mc_guarantees_{file_posfix}.csv")
     outputfile = open(outputfile_path, "w")
     outputfile.write(",".join(columns) + "\n")
     batches = get_num_qubits_to_hardware(WITH_THERMALIZATION, allowed_hardware=allowed_hardware)
@@ -698,9 +715,9 @@ def compare_with_simulated(experiment_id, batch_name, ibm_instance, get_experime
     
 ###### algorithm analysis ####
 
-def generate_diff_algorithms_file(experiment_id, allowed_hardware, get_hardware_embeddings, get_experiments_actions, with_thermalization=False):
+def get_diff_algorithms(experiment_id, allowed_hardware, get_hardware_embeddings, get_experiments_actions, with_thermalization=False):
     project_path = get_project_path()
-    outputdir_path = os.path.join(project_path, "results", experiment_id.exp_name)
+    outputdir_path = os.path.join(project_path, "results", experiment_id.exp_name, experiment_id.value)
     all_algorithms = dict()
     comments = dict()
 
@@ -717,7 +734,7 @@ def generate_diff_algorithms_file(experiment_id, allowed_hardware, get_hardware_
                 
             for (index, embedding) in enumerate(embeddings):
                 actions_to_instructions = dict()
-                actions = get_experiments_actions(noise_model, embedding, experiment_id)
+                actions = get_experiments_actions(noise_model, get_default_embedding(len(embedding.keys())), experiment_id)
                 for action in actions:
                     actions_to_instructions[action.name] = action.instruction_sequence
                 actions_to_instructions["halt"] = []
@@ -738,6 +755,12 @@ def generate_diff_algorithms_file(experiment_id, allowed_hardware, get_hardware_
                             if old_alg == algorithm:
                                 comments[horizon][index_old_alg] = f"{comments[horizon][index_old_alg]},{hardware_spec.value}-{index}"
                                 break
+    return all_algorithms, comments, actions
+
+def generate_diff_algorithms_file(experiment_id, allowed_hardware, get_hardware_embeddings, get_experiments_actions, with_thermalization=False):
+    project_path = get_project_path()
+    outputdir_path = os.path.join(project_path, "results", experiment_id.exp_name, experiment_id.value)
+    all_algorithms, comments, some_actions = get_diff_algorithms(experiment_id, allowed_hardware, get_hardware_embeddings, get_experiments_actions, with_thermalization=with_thermalization)
     for horizon in all_algorithms.keys():
         output_path = os.path.join(outputdir_path, f"diff{horizon}_algs.py")
-        dump_algorithms(all_algorithms[horizon], output_path, comments=comments[horizon])
+        dump_algorithms(all_algorithms[horizon], some_actions, output_path, comments=comments[horizon])

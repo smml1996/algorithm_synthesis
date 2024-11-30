@@ -2,6 +2,7 @@ from typing import List
 
 from qiskit import QuantumCircuit
 from ibm_noise_models import Instruction, instruction_to_ibm
+from pomdp import POMDPAction
 
 
 class AlgorithmNode:
@@ -162,8 +163,7 @@ def get_algorithm(current_node, tabs="\t", count_ifs = 0):
         return f"{tabs}pass\n"
     assert isinstance(current_node, AlgorithmNode)
     result = f"{tabs}{current_node.action_name}\n"
-    # for instruction in current_node.instruction_sequence:
-    #     result += f"{tabs}instruction_to_ibm(qc, basis_gates, {current_node.instruction}, {current_node.target}, {current_node.control})\n"
+    result += f"{tabs}instruction_to_ibm(qc, basis_gates, {current_node.action_name})\n"
 
 
     if current_node.is_meas:
@@ -183,13 +183,26 @@ def get_algorithm(current_node, tabs="\t", count_ifs = 0):
             result += next_algorithm
     return result
 
-def dump_algorithms(algorithms: List[AlgorithmNode], output_path, comments=None):
+def dump_algorithms(algorithms: List[AlgorithmNode], actions: List[POMDPAction], output_path, comments=None):
+    assert (comments is None) or (len(comments) == len(algorithms))
     file = open(output_path, "w")
     file.write("import os, sys\n")
     file.write("sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))\n")
     file.write("from qiskit import QuantumCircuit, ClassicalRegister\n")
-    file.write("from ibm_noise_models import Instruction, instruction_to_ibm\n\n")
-    assert (comments is None) or (len(comments) == len(algorithms))
+    file.write("from ibm_noise_models import Instruction, instruction_to_ibm, Op\n\n")
+    
+    file.write("###### ACTIONS ######\n")
+    for action in actions:
+        assert isinstance(action, POMDPAction)
+        instructions_str = ""
+        for instruction in action.instruction_sequence:
+            if len(instructions_str) > 0:
+                instructions_str += ", "
+            instructions_str += f"Instruction({instruction.target}, Op.{instruction.op.name}, {instruction.control}, {instruction.params})"
+        file.write(f"{action.name} = [{instructions_str}]\n")
+    
+    file.write("###### END ACTIONS ######\n\n")
+    
     for (index, algorithm) in enumerate(algorithms):
         assert isinstance(algorithm, AlgorithmNode)
         file.write(f"def algorithm{index}(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):\n")
