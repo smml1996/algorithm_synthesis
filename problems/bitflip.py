@@ -684,9 +684,13 @@ if __name__ == "__main__":
         # simulate all synthesized algorithms in all backends
         experiment_id = sys.argv[2]
 
-    elif arg_backend == "mc_ipma2":
+    elif arg_backend == "all_mc_guarantees":
+        generate_mc_guarantees_file(BitflipExperimentID.IPMA, HardwareSpec, get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION)
+        generate_mc_guarantees_file(BitflipExperimentID.CXH, HardwareSpec, get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION)
         generate_mc_guarantees_file(BitflipExperimentID.IPMA2, ipma2_allowed_hardware, get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION)
-    elif arg_backend == "alg_ipma2":
+    elif arg_backend == "alg_ipma":
+        generate_diff_algorithms_file(BitflipExperimentID.IPMA, HardwareSpec, get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
+        generate_diff_algorithms_file(BitflipExperimentID.CXH, HardwareSpec, get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
         generate_diff_algorithms_file(BitflipExperimentID.IPMA2, ipma2_allowed_hardware, get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
     elif arg_backend == "test" :
         # with cProfile.Profile() as pr:

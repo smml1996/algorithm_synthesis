@@ -159,10 +159,10 @@ if __name__ == "__main__":
         batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=allowed_hardware)
         for num_qubits in batches.keys():
             generate_pomdps(ResetExperimentID.main, num_qubits, get_experiments_actions, ResetInstance)
-    elif arg_backend == "mc_ipma":
-        generate_mc_guarantees_file(PhaseflipExperimentID.IPMA, allowed_hardware, get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION) 
-    elif arg_backend == "alg_ipma":
-        generate_diff_algorithms_file(PhaseflipExperimentID.IPMA, allowed_hardware, get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
+    elif arg_backend == "mc_main":
+        generate_mc_guarantees_file(ResetExperimentID.main, allowed_hardware, get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION) 
+    elif arg_backend == "alg_main":
+        generate_diff_algorithms_file(ResetExperimentID.main, allowed_hardware, get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
         
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)
     
