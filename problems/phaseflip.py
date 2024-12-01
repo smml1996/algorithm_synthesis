@@ -21,7 +21,7 @@ from ibm_noise_models import Instruction, MeasChannel, NoiseModel, get_ibm_noise
 import numpy as np
 from math import ceil, pi   
 from enum import Enum
-from experiments_utils import PhaseflipExperimentID, ReadoutNoise, bitflips_guard, directory_exists, generate_configs, generate_diff_algorithms_file, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_config_path, get_configs_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings, bell_state_pts
+from experiments_utils import PhaseflipExperimentID, ReadoutNoise, bitflips_guard, check_files, directory_exists, generate_configs, generate_diff_algorithms_file, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_config_path, get_configs_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings, bell_state_pts
 import cProfile
 import pstats
 
@@ -287,6 +287,8 @@ if __name__ == "__main__":
         generate_mc_guarantees_file(PhaseflipExperimentID.IPMA, allowed_hardware, get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION) 
     elif arg_backend == "alg_ipma":
         generate_diff_algorithms_file(PhaseflipExperimentID.IPMA, allowed_hardware, get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
+    elif arg_backend == "test" :
+        check_files(PhaseflipExperimentID.IPMA, allowed_hardware, with_thermalization=False)
         
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)
     

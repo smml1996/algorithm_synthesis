@@ -191,6 +191,10 @@ def load_embeddings(config=None, config_path=None, ExperimentIdObj=None):
                     d = dict()
                     for (key, value) in embedding.items():
                         d[int(key)] = int(value)
+                    if config["experiment_id"] == BitflipExperimentID.CXH:
+                        temp = d[2]
+                        d[2] = d[1]
+                        d[1] = temp
                     result[hardware_spec]["embeddings"].append(d)
             else:
                 assert hardware_spec.value not in data.keys()
@@ -288,6 +292,9 @@ def get_pomdp_path(config, hardware_spec, embedding_index):
 
 def get_embeddings_path(config):
     return os.path.join(get_project_path(), config["output_dir"], "embeddings.json")
+
+def get_algorithm_path(config, hardware_spec, embedding_index, horizon):
+    return os.path.join(config["output_dir"], "algorithms", f"{hardware_spec.value}_{embedding_index}_{horizon}.txt")
 
 
 ################# C++ code ###############
@@ -506,6 +513,9 @@ def generate_mc_guarantees_file(experiment_id, allowed_hardware: List[HardwareSp
 
 def parse_lambdas_file(config):
     path = os.path.join(get_project_path(), config["output_dir"], "lambdas.csv")
+    if not os.path.isfile(path):
+        print(f"lambdas file: {path} does not exists")
+        return None
     f = open(path)
     result = dict()
     for line in f.readlines()[1:]:
@@ -764,3 +774,93 @@ def generate_diff_algorithms_file(experiment_id, allowed_hardware, get_hardware_
     for horizon in all_algorithms.keys():
         output_path = os.path.join(outputdir_path, f"diff{horizon}_algs.py")
         dump_algorithms(all_algorithms[horizon], some_actions, output_path, comments=comments[horizon])
+        
+def generate_algs_vs_file(experiment_id, allowed_hardware, get_hardware_embeddings, get_experiments_actions, with_thermalization=False):
+    project_path = get_project_path()
+    outputdir_path = os.path.join(project_path, "results", experiment_id.exp_name, experiment_id.value)
+    
+    outputfile_path = os.path.join(outputdir_path, "algorithms_vs.csv")
+    outputfile = open(outputfile_path, "w")
+    columns = ["horizon", "alg_index", "hardware_spec", "embedding_index","acc"]
+    outputfile.write(",".join(columns) + "\n")
+    
+    all_algorithms, _, _ = get_diff_algorithms(experiment_id, allowed_hardware, get_hardware_embeddings, get_experiments_actions, with_thermalization=with_thermalization)
+    batches = get_num_qubits_to_hardware(with_thermalization, allowed_hardware=allowed_hardware)
+    
+    for (horizon, algorithms) in all_algorithms.items():
+        for (alg_index, algorithm) in enumerate(algorithms):
+            for (batch_name, hardware_specs) in batches.items():
+                config_path = get_config_path(experiment_id, batch_name)
+                config = load_config_file(config_path, type(experiment_id))
+                for hardware_spec in hardware_specs:
+                    embeddings = get_hardware_embeddings(hardware_spec, experiment_id)
+                    for (embedding_index, _) in enumerate(embeddings):
+                        pomdp_path = get_pomdp_path(config, hardware_spec, embedding_index)
+                        acc = get_custom_guarantee(algorithm, pomdp_path, config)
+                        columns = [horizon, alg_index, hardware_spec, embedding_index, acc]
+                        columns = [str(x) for x in columns]
+                        outputfile.write(",".join(columns) + "\n")
+                        
+    outputfile.close()
+            
+            
+#### DEBUGGER ######
+
+def check_lambdas(config, embeddings):
+    min_horizon = config["min_horizon"]
+    max_horizon = config["max_horizon"]
+    
+    all_lambdas = parse_lambdas_file(config)
+    if all_lambdas is None:
+        return None
+    for (hardware_spec_) in  config["hardware"]:
+        hardware_spec = find_enum_object(hardware_spec_, HardwareSpec)
+        if hardware_spec_ not in all_lambdas.keys():
+            print(f"{hardware_spec} is not in lambdas file ({config['experiment_id']}-{config['name']})")
+            continue
+        for (embedding_index, _) in enumerate(embeddings[hardware_spec]["embeddings"]):
+            if embedding_index not in all_lambdas[hardware_spec_].keys():
+                print(f"{hardware_spec}-{embedding_index} is not in lambdas file ({config['experiment_id']}-{config['name']})")
+                continue
+            for horizon in range(min_horizon, max_horizon+1):
+                if horizon not in all_lambdas[hardware_spec_][embedding_index].keys():
+                    print(f"{hardware_spec}-{embedding_index} h={horizon} is not in lambdas file ({config['experiment_id']}-{config['name']})")
+                    continue
+                
+def check_pomdp_files(config, embeddings):
+    for hardware_spec_ in  config["hardware"]:
+        hardware_spec = find_enum_object(hardware_spec_, HardwareSpec)
+        for (embedding_index, _) in enumerate(embeddings[hardware_spec]["embeddings"]):
+            pomdp_path = get_pomdp_path(config, hardware_spec, embedding_index)
+            if os.path.isfile(pomdp_path):
+                print(f"NO POMDP file for {hardware_spec}-{embedding_index} ({config['experiment_id']}-{config['name']})")
+                continue
+    
+def check_algorithms_files(config, embeddings):
+    for (hardware_spec_) in  config["hardware"]:
+        hardware_spec = find_enum_object(hardware_spec_, HardwareSpec)
+        for (embedding_index, _) in enumerate(embeddings[hardware_spec]["embeddings"]):
+            for horizon in range(config["min_horizon"], config["max_horizon"]+1):
+                algorithm_path = get_algorithm_path(config, hardware_spec, embedding_index, horizon)
+                if os.path.isfile(algorithm_path):
+                    print(f"NO ALGORITHM file for {hardware_spec}-{embedding_index} ({config['experiment_id']}-{config['name']})")
+                    continue
+            
+def check_files(experiment_id, allowed_hardware, with_thermalization=False):
+    batches = get_num_qubits_to_hardware(with_thermalization, allowed_hardware=allowed_hardware)
+    
+    for (batch_name, _) in batches.items():
+        config_path = get_config_path(experiment_id, batch_name)
+        config = load_config_file(config_path, type(experiment_id))
+        embeddings = load_embeddings(config)
+        
+        # check lambdas files
+        check_lambdas(config, embeddings)
+        
+        # check pomdp files
+        check_pomdp_files(config, embeddings)
+        
+        # check algorithms files
+        check_algorithms_files(config, embeddings)
+        
+        

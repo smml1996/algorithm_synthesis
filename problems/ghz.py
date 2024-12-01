@@ -19,7 +19,7 @@ from ibm_noise_models import Instruction, NoiseModel, HardwareSpec, load_config_
 import numpy as np
 from math import pi   
 from enum import Enum
-from experiments_utils import GHZExperimentID, generate_configs, generate_diff_algorithms_file, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_best_lambda_per_hardware, get_config_path, get_experiment_name_path, get_num_qubits_to_hardware, get_project_settings, get_simulated_guarantee, parse_lambdas_file
+from experiments_utils import GHZExperimentID, check_files, generate_configs, generate_diff_algorithms_file, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_best_lambda_per_hardware, get_config_path, get_experiment_name_path, get_num_qubits_to_hardware, get_project_settings, get_simulated_guarantee, parse_lambdas_file
 
 WITH_TERMALIZATION = False
 MAX_PRECISION = 10    
@@ -305,4 +305,6 @@ if __name__ == "__main__":
                 column = [str(c) for c in column]
                 output_file.write(",".join(column) + "\n")
             output_file.flush()
+    elif arg_backend == "test" :
+        check_files(GHZExperimentID.EMBED, get_allowed_hardware(GHZExperimentID.EMBED),with_thermalization=False)
             
