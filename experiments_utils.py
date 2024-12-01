@@ -138,6 +138,20 @@ def generate_configs(experiment_id: Enum, min_horizon, max_horizon, allowed_hard
             json.dump(config, f, indent=4)
             f.close()
 
+def get_allowed_hardware(experiment_id, with_thermalization=False):
+    if experiment_id in [BitflipExperimentID.IPMA, BitflipExperimentID.CXH, GHZExperimentID.EMBED]:
+        return HardwareSpec
+    elif experiment_id in [BitflipExperimentID.IPMA2, GHZExperimentID.EXP1, PhaseflipExperimentID.IPMA, ResetExperimentID.main]:
+        ipma2_allowed_hardware = []
+        for hardware in HardwareSpec:
+            noise_model = NoiseModel(hardware, thermal_relaxation=with_thermalization)
+            if noise_model.num_qubits >= 14:
+                ipma2_allowed_hardware.append(hardware)
+        return ipma2_allowed_hardware
+    else:
+        raise Exception(f"Configure allowed hardware for {experiment_id}")
+    
+
 ###### embeddings #########
 
 def get_default_embedding(num_keys: int) -> Dict[int, int]:
@@ -288,7 +302,9 @@ def get_experiment_name_path(experiment_id):
     return os.path.join("results", experiment_id.exp_name)
 
 def get_pomdp_path(config, hardware_spec, embedding_index):
-    return os.path.join(config["output_dir"], "pomdps", f"{hardware_spec.value}_{embedding_index}.txt")
+    project_settings = get_project_settings()
+    project_path = project_settings["PROJECT_PATH"]
+    return os.path.join(project_path, config["output_dir"], "pomdps", f"{hardware_spec.value}_{embedding_index}.txt")
 
 def get_embeddings_path(config):
     return os.path.join(get_project_path(), config["output_dir"], "embeddings.json")
