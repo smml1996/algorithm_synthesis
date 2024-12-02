@@ -21,7 +21,7 @@ from ibm_noise_models import Instruction, MeasChannel, NoiseModel, get_ibm_noise
 import numpy as np
 from math import ceil, pi   
 from enum import Enum
-from experiments_utils import BitflipExperimentID, ReadoutNoise, bitflips_guard, check_files, compare_with_simulated, directory_exists, generate_configs, generate_diff_algorithms_file, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_config_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings, bell_state_pts, load_embeddings, parse_lambdas_file
+from experiments_utils import BitflipExperimentID, ReadoutNoise, bitflips_guard, check_files, compare_with_simulated, directory_exists, generate_algs_vs_file, generate_configs, generate_diff_algorithms_file, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_config_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings, bell_state_pts, load_embeddings, parse_lambdas_file
 import cProfile
 import pstats
 
@@ -691,11 +691,14 @@ if __name__ == "__main__":
     elif arg_backend == "alg_ipma":
         generate_diff_algorithms_file(BitflipExperimentID.IPMA, HardwareSpec, get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
         generate_diff_algorithms_file(BitflipExperimentID.CXH, HardwareSpec, get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
-        generate_diff_algorithms_file(BitflipExperimentID.IPMA2, ipma2_allowed_hardware, get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
+        # generate_diff_algorithms_file(BitflipExperimentID.IPMA2, ipma2_allowed_hardware, get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
     elif arg_backend == "test" :
         check_files(BitflipExperimentID.IPMA, HardwareSpec, with_thermalization=False)
         check_files(BitflipExperimentID.CXH, HardwareSpec, with_thermalization=False)
         check_files(BitflipExperimentID.IPMA2, ipma2_allowed_hardware, with_thermalization=False)
+    elif arg_backend == "algorithms_vs_ipma2":
+        # test the algorithms in the diff*.py files
+        generate_algs_vs_file(BitflipExperimentID.IPMA2, ipma2_allowed_hardware, get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
     else:
         raise Exception("argument does not run any procedure in this script")
         

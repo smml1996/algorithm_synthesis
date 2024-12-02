@@ -162,8 +162,7 @@ def get_algorithm(current_node, tabs="\t", count_ifs = 0):
     if current_node is None:
         return f"{tabs}pass\n"
     assert isinstance(current_node, AlgorithmNode)
-    result = f"{tabs}{current_node.action_name}\n"
-    result += f"{tabs}instruction_to_ibm(qc, basis_gates, {current_node.action_name})\n"
+    result = f"{tabs}instruction_to_ibm(qc, basis_gates, {current_node.action_name})\n"
 
 
     if current_node.is_meas:
@@ -200,6 +199,7 @@ def dump_algorithms(algorithms: List[AlgorithmNode], actions: List[POMDPAction],
                 instructions_str += ", "
             instructions_str += f"Instruction({instruction.target}, Op.{instruction.op.name}, {instruction.control}, {instruction.params})"
         file.write(f"{action.name} = [{instructions_str}]\n")
+    file.write("halt = []\n")
     
     file.write("###### END ACTIONS ######\n\n")
     

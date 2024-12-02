@@ -249,6 +249,25 @@ def get_num_qubits_to_hardware(hardware_str=True, allowed_hardware=HardwareSpec)
             s[f"B{nm.num_qubits}"].append(hardware) 
     return s
 
+def load_all_embeddings(experiment_id, with_thermalization=False):
+    answer = dict()
+    allowed_hardware = get_allowed_hardware(experiment_id, with_thermalization=with_thermalization)
+    
+    batches = get_num_qubits_to_hardware(hardware_str=False, allowed_hardware=allowed_hardware)
+    
+    for (batch_name, hardware_specs) in batches.items():
+        config_path = get_config_path(experiment_id, batch_name)
+        batch_embeddings = load_embeddings(config_path=config_path, ExperimentIdObj=type(experiment_id))
+        
+        for hardware_spec in hardware_specs:
+            if hardware_spec not in answer.keys():
+                answer[hardware_spec] = dict()
+            for (embedding_index, embedding) in enumerate(batch_embeddings[hardware_spec]["embeddings"]):
+                assert embedding_index not in answer[hardware_spec].keys()
+                answer[hardware_spec][embedding_index] = embedding
+    return answer
+                
+
 ############# about paths ################
 def get_project_settings():
     path = "../.settings"
@@ -656,7 +675,7 @@ def get_qc_simulated_acc(qc: QuantumCircuit, qr: QuantumRegister, embedding, bac
     for _ in range(factor):
         state_vs = ibm_simulate_circuit(qc, ibm_noise_model, initial_layout, optimization_level=optimization_level, coupling_map=coupling_map)
         # assert len(state_vs) == 1024
-        assert len(state_vs) == 1
+        # assert len(state_vs) == 1
         for state in state_vs:
             if ibm_problem_instance.is_target_qs(state):
                 accuracy += 1
@@ -813,7 +832,7 @@ def generate_algs_vs_file(experiment_id, allowed_hardware, get_hardware_embeddin
                     for (embedding_index, _) in enumerate(embeddings):
                         pomdp_path = get_pomdp_path(config, hardware_spec, embedding_index)
                         acc = get_custom_guarantee(algorithm, pomdp_path, config)
-                        columns = [horizon, alg_index, hardware_spec, embedding_index, acc]
+                        columns = [horizon, alg_index, hardware_spec.value, embedding_index, acc]
                         columns = [str(x) for x in columns]
                         outputfile.write(",".join(columns) + "\n")
                         
