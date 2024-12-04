@@ -19,7 +19,7 @@ from ibm_noise_models import Instruction, NoiseModel, HardwareSpec, load_config_
 import numpy as np
 from math import pi   
 from enum import Enum
-from experiments_utils import GHZExperimentID, generate_configs, generate_diff_algorithms_file, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_best_lambda_per_hardware, get_config_path, get_experiment_name_path, get_num_qubits_to_hardware, get_project_settings, get_simulated_guarantee, parse_lambdas_file
+from experiments_utils import GHZExperimentID, check_files, generate_configs, generate_diff_algorithms_file, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_best_lambda_per_hardware, get_config_path, get_experiment_name_path, get_num_qubits_to_hardware, get_project_path, get_project_settings, get_simulated_guarantee, parse_lambdas_file
 
 WITH_TERMALIZATION = False
 MAX_PRECISION = 10    
@@ -274,14 +274,14 @@ if __name__ == "__main__":
         # for optimization_level in [0,1,2,3]:
         #     generate_mc_guarantees_file(GHZExperimentID.EXP1, get_allowed_hardware(GHZExperimentID.EXP1), get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION, optimization_level=optimization_level, IBMInstanceObj=IBMGHZInstance, file_posfix=f"exp1{optimization_level}", factor=8, get_coupling_map=get_coupling_map)
         generate_mc_guarantees_file(GHZExperimentID.EMBED, get_allowed_hardware(GHZExperimentID.EXP1), get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION, optimization_level=3, IBMInstanceObj=IBMGHZInstance, file_posfix=f"embed1{3}", factor=8)
-    elif arg_backend == "alg_exp1":
-        generate_diff_algorithms_file(GHZExperimentID.EXP1, get_allowed_hardware(GHZExperimentID.EXP1), get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
+    elif arg_backend == "alg_embed":
+        generate_diff_algorithms_file(GHZExperimentID.EMBED, get_allowed_hardware(GHZExperimentID.EXP1), get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
     elif arg_backend == "embed_prob_guarantees":
         experiment_id = GHZExperimentID.EMBED
         allowed_hardware = get_allowed_hardware(experiment_id)
         horizon = 3
         output_dir = get_experiment_name_path(experiment_id)
-        output_file_path = os.path.join(output_dir, "guarantees_embed.csv")
+        output_file_path = os.path.join(get_project_path(), output_dir, "guarantees_embed.csv")
         output_file = open(output_file_path, "w")
         
         columns = ["hardware", "my_guarantee", "ibm_simulated", "diff"]
@@ -298,11 +298,13 @@ if __name__ == "__main__":
             for hardware_spec in hardware_specs:
                 noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_TERMALIZATION)
                 hardware = hardware_spec.value
-                my_guarantee = hardware_to_best[hardware_spec]
-                ibm_simulated = get_simulated_guarantee(noise_model, hardware_spec, {0:0, 1:1, 2:2}, experiment_id,optimization_level=3, IBMInstanceObj=IBMGHZInstance, get_coupling_map=get_coupling_map)
+                my_guarantee = round(hardware_to_best[hardware_spec], 3)
+                ibm_simulated = get_simulated_guarantee(noise_model, hardware_spec, {0:0, 1:1, 2:2}, experiment_id,optimization_level=2, IBMInstanceObj=IBMGHZInstance, get_coupling_map=get_coupling_map)
                 diff = round(my_guarantee-ibm_simulated, 3)
                 column = [hardware_spec.value, my_guarantee, ibm_simulated, diff]
                 column = [str(c) for c in column]
                 output_file.write(",".join(column) + "\n")
             output_file.flush()
+    elif arg_backend == "test" :
+        check_files(GHZExperimentID.EMBED, get_allowed_hardware(GHZExperimentID.EMBED),with_thermalization=False)
             

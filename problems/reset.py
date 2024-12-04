@@ -16,7 +16,7 @@ from qstates import QuantumState
 from ibm_noise_models import Instruction, MeasChannel, NoiseModel, HardwareSpec
 import numpy as np
 from math import pi   
-from experiments_utils import ReadoutNoise, ResetExperimentID, bitflips_guard, generate_configs, generate_diff_algorithms_file, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_config_path, get_num_qubits_to_hardware, get_project_settings
+from experiments_utils import ReadoutNoise, ResetExperimentID, bitflips_guard, check_files, generate_algs_vs_file, generate_configs, generate_diff_algorithms_file, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_config_path, get_num_qubits_to_hardware, get_project_settings
 
 
 
@@ -163,7 +163,11 @@ if __name__ == "__main__":
         generate_mc_guarantees_file(ResetExperimentID.main, allowed_hardware, get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION) 
     elif arg_backend == "alg_main":
         generate_diff_algorithms_file(ResetExperimentID.main, allowed_hardware, get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
-        
+    elif arg_backend == "algorithms_vs":
+        # test the algorithms in the diff*.py files
+        generate_algs_vs_file(ResetExperimentID.main, allowed_hardware, get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
+    elif arg_backend == "test" :
+        check_files(ResetExperimentID.main, allowed_hardware, with_thermalization=False)
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)
     
         

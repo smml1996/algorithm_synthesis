@@ -21,7 +21,7 @@ from ibm_noise_models import Instruction, MeasChannel, NoiseModel, get_ibm_noise
 import numpy as np
 from math import ceil, pi   
 from enum import Enum
-from experiments_utils import BitflipExperimentID, ReadoutNoise, bitflips_guard, compare_with_simulated, directory_exists, generate_configs, generate_diff_algorithms_file, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_config_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings, bell_state_pts, load_embeddings, parse_lambdas_file
+from experiments_utils import BitflipExperimentID, ReadoutNoise, bitflips_guard, check_files, compare_with_simulated, directory_exists, generate_algs_vs_file, generate_configs, generate_diff_algorithms_file, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_config_path, get_embeddings_path, get_num_qubits_to_hardware, get_project_path, get_project_settings, bell_state_pts, load_embeddings, parse_lambdas_file
 import cProfile
 import pstats
 
@@ -664,16 +664,16 @@ if __name__ == "__main__":
             generate_embeddings(BitflipExperimentID.IPMA2, num_qubits, get_hardware_embeddings=get_hardware_embeddings)
     elif arg_backend == "all_pomdps":
         # IPMA and CXH
-        # batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
-        # for num_qubits in batches.keys():
-        #     generate_pomdps(BitflipExperimentID.IPMA, num_qubits, get_experiments_actions, BitFlipInstance, guard=bitflips_guard)
+        batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
+        for num_qubits in batches.keys():
+            # generate_pomdps(BitflipExperimentID.IPMA, num_qubits, get_experiments_actions, BitFlipInstance, guard=bitflips_guard)
             
-            # generate_pomdps(BitflipExperimentID.CXH, num_qubits, get_experiments_actions, BitFlipInstance, guard=bitflips_guard)
+            generate_pomdps(BitflipExperimentID.CXH, num_qubits, get_experiments_actions, BitFlipInstance, guard=bitflips_guard)
         
         # IPMA 2
-        batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=ipma2_allowed_hardware)
-        for num_qubits in batches.keys():
-            generate_pomdps(BitflipExperimentID.IPMA2, num_qubits, get_experiments_actions, BitFlipInstance, guard=bitflips_guard)
+        # batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=ipma2_allowed_hardware)
+        # for num_qubits in batches.keys():
+        #     generate_pomdps(BitflipExperimentID.IPMA2, num_qubits, get_experiments_actions, BitFlipInstance, guard=bitflips_guard)
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)
     
     elif arg_backend == "simulator_test":
@@ -685,38 +685,20 @@ if __name__ == "__main__":
         experiment_id = sys.argv[2]
 
     elif arg_backend == "all_mc_guarantees":
-        generate_mc_guarantees_file(BitflipExperimentID.IPMA, HardwareSpec, get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION)
-        generate_mc_guarantees_file(BitflipExperimentID.CXH, HardwareSpec, get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION)
+        # generate_mc_guarantees_file(BitflipExperimentID.IPMA, HardwareSpec, get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION)
+        # generate_mc_guarantees_file(BitflipExperimentID.CXH, HardwareSpec, get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION)
         generate_mc_guarantees_file(BitflipExperimentID.IPMA2, ipma2_allowed_hardware, get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION)
     elif arg_backend == "alg_ipma":
         generate_diff_algorithms_file(BitflipExperimentID.IPMA, HardwareSpec, get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
         generate_diff_algorithms_file(BitflipExperimentID.CXH, HardwareSpec, get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
-        generate_diff_algorithms_file(BitflipExperimentID.IPMA2, ipma2_allowed_hardware, get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
+        # generate_diff_algorithms_file(BitflipExperimentID.IPMA2, ipma2_allowed_hardware, get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
     elif arg_backend == "test" :
-        # with cProfile.Profile() as pr:
-        #     generate_pomdps(f"../configs/tenerife_test.json")
-        # stats = pstats.Stats(pr)
-        # stats.sort_stats('cumulative').print_stats(10)
-        # pass     
-        # generate_pomdp(BitflipExperimentID.CXH, HardwareSpec.ATHENS, {0: 0, 1: 1, 2: 2}, "", return_pomdp=True)
-        # Test.check_selected_hardware()
-        # Test.check_embeddings()
-        # Test.check_embeddings_file()
-        # Test.check_bell_state_creation()
-        # Test.check_instruction_sets(BitflipExperimentID.IPMA)
-        # Test.check_instruction_sets(BitflipExperimentID.CXH)
-        # Test.test_pomdp(HardwareSpec.BOGOTA, 0, BitflipExperimentID.IPMA)
-        # Test.test_pomdp(HardwareSpec.TENERIFE, 1, BitflipExperimentID.IPMA)
-        # Test.dump_actions(HardwareSpec.TENERIFE, 0, BitflipExperimentID.IPMA)
-        # Test.print_pomdp(HardwareSpec.TENERIFE, 0, BitflipExperimentID.IPMA)
-        # Test.compare_lambdas(HardwareSpec.TENERIFE)
-        # config_path = sys.argv[2]
-        # Test.ibm_run(config_path)
-        # generate_server_sbatchs()
-        # generate_server_synthesis_script()
-        # generate_input_files_for_script()
-        # Test.compare_lambdas()
-        Test.compare_pomdps()
+        check_files(BitflipExperimentID.IPMA, HardwareSpec, with_thermalization=False)
+        check_files(BitflipExperimentID.CXH, HardwareSpec, with_thermalization=False)
+        check_files(BitflipExperimentID.IPMA2, ipma2_allowed_hardware, with_thermalization=False)
+    elif arg_backend == "algorithms_vs_ipma2":
+        # test the algorithms in the diff*.py files
+        generate_algs_vs_file(BitflipExperimentID.IPMA2, ipma2_allowed_hardware, get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
     else:
         raise Exception("argument does not run any procedure in this script")
         
