@@ -1,0 +1,14 @@
+{
+    "name": "B28",
+    "experiment_id": "ipma3",
+    "min_horizon": 1,
+    "max_horizon": 7,
+    "output_dir": "results/phaseflip/ipma3/B28",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_cambridge"
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
+}
