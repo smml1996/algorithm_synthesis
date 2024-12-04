@@ -299,7 +299,7 @@ if __name__ == "__main__":
                 noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_TERMALIZATION)
                 hardware = hardware_spec.value
                 my_guarantee = hardware_to_best[hardware_spec]
-                ibm_simulated = get_simulated_guarantee(noise_model, hardware_spec, {0:0, 1:1, 2:2}, experiment_id,optimization_level=2, IBMInstanceObj=IBMGHZInstance, get_coupling_map=get_coupling_map)
+                ibm_simulated = get_simulated_guarantee(noise_model, hardware_spec, {0:0, 1:1, 2:2}, experiment_id,optimization_level=3, IBMInstanceObj=IBMGHZInstance, get_coupling_map=get_coupling_map)
                 diff = round(my_guarantee-ibm_simulated, 3)
                 column = [hardware_spec.value, my_guarantee, ibm_simulated, diff]
                 column = [str(c) for c in column]
