@@ -1,13 +1,13 @@
 {
-    "action": "CX21",
+    "action": "H2",
     "case0": "None",
     "case1": "None",
     "next": {
-        "action": "H2",
+        "action": "CX21",
         "case0": "None",
         "case1": "None",
         "next": {
-            "action": "CX21",
+            "action": "H2",
             "case0": "None",
             "case1": "None",
             "next": {
@@ -15,11 +15,11 @@
                 "case0": "None",
                 "case1": "None",
                 "next": {
-                    "action": "H2",
+                    "action": "CX21",
                     "case0": "None",
                     "case1": "None",
                     "next": {
-                        "action": "CX21",
+                        "action": "halt",
                         "case0": "None",
                         "case1": "None",
                         "next": "None"

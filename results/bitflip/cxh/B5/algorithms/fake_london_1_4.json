@@ -1,1 +1,6 @@
-"None"
+{
+    "action": "halt",
+    "case0": "None",
+    "case1": "None",
+    "next": "None"
+}
