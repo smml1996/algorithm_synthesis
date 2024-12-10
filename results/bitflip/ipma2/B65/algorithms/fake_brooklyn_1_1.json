@@ -1,6 +1,11 @@
 {
-    "action": "halt",
+    "action": "X0",
     "case0": "None",
     "case1": "None",
-    "next": "None"
+    "next": {
+        "action": "halt",
+        "case0": "None",
+        "case1": "None",
+        "next": "None"
+    }
 }

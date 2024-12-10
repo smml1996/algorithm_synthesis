@@ -192,10 +192,18 @@
                 "next": "None"
             },
             "case1": {
-                "action": "P2",
-                "case0": {
+                "action": "X0",
+                "case0": "None",
+                "case1": "None",
+                "next": {
                     "action": "P2",
                     "case0": {
+                        "action": "halt",
+                        "case0": "None",
+                        "case1": "None",
+                        "next": "None"
+                    },
+                    "case1": {
                         "action": "P2",
                         "case0": {
                             "action": "halt",
@@ -216,31 +224,8 @@
                         },
                         "next": "None"
                     },
-                    "case1": {
-                        "action": "X0",
-                        "case0": "None",
-                        "case1": "None",
-                        "next": {
-                            "action": "halt",
-                            "case0": "None",
-                            "case1": "None",
-                            "next": "None"
-                        }
-                    },
                     "next": "None"
-                },
-                "case1": {
-                    "action": "X0",
-                    "case0": "None",
-                    "case1": "None",
-                    "next": {
-                        "action": "halt",
-                        "case0": "None",
-                        "case1": "None",
-                        "next": "None"
-                    }
-                },
-                "next": "None"
+                }
             },
             "next": "None"
         },
@@ -322,10 +307,18 @@
                 "next": "None"
             },
             "case1": {
-                "action": "P2",
-                "case0": {
+                "action": "X0",
+                "case0": "None",
+                "case1": "None",
+                "next": {
                     "action": "P2",
                     "case0": {
+                        "action": "halt",
+                        "case0": "None",
+                        "case1": "None",
+                        "next": "None"
+                    },
+                    "case1": {
                         "action": "P2",
                         "case0": {
                             "action": "halt",
@@ -346,31 +339,8 @@
                         },
                         "next": "None"
                     },
-                    "case1": {
-                        "action": "X0",
-                        "case0": "None",
-                        "case1": "None",
-                        "next": {
-                            "action": "halt",
-                            "case0": "None",
-                            "case1": "None",
-                            "next": "None"
-                        }
-                    },
                     "next": "None"
-                },
-                "case1": {
-                    "action": "X0",
-                    "case0": "None",
-                    "case1": "None",
-                    "next": {
-                        "action": "halt",
-                        "case0": "None",
-                        "case1": "None",
-                        "next": "None"
-                    }
-                },
-                "next": "None"
+                }
             },
             "next": "None"
         },

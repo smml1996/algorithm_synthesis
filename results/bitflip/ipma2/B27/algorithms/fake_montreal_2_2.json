@@ -1,9 +1,9 @@
 {
-    "action": "X0",
+    "action": "CX",
     "case0": "None",
     "case1": "None",
     "next": {
-        "action": "X0",
+        "action": "CX",
         "case0": "None",
         "case1": "None",
         "next": {
