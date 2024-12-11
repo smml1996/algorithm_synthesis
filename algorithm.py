@@ -81,7 +81,7 @@ class AlgorithmNode:
 
     def __eq__(self, other: object) -> bool:
         if other is None:
-            return False
+            return self.action_name == "halt"
         return (self.action_name == other.action_name) and (self.next_ins == other.next_ins) and (self.case0 == other.case0) and (self.case1 == other.case1) # WARNING: only comparing action name (not instruction_sequence)
     
     def get_instructions_used(self, current_set) -> List[Instruction]:

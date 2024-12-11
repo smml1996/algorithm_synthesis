@@ -474,15 +474,17 @@ def get_df_visualizing_lambdas(experiment_id, diff_algs_to_spec, take_best=True,
     })
     return df, horizon_lines
 
-def get_scatterplot_guarantees_compare(experiment_id, horizon, df, horizon_lines, horizon_to_num_algs):
+def get_scatterplot_guarantees_compare(experiment_id, horizon, df, horizon_lines, horizon_to_num_algs, new_palette=None, hue_order=None):
     plt.clf()
     plt.figure(figsize=(15, 10))
     
     # Set Seaborn context
     sns.set(style="white", font_scale=1.5)
 
-    new_palette = sns.color_palette(n_colors=horizon_to_num_algs[horizon]+1)
-    hue_order = [x for x in range(0, horizon_to_num_algs[horizon]+1)]
+    if new_palette is None:
+        new_palette = sns.color_palette(n_colors=horizon_to_num_algs[horizon]+1)
+    if hue_order is None:
+        hue_order = [x for x in range(0, horizon_to_num_algs[horizon]+1)]
     current_df = df[df.horizon==horizon]
     hardware_order = copy.deepcopy(df['hardware_spec'].values)
     for h in hardware_order:

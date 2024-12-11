@@ -75,8 +75,7 @@ def get_pivot_qubits(noise_model: NoiseModel, experiment_id: ResetExperimentID):
     if noise_model.hardware_spec == HardwareSpec.MELBOURNE:
         noise_model.num_qubits = 14
     for qubit in range(noise_model.num_qubits):
-        assert experiment_id == ResetExperimentID.main
-        if noise_model.get_qubit_outdegree(qubit) > 1:
+        if noise_model.get_qubit_indegree(qubit) > 1:
             noise_data = noise_model.instructions_to_channel[Instruction(qubit, Op.MEAS)]
             assert isinstance(noise_data, MeasChannel)
             success0 = noise_data.get_ind_probability(0,0)
@@ -85,16 +84,20 @@ def get_pivot_qubits(noise_model: NoiseModel, experiment_id: ResetExperimentID):
 
     temp = sorted(noises, key=lambda x : x.success0)
     result.add(temp[0].target)
+    result.add(temp[len(temp)-1].target)
 
     temp = sorted(noises, key=lambda x : x.success1)
     result.add(temp[0].target)
+    result.add(temp[len(temp)-1].target)
 
     temp = sorted(noises, key=lambda x: x.acc_err) # accumulated error
     result.add(temp[0].target)
+    result.add(temp[len(temp)-1].target)
 
     temp = sorted(noises, key=lambda x: x.diff)
     if temp[0].diff != temp[len(temp)-1].diff:
         result.add(temp[0].target)
+        result.add(temp[len(temp)-1].target)
 
     temp = sorted(noises, key=lambda x: x.abs_diff)
     if temp[0].abs_diff != temp[len(temp)-1].abs_diff:
@@ -106,7 +109,6 @@ def get_hardware_embeddings(backend: HardwareSpec, experiment_id) -> List[Dict[i
     result = []
     parsed_pivots = set()
     noise_model = NoiseModel(backend, thermal_relaxation=WITH_TERMALIZATION)
-    assert noise_model.num_qubits >= 14
     pivot_qubits = get_pivot_qubits(noise_model, experiment_id)
     for target in pivot_qubits:
         assert(isinstance(target, int))
@@ -137,17 +139,12 @@ if __name__ == "__main__":
     settings = get_project_settings()
     project_path = settings["PROJECT_PATH"]
     
-    allowed_hardware = []
-    for hardware in HardwareSpec:
-        noise_model = NoiseModel(hardware, thermal_relaxation=WITH_TERMALIZATION)
-        if noise_model.num_qubits >= 14:
-            allowed_hardware.append(hardware)
     if arg_backend == "gen_configs":
         # step 0
-        generate_configs(experiment_id=ResetExperimentID.main, min_horizon=2, max_horizon=7, allowed_hardware=allowed_hardware)
+        generate_configs(experiment_id=ResetExperimentID.main, min_horizon=2, max_horizon=7)
     elif arg_backend == "embeddings":
         # generate paper embeddings
-        batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=allowed_hardware)
+        batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
         for num_qubits in batches.keys():
             reset_config_path = get_config_path(ResetExperimentID.main, num_qubits)
             generate_embeddings(ResetExperimentID.main, num_qubits, get_hardware_embeddings)
@@ -156,18 +153,18 @@ if __name__ == "__main__":
         # step 2: generate all pomdps
         # config_path = sys.argv[2]
         # generate_pomdps(config_path)
-        batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=allowed_hardware)
+        batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)
         for num_qubits in batches.keys():
             generate_pomdps(ResetExperimentID.main, num_qubits, get_experiments_actions, ResetInstance)
     elif arg_backend == "mc_main":
-        generate_mc_guarantees_file(ResetExperimentID.main, allowed_hardware, get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION) 
+        generate_mc_guarantees_file(ResetExperimentID.main, HardwareSpec, get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION) 
     elif arg_backend == "alg_main":
-        generate_diff_algorithms_file(ResetExperimentID.main, allowed_hardware, get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
+        generate_diff_algorithms_file(ResetExperimentID.main, HardwareSpec, get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
     elif arg_backend == "algorithms_vs":
         # test the algorithms in the diff*.py files
-        generate_algs_vs_file(ResetExperimentID.main, allowed_hardware, get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
+        generate_algs_vs_file(ResetExperimentID.main, HardwareSpec, get_hardware_embeddings, get_experiments_actions, with_thermalization=False)
     elif arg_backend == "test" :
-        check_files(ResetExperimentID.main, allowed_hardware, with_thermalization=False)
+        check_files(ResetExperimentID.main, HardwareSpec, with_thermalization=False)
     # step 3 synthesis of algorithms with C++ code and generate lambdas (guarantees)
     
         
