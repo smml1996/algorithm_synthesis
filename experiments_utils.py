@@ -801,7 +801,7 @@ def get_diff_algorithms(experiment_id, allowed_hardware, get_hardware_embeddings
                 
             for (index, embedding) in enumerate(embeddings):
                 actions_to_instructions = dict()
-                actions = get_experiments_actions(noise_model, get_default_embedding(len(embedding.keys())), experiment_id)
+                actions = get_experiments_actions(noise_model, embedding, experiment_id)
                 for action in actions:
                     actions_to_instructions[action.name] = action.instruction_sequence
                 actions_to_instructions["halt"] = []
