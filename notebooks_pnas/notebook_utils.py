@@ -15,6 +15,7 @@ import numpy as np
 from utils import Precision
 from experiments_utils import *
 from ibm_noise_models import MeasChannel, QuantumChannel
+from qpu_utils import is_multiqubit_gate
 
 Precision.PRECISION = 8
 Precision.update_threshold()
