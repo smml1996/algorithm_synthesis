@@ -5,7 +5,7 @@ from qpu_utils import Op
 from utils import Precision, Queue
 from qstates import QuantumState
 from cmemory import ClassicalState, cwrite
-from typing import Any, Tuple, List, Dict
+from typing import Any, Set, Tuple, List, Dict
 
 INIT_CHANNEL = "INIT_"
 class POMDPVertex:
@@ -204,6 +204,11 @@ class POMDP:
         self.states = states
         self.actions = actions
         self.transition_matrix = transition_matrix
+        
+        # used only in qualitative winning-set finding (filled up later)
+        self.observables_to_v = dict() # ClassicalState -> Set[POMDPVertex]
+        self.rankings = dict()
+        self.v_to_rankings = dict()
 
     def print_graph(self):
         for (v_source, v_source_dict) in self.transition_matrix.items():
@@ -213,6 +218,17 @@ class POMDP:
 
     def get_obs(self, state: POMDPVertex) -> ClassicalState:
         return state.classical_state
+
+    def get_observable_vertices(self, observable) -> Set[POMDPVertex]:
+        if observable in self.observables_to_v.keys():
+            return self.observables_to_v[observable]
+        answer = set()
+        for vertex in self.states:
+            if vertex.classical_state == observable:
+                answer.add(vertex)
+        self.observables_to_v[observable] = answer
+        return self.observables_to_v[observable]
+        
     
     def serialize(self, problem_instance: Any, output_path: str):
         f = open(output_path, "w")
