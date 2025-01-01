@@ -1,10 +1,95 @@
 from typing import Dict, List, Set, Tuple
-from cmemory import ClassicalState
-from pomdp import POMDP, POMDPVertex
+from cmemory import KnwObs
 from copy import deepcopy
 
+from pomdp import POMDP, POMDPAction, POMDPVertex
+from utils import Queue
+
+class KnwObs:
+    vertices: Set[int]
+    def __init__(self, vertices):
+        self.vertices = set()
+        for v in vertices:
+            self.vertices.add(v)
+    
+    def __eq__(self, other_obs):
+        assert isinstance(other_obs, KnwObs)
+        return self.vertices == other_obs.vertices
+        
+    def __hash__(self):
+        return hash(tuple(self.vertices))
+
+class KnwVertex:
+    observable: KnwObs
+    vertex_id: int
+    def __init__(self, observable_vertices: List[POMDPVertex], vertex: POMDPVertex):
+        self.observable = KnwObs(observable_vertices)
+        self.vertex_id = vertex
+        
+    def __eq__(self, other):
+        if self.vertex != other.vertex:
+            return False
+        return self.observable == other.observable
+    
+    def __hash__(self):
+        return hash((self.observable, self.vertex.__hash__()))
+    
+class KnwGraph:
+    ''' Knowledge graph
+    '''
+    observables_to_vertices: Dict[int, set[int]]
+    rankings : Dict[int, int]
+    transition_matrix: Dict[KnwVertex, Dict[str, KnwVertex]]
+    def __init__(self, pomdp: POMDP, max_depth: int = -1):
+        self.rankings = dict()
+        self.transition_matrix = dict()
+        self.actions = [a.name for a in pomdp.actions]
+        self.build_graph(pomdp, max_depth)
+    
+    def build_graph(self, pomdp: POMDP, max_depth: int):
+        q = Queue()
+        self.initial_state = KnwVertex([pomdp.initial_state], pomdp.initial_state)
+        q.push((self.initial_state, 0))
+        visited.add(current_vertex)
+        
+        visited = set()
+        
+        while not q.is_empty():
+            current_vertex, depth = q.pop()
+            assert isinstance(current_vertex, KnwVertex)
+            assert not (depth > max_depth)
+            if depth == max_depth:
+                continue
+            
+            current_observable = current_vertex.observable # knowledge
+            actual_pomdp_vertex = current_vertex.pomdp_vertex
+            for action in pomdp.actions:
+                assert isinstance(action, POMDPAction)
+                real_successors = action.get_real_successor(actual_pomdp_vertex) # return dict classical_state -> POMDPVertex
+                
+                # compute knowledge
+                pomdp_obs_to_v = dict()
+                for current_v in current_observable.vertices:
+                    for (succ, _prob) in pomdp.transition_matrix[current_v][action.name].items():
+                        classical_state = succ.classical_state
+                        if classical_state not in pomdp_obs_to_v.keys():
+                            pomdp_obs_to_v[classical_state] = set()
+                        pomdp_obs_to_v[classical_state].add(succ)
+                
+                assert len(pomdp_obs_to_v.keys()) == len(real_successors.keys())
+                
+                # update transition matrix
+                for (classical_state, real_succ) in real_successors.items():
+                    new_vertex = KnwVertex(pomdp_obs_to_v[classical_state], real_succ)
+                    if not (new_vertex in visited):
+                        visited.add(new_vertex)
+                        q.push((new_vertex, depth + 1))
+                    assert action.name not in self.transition_matrix[current_vertex].keys()
+                    self.transition_matrix[current_vertex][action.name] = new_vertex
+
+
 ## FINDING WINNING SET ##
-def allow(graph: POMDP, v: POMDPVertex, Y: Set[POMDPVertex]) -> Set[str]:
+def allow(graph: KnwGraph, v: KnwVertex, Y: Set[KnwVertex]) -> Set[str]:
     result = set()
     for (channel, vertices_dict) in graph.transition_matrix[v].items():
         vertices = set(vertices_dict.keys())
@@ -13,7 +98,7 @@ def allow(graph: POMDP, v: POMDPVertex, Y: Set[POMDPVertex]) -> Set[str]:
     return result
         
 
-def class_allow(graph: POMDP, v: POMDPVertex, Y: Set[POMDPVertex]) -> Set[int]:
+def class_allow(graph: KnwGraph, v: KnwVertex, Y: Set[KnwVertex]) -> Set[int]:
     observable = v.classical_state
     equivalence_class = deepcopy(graph.get_observable_vertices(observable))
     result = allow(graph, v, Y)
@@ -22,7 +107,7 @@ def class_allow(graph: POMDP, v: POMDPVertex, Y: Set[POMDPVertex]) -> Set[int]:
         result = result.intersection(allow(graph, q, Y))
     return result
 
-def apre(graph: POMDP, X: Set[POMDPVertex], Y: Set[POMDPVertex]) -> Set[POMDPVertex]:
+def apre(graph: KnwGraph, X: Set[KnwVertex], Y: Set[KnwVertex]) -> Set[KnwVertex]:
     result = set()
     for q in Y:
         allow_q = class_allow(graph, q, Y)
@@ -34,7 +119,7 @@ def apre(graph: POMDP, X: Set[POMDPVertex], Y: Set[POMDPVertex]) -> Set[POMDPVer
     return result
 
 
-def spre(graph: POMDP, Y: Set[POMDPVertex]) -> Set[POMDPVertex]:
+def spre(graph: KnwGraph, Y: Set[KnwVertex]) -> Set[KnwVertex]:
     result = set()
     for v in Y:
         allow_v = class_allow(graph, v, Y)
@@ -43,7 +128,7 @@ def spre(graph: POMDP, Y: Set[POMDPVertex]) -> Set[POMDPVertex]:
     return result
 
 
-def find_winning_set(graph: POMDP, target_observations: List[ClassicalState]):
+def find_winning_set(graph: KnwGraph, target_observations: List[KnwObs]):
     Y = graph.vertices
     
     Bt = set()
@@ -67,8 +152,8 @@ def find_winning_set(graph: POMDP, target_observations: List[ClassicalState]):
     return Y
 
 ## Ranking ##
-def clean_graph(graph: POMDP, target_obs: Set[ClassicalState], winning_set: Set[POMDPVertex]) -> POMDP:
-    new_graph = POMDP(graph.initial_state, winning_set, graph.actions, dict())
+def clean_graph(graph: KnwGraph, target_obs: Set[KnwObs], winning_set: Set[KnwVertex]) -> KnwGraph:
+    new_graph = KnwGraph(graph.initial_state, winning_set, graph.actions, dict())
     
     for (obs, vertices) in graph.observables_to_v.items():
         z = vertices.intersection(winning_set)

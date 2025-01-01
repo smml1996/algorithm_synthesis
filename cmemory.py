@@ -15,6 +15,9 @@ class ClassicalState:
     def __eq__(self, other) -> bool:
         return self.get_memory_val() == other.get_memory_val()
 
+    def __hash__(self):
+        return self.get_memory_val()
+    
     def get_memory_val(self) -> int:
         answer = 0
         for (key, value) in self.sparse_vector.items():
