@@ -13,7 +13,7 @@ class QSimulator:
     noise_model: NoiseModel
     count_executed_instructions: int
     log: List[str]
-    def __init__(self, noise_model = NoiseModel(), seed=None, with_readout_err=True) -> None:
+    def __init__(self, noise_model = NoiseModel(), seed=None) -> None:
         self.log = []
         self.instructions_applied = []
         if not (seed is None):
@@ -23,7 +23,6 @@ class QSimulator:
         self.qmemory = QuantumState(0)
         self.meas_cache = ClassicalState()
         self.count_executed_instructions = 0
-        self.with_readout_err = with_readout_err
         
 
     def apply_noise_model(self, instruction: Instruction):

@@ -9,24 +9,69 @@ from utils import Queue
 class ImperfectGameAlgorithm:
     def __init__(self):
         self.states_to_algorithm = dict()
+        self.states_to_comments = dict()
         self.next_states = dict()
+        self.initial_state = None
     
     def does_state_exists(self, state):
         return state in self.states_to_algorithm.keys()
+    
+    def dump(self, path, actions: List[POMDPAction]):
+        file = open(path, "w")
+        file.write("import os, sys, random\n")
+        file.write("sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))\n")
+        file.write("from qiskit import QuantumCircuit, ClassicalRegister\n")
+        file.write("from ibm_noise_models import NoiseModel, Instruction, instruction_to_ibm, Op\n\n")
+        
+        file.write("###### ACTIONS ######\n")
+        for action in actions:
+            assert isinstance(action, POMDPAction)
+            instructions_str = ""
+            for instruction in action.instruction_sequence:
+                if len(instructions_str) > 0:
+                    instructions_str += ", "
+                instructions_str += f"Instruction({instruction.target}, Op.{instruction.op.name}, {instruction.control}, {instruction.params})"
+            file.write(f"{action.name} = [{instructions_str}]\n")
+           
+        file.write("def my_algorithm(qc: QuantumCircuit, noise_model: NoiseModel, basis_gates, seed=1):") 
+        
+        file.write("\t#### INITIALIZE SIMULATOR ######\n")
+        file.write("\tsimulator = QSimulator(noise_model, seed)\n")
+        file.write(f"\tcurrent_state = {self.initial_state}\n\n")
+        
+        file.write("\twhile True:\n")
+        
+        for (state, algo_nodes) in self.states_to_algorithm.items():
+            file.write(f"\t\tif current_state == {state}:\n")
+            actions_ = [algo_node.action_name for algo_node in algo_nodes] 
+            file.write(f"\t\t\tactions = {actions_}\n")
+            file.write(f"\t\t\tchoosen_action = random.choice(actions)\n")
+            file.write(f"\t\t\tout = simulator.apply_instructions(choosen_action)\n")
+            
+            if isinstance(self.next_states[state], int):
+                file.write(f"\t\t\tcurrent_state = {self.next_states[state]}\n")
+            else:
+                for (out_val, next_state) in self.next_states[state].items():
+                    file.write(f"\t\t\tout == {out_val}:\n")
+                    file.write(f"\t\t\t\tcurrent_state == {next_state}:\n")
+        
+        file.close()
         
 class KnwObs:
     vertices: Set[int]
-    def __init__(self, vertices):
-        self.vertices = set()
-        for v in vertices:
-            self.vertices.add(v)
+    def __init__(self, vertices, out_val=None):
+        self.vertices = frozenset(vertices)
+        self.out_val = out_val
     
     def __eq__(self, other_obs):
         assert isinstance(other_obs, KnwObs)
-        return self.vertices == other_obs.vertices
+        if self.vertices == other_obs.vertices:
+            assert self.out_val == other_obs.out_val
+            return True
+        return False
         
     def __hash__(self):
-        return hash(tuple(self.vertices))
+        return hash(self.vertices)
 
 class KnwVertex:
     observable: KnwObs
@@ -85,10 +130,18 @@ class KnwGraph:
             assert (max_depth == -1) or (not (depth > max_depth))
             current_observable = current_vertex.observable # knowledge
             actual_pomdp_vertex = current_vertex.pomdp_vertex
+            
             for action in pomdp.actions:
                 assert isinstance(action, POMDPAction)
-                real_successors = action.get_real_successor(actual_pomdp_vertex) # return dict classical_state -> POMDPVertex
                 
+                # compute actual states we could possibly be in
+                real_succs_dict = dict()
+                for (succ, _prob) in pomdp.transition_matrix[actual_pomdp_vertex][action.name].items():
+                    classical_state = succ.classical_state
+                    if classical_state not in real_succs_dict.keys():
+                        real_succs_dict[classical_state] = set()
+                    real_succs_dict[classical_state].add(succ)
+
                 # compute knowledge
                 pomdp_obs_to_v = dict()
                 for current_v in current_observable.vertices:
@@ -98,26 +151,25 @@ class KnwGraph:
                             pomdp_obs_to_v[classical_state] = set()
                         pomdp_obs_to_v[classical_state].add(succ)
                 
-                assert len(pomdp_obs_to_v.keys()) == len(real_successors.keys())
-                
                 # update transition matrix
-                for (classical_state, real_succ) in real_successors.items():
-                    new_vertex = KnwVertex(pomdp_obs_to_v[classical_state], real_succ)
-                    if new_vertex.observable not in self.equivalence_class.keys():
-                        self.equivalence_class[new_vertex.observable] = set()
-                    self.equivalence_class[new_vertex.observable].add(new_vertex)
-                    is_target = self.is_target_vertex(new_vertex, is_target_qs)
-                    if not (new_vertex in visited):
-                        visited.add(new_vertex)
-                        if not is_target:
-                            # only explore if we are not in a target observable (otherwise it doesnt make sense to keep exploring because we have already reached the target)
-                            q.push((new_vertex, depth + 1))
-                        else:
-                            self.target_vertices.add(new_vertex) # TODO: optimize this (reduce number of checks by caching observables that have already been checked)
-                    if action.name not in self.transition_matrix[current_vertex].keys():
-                        self.transition_matrix[current_vertex][action.name] = set()
-                    assert action.name not in self.transition_matrix[current_vertex].keys()
-                    self.transition_matrix[current_vertex][action.name].add(new_vertex)
+                for (classical_state, real_succs) in real_succs_dict.items():
+                    for real_succ in real_succs:
+                        new_vertex = KnwVertex(pomdp_obs_to_v[classical_state], real_succ)
+                        if new_vertex.observable not in self.equivalence_class.keys():
+                            self.equivalence_class[new_vertex.observable] = set()
+                        self.equivalence_class[new_vertex.observable].add(new_vertex)
+                        is_target = self.is_target_vertex(new_vertex, is_target_qs)
+                        if not (new_vertex in visited):
+                            visited.add(new_vertex)
+                            if not is_target:
+                                # only explore if we are not in a target observable (otherwise it doesnt make sense to keep exploring because we have already reached the target)
+                                q.push((new_vertex, depth + 1))
+                            else:
+                                self.target_vertices.add(new_vertex) # TODO: optimize this (reduce number of checks by caching observables that have already been checked)
+                        if action.name not in self.transition_matrix[current_vertex].keys():
+                            self.transition_matrix[current_vertex][action.name] = set()
+                        assert action.name not in self.transition_matrix[current_vertex].keys()
+                        self.transition_matrix[current_vertex][action.name].add(new_vertex)
                     
     def search_pomdp_action(self, delta) -> POMDPAction:
         for action in self.actions:
@@ -155,12 +207,16 @@ class KnwGraph:
 def clean_deltas(graph: KnwGraph, current_vertex, deltas) -> Set[str]:
     new_deltas = set()
     for delta in deltas:
-        post_vertices = graph.transition_matrix[current_vertex][delta]
+        post_vertices = set()
+        assert current_vertex in graph.equivalence_class[current_vertex.observable]
+        for vertex in graph.equivalence_class[current_vertex.observable]:
+            post_vertices = post_vertices.union(graph.transition_matrix[vertex][delta])
         min_rank = min([graph.rankings[v] for v in post_vertices])
-        pre_rank = graph.rankings[current_vertex]
+        pre_rank = max(graph.rankings[v] for v in graph.equivalence_class[current_vertex.observable])
         if min_rank < pre_rank:
             if len(graph.adj_list[current_vertex][delta]) != 1 or (current_vertex not in graph.adj_list[current_vertex][delta]):
                 new_deltas.add(delta)
+    return new_deltas
 
 ## FINDING WINNING SET ##
 def allow(graph: KnwGraph, v: KnwVertex, Y: Set[KnwVertex]) -> Set[str]:
