@@ -83,7 +83,7 @@ class POMDPAction:
     def get_num_parameters(self):
         return len(self.symbols)
 
-    def __handle_measure_instruction(self, instruction: Instruction, channel: MeasChannel, vertex: POMDPVertex, is_meas1: bool =True, result: Dict[POMDPVertex, float]=None, is_real_succ=False) :
+    def __handle_measure_instruction(self, instruction: Instruction, channel: MeasChannel, vertex: POMDPVertex, is_meas1: bool =True, result: Dict[POMDPVertex, float]=None) :
         """applies a measurement instruction to a given hybrid state (POMDP vertex)
 
         Args:
@@ -111,16 +111,14 @@ class POMDPAction:
 
             if new_vertex_correct not in result.keys():
                 result[new_vertex_correct] = 0.0
-            if (not is_real_succ) and new_vertex_incorrect not in result.keys():
+            if new_vertex_incorrect not in result.keys():
                 result[new_vertex_incorrect] = 0.0
-            if is_real_succ:
-                result[new_vertex_correct] += meas_prob
-            else:
-                result[new_vertex_correct] += meas_prob * channel.get_ind_probability(is_meas1, is_meas1)
-                result[new_vertex_incorrect] += meas_prob * channel.get_ind_probability( is_meas1, not is_meas1)
-            assert isclose(channel.get_ind_probability(is_meas1, is_meas1) + channel.get_ind_probability(is_meas1, not is_meas1), 1, rel_tol=Precision.rel_tol )
+            
+            result[new_vertex_correct] += meas_prob * channel.get_ind_probability(is_meas1, is_meas1)
+            result[new_vertex_incorrect] += meas_prob * channel.get_ind_probability( is_meas1, not is_meas1)
+            assert isclose(channel.get_ind_probability(is_meas1, is_meas1) + channel.get_ind_probability(is_meas1, not is_meas1), 1, rel_tol=Precision.rel_tol)
 
-    def __handle_unitary_instruction(self, instruction: Instruction, channel: QuantumChannel, vertex: POMDPVertex, result: Dict[POMDPVertex, float]=None, is_real_succ=False):
+    def __handle_unitary_instruction(self, instruction: Instruction, channel: QuantumChannel, vertex: POMDPVertex, result: Dict[POMDPVertex, float]=None):
         """_summary_
 
         Args:
@@ -129,22 +127,16 @@ class POMDPAction:
             vertex (POMDPVertex): _description_
             result (Dict[POMDPVertex, float], optional): _description_. Defaults to None.
         """
-        if len(channel.errors) == 0 or is_real_succ:
+        for (index, err_seq) in enumerate(channel.errors): 
             new_qs = handle_write(vertex.quantum_state, instruction.get_gate_data())
-            new_vertex = POMDPVertex(new_qs, vertex.classical_state)
-            assert new_vertex not in result.keys()
-            result[new_vertex] = 1
-        else:
-            for (index, err_seq) in enumerate(channel.errors): 
-                new_qs = handle_write(vertex.quantum_state, instruction.get_gate_data())
-                errored_seq, seq_prob = get_seq_probability(new_qs, err_seq)
-                if seq_prob > 0.0:
-                    new_vertex = POMDPVertex(errored_seq, vertex.classical_state)
-                    if new_vertex not in result.keys():
-                        result[new_vertex] = 0.0
-                    result[new_vertex] += seq_prob * channel.probabilities[index]
+            errored_seq, seq_prob = get_seq_probability(new_qs, err_seq)
+            if seq_prob > 0.0:
+                new_vertex = POMDPVertex(errored_seq, vertex.classical_state)
+                if new_vertex not in result.keys():
+                    result[new_vertex] = 0.0
+                result[new_vertex] += seq_prob * channel.probabilities[index]
 
-    def __dfs(self, noise_model: NoiseModel, current_vertex: POMDPVertex, index_ins: int, is_real_succ=False) -> Dict[POMDPVertex, float]:
+    def __dfs(self, noise_model: NoiseModel, current_vertex: POMDPVertex, index_ins: int) -> Dict[POMDPVertex, float]:
         """perform a dfs to compute successors states of the sequence of instructions.
         It applies the instruction at index self.instructions_seq[index_ins] along with errors recursively
 
@@ -171,12 +163,12 @@ class POMDPAction:
             instruction_channel = noise_model.instructions_to_channel[current_instruction]
             if current_instruction.is_meas_instruction():
                 # get successors for 0-measurements
-                self.__handle_measure_instruction(current_instruction, instruction_channel, current_vertex, is_meas1=False, result=temp_result, is_real_succ=is_real_succ)
+                self.__handle_measure_instruction(current_instruction, instruction_channel, current_vertex, is_meas1=False, result=temp_result)
 
                 # get successors for 1-measurements
-                self.__handle_measure_instruction(current_instruction, instruction_channel, current_vertex, is_meas1=True, result=temp_result, is_real_succ=is_real_succ)
+                self.__handle_measure_instruction(current_instruction, instruction_channel, current_vertex, is_meas1=True, result=temp_result)
             else:
-                self.__handle_unitary_instruction(current_instruction, instruction_channel, current_vertex, result=temp_result, is_real_succ=is_real_succ)
+                self.__handle_unitary_instruction(current_instruction, instruction_channel, current_vertex, result=temp_result)
 
         result = dict()
         for (successor, prob) in temp_result.items():
@@ -195,17 +187,6 @@ class POMDPAction:
 
     def get_successor_states(self, noise_model: NoiseModel, current_vertex: POMDPVertex) -> Dict[POMDPVertex, float]:
         return self.__dfs(noise_model, current_vertex, 0)
-    
-    def get_real_successors(self, all_pomdp_vertices, current_vertex):
-        dict_probs = self.__dfs(None, current_vertex, 0, is_real_succ=True)
-        answer = dict()
-        for vertex_ in dict_probs.keys():
-            assert dict_probs[vertex_] == 1.0
-            assert isinstance(vertex_, POMDPVertex)
-            vertex = get_vertex(all_pomdp_vertices, vertex_.quantum_state, vertex_.classical_state)
-            assert vertex is not None
-            answer[vertex.classical_state] = vertex_
-        return answer
 
 class POMDP:
     states: List[POMDPVertex]
