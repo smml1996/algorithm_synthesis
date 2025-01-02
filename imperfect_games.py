@@ -39,13 +39,14 @@ class KnwGraph:
     '''
     observables_to_vertices: Dict[int, set[int]]
     rankings : Dict[int, int]
-    transition_matrix: Dict[KnwVertex, Dict[str, KnwVertex]]
+    transition_matrix: Dict[KnwVertex, Dict[str, Set[KnwVertex]]]
     def __init__(self, pomdp: POMDP, max_depth: int = -1):
         self.rankings = dict()
         self.transition_matrix = dict()
-        self.actions = [a.name for a in pomdp.actions]
-        self.build_graph(pomdp, max_depth)
         self.target_vertices = set()
+        self.equivalence_class = dict()
+        self.build_graph(pomdp, max_depth)
+        
         
     def is_target_vertex(self, vertex, is_target_qs):
         assert isinstance(vertex, KnwVertex)
@@ -90,6 +91,9 @@ class KnwGraph:
                 # update transition matrix
                 for (classical_state, real_succ) in real_successors.items():
                     new_vertex = KnwVertex(pomdp_obs_to_v[classical_state], real_succ)
+                    if new_vertex.observable not in self.equivalence_class.keys():
+                        self.equivalence_class[new_vertex.observable] = set()
+                    self.equivalence_class[new_vertex.observable].add(new_vertex)
                     is_target = self.is_target_vertex(new_vertex, is_target_qs)
                     if not (new_vertex in visited):
                         visited.add(new_vertex)
@@ -98,27 +102,27 @@ class KnwGraph:
                             q.push((new_vertex, depth + 1))
                         else:
                             self.target_vertices.add(new_vertex) # TODO: optimize this (reduce number of checks by caching observables that have already been checked)
+                    if action.name not in self.transition_matrix[current_vertex].keys():
+                        self.transition_matrix[current_vertex][action.name] = set()
                     assert action.name not in self.transition_matrix[current_vertex].keys()
-                    self.transition_matrix[current_vertex][action.name] = new_vertex
+                    self.transition_matrix[current_vertex][action.name].add(new_vertex)
 
 
 ## FINDING WINNING SET ##
 def allow(graph: KnwGraph, v: KnwVertex, Y: Set[KnwVertex]) -> Set[str]:
     result = set()
-    for (channel, vertices_dict) in graph.transition_matrix[v].items():
-        vertices = set(vertices_dict.keys())
+    for (channel, vertices) in graph.transition_matrix[v].items():
         if vertices.issubset(Y):
             result.add(channel)
     return result
         
 
 def class_allow(graph: KnwGraph, v: KnwVertex, Y: Set[KnwVertex]) -> Set[int]:
-    observable = v.classical_state
-    equivalence_class = deepcopy(graph.get_observable_vertices(observable))
+    equivalence_class = graph.equivalence_class[v.observable]
     result = allow(graph, v, Y)
-    equivalence_class.remove(v)
     for q in equivalence_class:
-        result = result.intersection(allow(graph, q, Y))
+        if q != v:
+            result = result.intersection(allow(graph, q, Y))
     return result
 
 def apre(graph: KnwGraph, X: Set[KnwVertex], Y: Set[KnwVertex]) -> Set[KnwVertex]:
@@ -126,7 +130,7 @@ def apre(graph: KnwGraph, X: Set[KnwVertex], Y: Set[KnwVertex]) -> Set[KnwVertex
     for q in Y:
         allow_q = class_allow(graph, q, Y)
         for delta in allow_q:
-            post_q = set(graph.transition_matrix[q][delta].keys())
+            post_q = graph.transition_matrix[q][delta]
             if post_q.issubset(X):
                 result.add(q)
                 break
@@ -142,12 +146,12 @@ def spre(graph: KnwGraph, Y: Set[KnwVertex]) -> Set[KnwVertex]:
     return result
 
 
-def find_winning_set(graph: KnwGraph, target_observations: List[KnwObs]):
+def find_winning_set(graph: KnwGraph):
     Y = graph.vertices
     
     Bt = set()
-    for o in target_observations:
-        Bt = Bt.union(graph.get_observable_vertices(o))
+    for o in graph.target_vertices:
+        Bt = Bt.union(o)
     
     while True:
         X = set()
