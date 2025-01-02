@@ -46,40 +46,32 @@ class ImperfectGameAlgorithm:
             actions_ = [algo_node.action_name for algo_node in algo_nodes] 
             file.write(f"\t\t\tactions = {actions_}\n")
             file.write(f"\t\t\tchoosen_action = random.choice(actions)\n")
-            file.write(f"\t\t\tout = simulator.apply_instructions(choosen_action)\n")
-            
-            if isinstance(self.next_states[state], int):
-                file.write(f"\t\t\tcurrent_state = {self.next_states[state]}\n")
-            else:
-                for (out_val, next_state) in self.next_states[state].items():
-                    file.write(f"\t\t\tout == {out_val}:\n")
-                    file.write(f"\t\t\t\tcurrent_state == {next_state}:\n")
+            file.write(f"\t\t\tsimulator.apply_instructions(choosen_action)\n")
+
+            for (classical_state, next_state) in self.next_states[state].items():
+                file.write(f"\t\t\tsimulator.meas_cache.get_memory_val() == {classical_state}:\n")
+                file.write(f"\t\t\t\tcurrent_state = {next_state}\n")
+            file.write(f"\t\t\traise Exception('Invalid memory state at {state}')\n")
         
         file.close()
         
 class KnwObs:
     vertices: Set[int]
-    def __init__(self, vertices, out_val=None):
+    def __init__(self, vertices):
         self.vertices = frozenset(vertices)
-        self.out_val = out_val
     
     def __eq__(self, other_obs):
         assert isinstance(other_obs, KnwObs)
-        if self.vertices == other_obs.vertices:
-            assert self.out_val == other_obs.out_val
-            return True
-        return False
+        return self.vertices == other_obs.vertices
         
     def __hash__(self):
         return hash(self.vertices)
 
 class KnwVertex:
     observable: KnwObs
-    vertex_id: int
     def __init__(self, observable_vertices: List[POMDPVertex], vertex: POMDPVertex):
         self.observable = KnwObs(observable_vertices)
-        self.vertex_id = vertex
-        self.state = vertex.classical_state.get_memory_val()
+        self.vertex = vertex
         
     def __eq__(self, other):
         if self.vertex != other.vertex:
@@ -180,6 +172,16 @@ class KnwGraph:
     def get_state_to_algorithm(self) -> ImperfectGameAlgorithm:
         '''returns a dictionary that maps a state (integer) to AlgorithmNode
         '''
+        # assign to each diff. observable a state (int)
+        obs_to_indices = dict()
+        count_obs = 0
+        for vertex in self.rankings.keys():
+            assert isinstance(vertex, KnwVertex)
+            obs = vertex.observable
+            if obs not in obs_to_indices.keys():
+                obs_to_indices[obs] = count_obs
+                count_obs += 1
+        
         winning_set = find_winning_set(self)
         algorithm = ImperfectGameAlgorithm()
         if self.initial_state not in winning_set:
@@ -190,6 +192,7 @@ class KnwGraph:
         
         while not q.is_empty():
             current_vertex = q.pop()
+            current_state = obs_to_indices[current_vertex.observable]
             if algorithm.does_state_exists(current_vertex.state):
                 continue
             
@@ -197,11 +200,11 @@ class KnwGraph:
             for delta in allowed_deltas:
                 action = self.search_pomdp_action(delta)
                 algorithm_node = AlgorithmNode(action.name, action.instruction_sequence)
-                algorithm.states_to_algorithm[current_vertex.state] = algorithm_node
-                assert current_vertex.state not in algorithm.next_states.keys()
-                algorithm.next_states[current_vertex.state] = set()
+                algorithm.states_to_algorithm[current_state] = algorithm_node
+                assert current_state not in algorithm.next_states.keys()
+                algorithm.next_states[current_state] = dict()
                 for successor in self.transition_matrix[current_vertex][delta]:
-                    algorithm.next_states[current_vertex.state].add(successor.state)
+                    algorithm.next_states[current_state][successor.vertex.classical_state] = obs_to_indices[successor.observable]
         return algorithm
 
 def clean_deltas(graph: KnwGraph, current_vertex, deltas) -> Set[str]:
