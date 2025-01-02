@@ -141,6 +141,7 @@ def find_winning_set(graph: KnwGraph):
     Y = graph.vertices
     
     Bt = set()
+    current_ranking = 0
     for o in graph.target_vertices:
         Bt = Bt.union(o)
         graph.rankings[o] = 0
@@ -152,6 +153,11 @@ def find_winning_set(graph: KnwGraph):
 
             if X_ == X:
                 break
+            
+            current_ranking += 1
+            for x in (X_-X):
+                assert x not in graph.rankings.keys()
+                graph.rankings[x] = current_ranking
             X = deepcopy(X_)
 
         Y_ = X
