@@ -45,8 +45,17 @@ class KnwGraph:
         self.transition_matrix = dict()
         self.actions = [a.name for a in pomdp.actions]
         self.build_graph(pomdp, max_depth)
+        self.target_vertices = set()
+        
+    def is_target_vertex(self, vertex, is_target_qs):
+        assert isinstance(vertex, KnwVertex)
+        for pomdp_state in vertex.observable.vertices:
+            if not is_target_qs((pomdp_state.quantum_state, pomdp_state.classical_state)):
+                return False
+        return True
     
-    def build_graph(self, pomdp: POMDP, max_depth: int):
+    def build_graph(self, pomdp: POMDP, is_target_qs, max_depth: int=-1):
+        assert max_depth != 0
         q = Queue()
         self.initial_state = KnwVertex([pomdp.initial_state], pomdp.initial_state)
         q.push((self.initial_state, 0))
@@ -57,10 +66,10 @@ class KnwGraph:
         while not q.is_empty():
             current_vertex, depth = q.pop()
             assert isinstance(current_vertex, KnwVertex)
-            assert not (depth > max_depth)
-            if depth == max_depth:
-                continue
             
+            if max_depth > 0 and depth == max_depth:
+                continue
+            assert (max_depth == -1) or (not (depth > max_depth))
             current_observable = current_vertex.observable # knowledge
             actual_pomdp_vertex = current_vertex.pomdp_vertex
             for action in pomdp.actions:
@@ -81,9 +90,14 @@ class KnwGraph:
                 # update transition matrix
                 for (classical_state, real_succ) in real_successors.items():
                     new_vertex = KnwVertex(pomdp_obs_to_v[classical_state], real_succ)
+                    is_target = self.is_target_vertex(new_vertex, is_target_qs)
                     if not (new_vertex in visited):
                         visited.add(new_vertex)
-                        q.push((new_vertex, depth + 1))
+                        if not is_target:
+                            # only explore if we are not in a target observable (otherwise it doesnt make sense to keep exploring because we have already reached the target)
+                            q.push((new_vertex, depth + 1))
+                        else:
+                            self.target_vertices.add(new_vertex) # TODO: optimize this (reduce number of checks by caching observables that have already been checked)
                     assert action.name not in self.transition_matrix[current_vertex].keys()
                     self.transition_matrix[current_vertex][action.name] = new_vertex
 
