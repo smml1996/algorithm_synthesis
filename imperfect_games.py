@@ -137,21 +137,13 @@ def apre(graph: KnwGraph, X: Set[KnwVertex], Y: Set[KnwVertex]) -> Set[KnwVertex
     return result
 
 
-def spre(graph: KnwGraph, Y: Set[KnwVertex]) -> Set[KnwVertex]:
-    result = set()
-    for v in Y:
-        allow_v = class_allow(graph, v, Y)
-        if len(allow_v) > 0:
-            result.add(v)
-    return result
-
-
 def find_winning_set(graph: KnwGraph):
     Y = graph.vertices
     
     Bt = set()
     for o in graph.target_vertices:
         Bt = Bt.union(o)
+        graph.rankings[o] = 0
     
     while True:
         X = set()
