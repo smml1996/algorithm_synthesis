@@ -1,10 +1,19 @@
 from typing import Dict, List, Set, Tuple
+from algorithm import AlgorithmNode
 from cmemory import KnwObs
 from copy import deepcopy
 
 from pomdp import POMDP, POMDPAction, POMDPVertex
 from utils import Queue
 
+class ImperfectGameAlgorithm:
+    def __init__(self):
+        self.states_to_algorithm = dict()
+        self.next_states = dict()
+    
+    def does_state_exists(self, state):
+        return state in self.states_to_algorithm.keys()
+        
 class KnwObs:
     vertices: Set[int]
     def __init__(self, vertices):
@@ -25,6 +34,7 @@ class KnwVertex:
     def __init__(self, observable_vertices: List[POMDPVertex], vertex: POMDPVertex):
         self.observable = KnwObs(observable_vertices)
         self.vertex_id = vertex
+        self.state = vertex.classical_state.get_memory_val()
         
     def __eq__(self, other):
         if self.vertex != other.vertex:
@@ -38,14 +48,16 @@ class KnwGraph:
     ''' Knowledge graph
     '''
     observables_to_vertices: Dict[int, set[int]]
-    rankings : Dict[int, int]
+    rankings : Dict[KnwVertex, int]
     transition_matrix: Dict[KnwVertex, Dict[str, Set[KnwVertex]]]
     def __init__(self, pomdp: POMDP, max_depth: int = -1):
         self.rankings = dict()
         self.transition_matrix = dict()
         self.target_vertices = set()
         self.equivalence_class = dict()
+        self.actions = pomdp.actions
         self.build_graph(pomdp, max_depth)
+            
         
         
     def is_target_vertex(self, vertex, is_target_qs):
@@ -106,7 +118,49 @@ class KnwGraph:
                         self.transition_matrix[current_vertex][action.name] = set()
                     assert action.name not in self.transition_matrix[current_vertex].keys()
                     self.transition_matrix[current_vertex][action.name].add(new_vertex)
+                    
+    def search_pomdp_action(self, delta) -> POMDPAction:
+        for action in self.actions:
+            if delta == action.name:
+                return action
+        raise Exception("POMDP Action not found in Knowledge graph")
+    
+    def get_state_to_algorithm(self) -> ImperfectGameAlgorithm:
+        '''returns a dictionary that maps a state (integer) to AlgorithmNode
+        '''
+        winning_set = find_winning_set(self)
+        algorithm = ImperfectGameAlgorithm()
+        if self.initial_state not in winning_set:
+            return algorithm
+        
+        q = Queue()
+        q.push(self.initial_state)
+        
+        while not q.is_empty():
+            current_vertex = q.pop()
+            if algorithm.does_state_exists(current_vertex.state):
+                continue
+            
+            allowed_deltas = clean_deltas(self, class_allow(self, current_vertex, winning_set))
+            for delta in allowed_deltas:
+                action = self.search_pomdp_action(delta)
+                algorithm_node = AlgorithmNode(action.name, action.instruction_sequence)
+                algorithm.states_to_algorithm[current_vertex.state] = algorithm_node
+                assert current_vertex.state not in algorithm.next_states.keys()
+                algorithm.next_states[current_vertex.state] = set()
+                for successor in self.transition_matrix[current_vertex][delta]:
+                    algorithm.next_states[current_vertex.state].add(successor.state)
+        return algorithm
 
+def clean_deltas(graph: KnwGraph, current_vertex, deltas) -> Set[str]:
+    new_deltas = set()
+    for delta in deltas:
+        post_vertices = graph.transition_matrix[current_vertex][delta]
+        min_rank = min([graph.rankings[v] for v in post_vertices])
+        pre_rank = graph.rankings[current_vertex]
+        if min_rank < pre_rank:
+            if len(graph.adj_list[current_vertex][delta]) != 1 or (current_vertex not in graph.adj_list[current_vertex][delta]):
+                new_deltas.add(delta)
 
 ## FINDING WINNING SET ##
 def allow(graph: KnwGraph, v: KnwVertex, Y: Set[KnwVertex]) -> Set[str]:
@@ -167,73 +221,4 @@ def find_winning_set(graph: KnwGraph):
 
     return Y
 
-## Ranking ##
-def clean_graph(graph: KnwGraph, target_obs: Set[KnwObs], winning_set: Set[KnwVertex]) -> KnwGraph:
-    new_graph = KnwGraph(graph.initial_state, winning_set, graph.actions, dict())
-    
-    for (obs, vertices) in graph.observables_to_v.items():
-        z = vertices.intersection(winning_set)
-        if len(z) > 0:
-            new_graph.observables_to_v[obs] = z
-            for v in z:
-                new_graph.v_to_observable[v] = obs
 
-    # calculate rankings
-    visited = set()
-    new_graph.rankings[0] = set()
-    for obs in target_obs:
-        for v in graph.observables_to_v[obs]:
-            assert v in winning_set
-            new_graph.rankings[0].add(v)
-            new_graph.v_to_rankings[v] = 0
-            visited.add(v)
-
-    current_ranking = 1
-    while visited != winning_set:
-        for v in winning_set:
-            if v not in visited:
-                deltas = class_allow(graph, v, winning_set)
-                if len(deltas) > 0:
-                    for delta in deltas:
-                        if set(graph.transition_matrix[v][delta].keys()).issubset(new_graph.rankings[current_ranking-1]):
-                            if current_ranking not in new_graph.rankings.keys():
-                                new_graph.rankings[current_ranking] = deepcopy(new_graph.rankings[current_ranking-1])
-                            new_graph.rankings[current_ranking].add(v)
-                            new_graph.v_to_rankings[v] = current_ranking
-                            visited.add(v)
-        current_ranking +=1
-   
-    for (obs, vertices) in new_graph.observables_to_v.items():
-        deltas = class_allow(graph, list(vertices)[0], winning_set)
-        for delta in deltas:
-            post_vertices = set()
-            for vertex in vertices:
-                post_vertices = post_vertices.union(set(graph.transition_matrix[vertex][delta]).keys())
-
-            min_rank = min([new_graph.v_to_rankings[v] for v in post_vertices])
-            pre_max_rank = max([new_graph.v_to_rankings[v] for v in vertices])
-            if min_rank < pre_max_rank:
-
-                for vertex in vertices:
-                    if len(graph.transition_matrix[vertex][delta].keys()) == 1 and (vertex in graph.transition_matrix[vertex][delta].keys()):
-                        pass
-                    else:
-                        if vertex not in new_graph.transition_matrix.keys():
-                            new_graph.transition_matrix[vertex] = dict()
-                        assert delta not in new_graph.transition_matrix[vertex].keys()
-                        new_graph.transition_matrix[vertex][delta] = deepcopy(graph.transition_matrix[vertex][delta])
-
-    new_winning_set = set()
-    for v in new_graph.transition_matrix.keys():
-        new_winning_set.add(v)
-
-    for obs in target_obs:
-        for v in graph.observables_to_v[obs]:
-            assert isinstance(v, int)
-            new_winning_set.add(v)
-
-    winning_set = new_winning_set
-    new_graph.vertices = winning_set
-    for obs in new_graph.observables_to_v.keys():
-        new_graph.observables_to_v[obs] = new_graph.observables_to_v[obs].intersection(winning_set)
-    return new_graph
