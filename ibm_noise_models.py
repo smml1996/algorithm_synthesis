@@ -747,9 +747,9 @@ class NoiseModel:
     num_qubits: int
     qubit_to_indegree: Dict[int, int] # tells mutiqubit gates have as target a given qubit (key)
     qubit_to_outdegree: Dict[int, int]
-    def __init__(self, hardware_specification: HardwareSpec, thermal_relaxation=True) -> None:
-        self.hardware_spec = hardware_specification
-        ibm_noise_model = get_ibm_noise_model(hardware_specification, thermal_relaxation=thermal_relaxation)
+    
+    def load_noise_model(self, thermal_relaxation):
+        ibm_noise_model = get_ibm_noise_model(self.hardware_specification, thermal_relaxation=thermal_relaxation)
         assert isinstance(ibm_noise_model, IBMNoiseModel)
         self.basis_gates = get_basis_gate_type([get_op(op) for op in ibm_noise_model.basis_gates])
         self.instructions_to_channel = dict()
@@ -793,12 +793,6 @@ class NoiseModel:
             if error['type'] == "qerror":    
                 error_instructions = error['instructions']
                 self.instructions_to_channel[target_instruction] = QuantumChannel(error_instructions, probabilities, target_qubits)
-                
-                # TODO: remove this
-                # if op == Op.CNOT and target_instruction.control==1 and target_instruction.target== 0:
-                #     print(hardware_specification, target_instruction)
-                #     print(probabilities, "\n")
-                
             else:
                 assert error['type'] == "roerror"
                 self.instructions_to_channel[target_instruction] = MeasChannel(probabilities)
@@ -821,6 +815,18 @@ class NoiseModel:
         self.digraph = self.get_digraph_()
         # if len(report.keys()) > 0:
         #     print(f"WARNING ({hardware_specification.value}) (qubits={self.num_qubits}) ({self.basis_gates.value}): no quantum channel found for {report}")
+        
+    def __init__(self, hardware_specification: HardwareSpec=None, thermal_relaxation=True) -> None:
+        self.hardware_spec = hardware_specification
+        if hardware_specification is not None:
+            self.load_noise_model(thermal_relaxation=thermal_relaxation)
+        else:
+            self.instructions_to_channel = dict()
+            self.num_qubits = None
+            self.basis_gates = None
+            self.report = None
+            self.digraph = None
+        
 
     def get_digraph_(self):
         answer = dict()
@@ -893,6 +899,17 @@ class NoiseModel:
             'instructions': instructions,
             'channels': channels
         }
+    
+    def get_instruction_channel(self, instruction):
+        assert isinstance(instruction, Instruction)
+        if self.hardware_spec is None:
+            if instruction not in self.instructions_to_channel.keys():
+                if instruction.is_meas_instruction():
+                    channel = MeasChannel([[1.0, 0.0], [0.0, 1.0]])
+                else:
+                    channel = QuantumChannel([], [], [0])
+                self.instructions_to_channel[instruction] = channel
+        return self.instructions_to_channel[instruction]
     
     def dump_json(self, path):
         f = open(path, "w")

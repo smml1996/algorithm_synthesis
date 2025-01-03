@@ -45,7 +45,7 @@ class BitFlipInstance:
         assert 1 in self.embedding.keys()
         assert 2 in self.embedding.keys()
         assert len(self.embedding.keys()) == 3
-
+    
     def get_initial_states(self):
         """
         The initial state is specified as a uniform superpositions over all four bell states.

@@ -160,7 +160,7 @@ class POMDPAction:
             new_vertex = POMDPVertex(current_vertex.quantum_state, new_classical_state)
             temp_result[new_vertex] = 1.0
         else:
-            instruction_channel = noise_model.instructions_to_channel[current_instruction]
+            instruction_channel = noise_model.get_instruction_channel(current_instruction)
             if current_instruction.is_meas_instruction():
                 # get successors for 0-measurements
                 self.__handle_measure_instruction(current_instruction, instruction_channel, current_vertex, is_meas1=False, result=temp_result)

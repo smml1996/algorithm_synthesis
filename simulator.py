@@ -26,7 +26,7 @@ class QSimulator:
         
 
     def apply_noise_model(self, instruction: Instruction):
-        channel = self.noise_model.instructions_to_channel[instruction]
+        channel = self.noise_model.get_instruction_channel(instruction)
         
         if not instruction.is_meas_instruction():
             assert isinstance(channel, QuantumChannel)
