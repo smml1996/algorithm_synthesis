@@ -265,15 +265,28 @@ class KnwGraph:
 
 def clean_deltas(graph: KnwGraph, current_vertex, deltas) -> Set[str]:
     new_deltas = set()
+    count_forwards = dict() # maps a delta to the number of vertices from which current equivalence class leads to lower rank
+    for delta in deltas:
+        count_forwards[delta] = 0
+        
+    max_current_class_rank = max(graph.rankings[v] for v in graph.equivalence_class[current_vertex.observable])
+    
+    
+    
     for delta in deltas:
         post_vertices = set()
         assert current_vertex in graph.equivalence_class[current_vertex.observable]
         for vertex in graph.equivalence_class[current_vertex.observable]:
             post_vertices = post_vertices.union(graph.transition_matrix[vertex][delta])
-        min_rank = min([graph.rankings[v] for v in post_vertices])
-        pre_rank = max(graph.rankings[v] for v in graph.equivalence_class[current_vertex.observable])
-        if min_rank < pre_rank:
-            if len(graph.transition_matrix[current_vertex][delta]) != 1 or (current_vertex not in graph.transition_matrix[current_vertex][delta]):
+        for vertex in post_vertices:
+            if graph.rankings[vertex] < max_current_class_rank:
+                count_forwards[delta]+=1
+    
+    if len(count_forwards) > 0:
+        max_forwards = max(count_forwards.values())
+        
+        for (delta, count) in count_forwards.items():
+            if count == max_forwards:
                 new_deltas.add(delta)
     return new_deltas
 

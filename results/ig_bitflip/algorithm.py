@@ -18,23 +18,17 @@ def my_algorithm(qc: QuantumCircuit, noise_model: NoiseModel, seed=1):
 			# target state reached
 			break
 		if current_state == 14:
-			actions = ['X0', 'CX']
+			actions = ['CX']
 			choosen_action = random.choice(actions)
 			simulator.apply_instructions(choosen_action)
-			if choosen_action == X0 and simulator.meas_cache.get_memory_val() == 0:
-				current_state = 14
-				continue
 			if choosen_action == CX and simulator.meas_cache.get_memory_val() == 0:
 				current_state = 10
 				continue
 			raise Exception('Invalid (classical) memory state at 14')
 		if current_state == 10:
-			actions = ['X0', 'P2']
+			actions = ['P2']
 			choosen_action = random.choice(actions)
 			simulator.apply_instructions(choosen_action)
-			if choosen_action == X0 and simulator.meas_cache.get_memory_val() == 0:
-				current_state = 9
-				continue
 			if choosen_action == P2 and simulator.meas_cache.get_memory_val() == 0:
 				current_state = 3
 				continue
@@ -42,20 +36,6 @@ def my_algorithm(qc: QuantumCircuit, noise_model: NoiseModel, seed=1):
 				current_state = 6
 				continue
 			raise Exception('Invalid (classical) memory state at 10')
-		if current_state == 9:
-			actions = ['X0', 'P2']
-			choosen_action = random.choice(actions)
-			simulator.apply_instructions(choosen_action)
-			if choosen_action == X0 and simulator.meas_cache.get_memory_val() == 0:
-				current_state = 10
-				continue
-			if choosen_action == P2 and simulator.meas_cache.get_memory_val() == 0:
-				current_state = 4
-				continue
-			if choosen_action == P2 and simulator.meas_cache.get_memory_val() == 4:
-				current_state = 1
-				continue
-			raise Exception('Invalid (classical) memory state at 9')
 		if current_state == 6:
 			actions = ['X0']
 			choosen_action = random.choice(actions)
@@ -64,11 +44,3 @@ def my_algorithm(qc: QuantumCircuit, noise_model: NoiseModel, seed=1):
 				current_state = 1
 				continue
 			raise Exception('Invalid (classical) memory state at 6')
-		if current_state == 4:
-			actions = ['X0']
-			choosen_action = random.choice(actions)
-			simulator.apply_instructions(choosen_action)
-			if choosen_action == X0 and simulator.meas_cache.get_memory_val() == 0:
-				current_state = 3
-				continue
-			raise Exception('Invalid (classical) memory state at 4')
