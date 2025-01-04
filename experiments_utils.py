@@ -922,4 +922,11 @@ def check_files(experiment_id, allowed_hardware, with_thermalization=False):
         # check algorithms files
         check_algorithms_files(config, embeddings)
         
-        
+## imperfect information games ##
+def setup(experiment_id):
+    name = experiment_id.exp_name
+    
+    project_path = get_project_path()
+    dir_path = os.path.join(project_path, "results", name)
+    directory_exists(dir_path)
+    

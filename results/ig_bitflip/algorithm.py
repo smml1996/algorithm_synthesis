@@ -8,9 +8,12 @@ from ibm_noise_models import NoiseModel, Instruction, instruction_to_ibm, Op
 X0 = [Instruction(0, Op.X, None, None)]
 CX = [Instruction(2, Op.CNOT, 0, None), Instruction(2, Op.CNOT, 1, None)]
 P2 = [Instruction(2, Op.MEAS, None, None)]
-def my_algorithm(qc: QuantumCircuit, noise_model: NoiseModel, seed=1):
+def my_algorithm(qc: QuantumCircuit, initial_state, noise_model: NoiseModel, seed=1):
 	#### INITIALIZE SIMULATOR ######
+	qs, cs = initial_state
 	simulator = QSimulator(noise_model, seed)
+	simulator.qmemory = qs
+	simulator.meas_cache = cs
 	current_state = 14
 
 	while True:

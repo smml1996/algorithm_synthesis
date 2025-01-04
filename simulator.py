@@ -2,8 +2,8 @@ from cmath import isclose
 from typing import List, Optional
 from cmemory import ClassicalState, cread, cwrite
 from qmemory import QuantumState, get_qs_probability, handle_write
-from qpu_utils import Op
-from utils import Instruction, Precision
+from qpu_utils import GateData, Op
+from utils import Precision
 import random
 from ibm_noise_models import MeasChannel, NoiseModel, Instruction, QuantumChannel
 
@@ -13,14 +13,14 @@ class QSimulator:
     noise_model: NoiseModel
     count_executed_instructions: int
     log: List[str]
-    def __init__(self, noise_model = NoiseModel(), seed=None) -> None:
+    def __init__(self, noise_model = NoiseModel(), seed=None, qubits_used=None) -> None:
         self.log = []
         self.instructions_applied = []
         if not (seed is None):
             self.log.append(f"SEED: {seed}")
             random.seed(seed)
         self.noise_model = noise_model
-        self.qmemory = QuantumState(0)
+        self.qmemory = QuantumState(0, qubits_used=qubits_used)
         self.meas_cache = ClassicalState()
         self.count_executed_instructions = 0
         
@@ -33,8 +33,8 @@ class QSimulator:
             error_sequence = random.choices(channel.errors, weights=channel.probabilities, k=1)[0]
             
             for error_instruction in error_sequence:
-                assert isinstance(error_instruction, Instruction)
-                self.qmemory = handle_write(self.qmemory, error_instruction.get_gate_data())
+                assert isinstance(error_instruction, GateData)
+                self.qmemory = handle_write(self.qmemory, error_instruction)
         else:
             assert isinstance(channel, MeasChannel)
             current_memory_val = self.get_meas_cache_val(instruction.target)
@@ -42,7 +42,7 @@ class QSimulator:
             wrong_val = (current_memory_val + 1) % 2
             wrong_prob = channel.get_ind_probability(current_memory_val, wrong_val)
             
-            flip = random.choices([current_memory_val, wrong_val], probabilities=[correct_prob, wrong_prob], k=1)[0]
+            flip = random.choices([current_memory_val, wrong_val], weights=[correct_prob, wrong_prob], k=1)[0]
             
             if flip == 0:
                 self.meas_cache = cwrite(self.meas_cache, Op.WRITE0, instruction.target)

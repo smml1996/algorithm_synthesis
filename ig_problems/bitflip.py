@@ -51,4 +51,6 @@ if __name__ == "__main__":
     project_path = get_project_path()
     output_path = os.path.join(project_path, "results", "ig_bitflip", "algorithm.py")
     algorithm.dump(output_path, actions)
+    
+    algorithm.check(problem_instance.initial_state, problem_instance.is_target_qs)
 

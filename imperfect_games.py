@@ -1,8 +1,10 @@
+import random
 from typing import Dict, List, Set, Tuple
 from algorithm import AlgorithmNode
 from copy import deepcopy
 
 from pomdp import POMDP, POMDPAction, POMDPVertex
+from simulator import QSimulator
 from utils import Queue
 
 class ImperfectGameAlgorithm:
@@ -34,10 +36,13 @@ class ImperfectGameAlgorithm:
                 instructions_str += f"Instruction({instruction.target}, Op.{instruction.op.name}, {instruction.control}, {instruction.params})"
             file.write(f"{action.name} = [{instructions_str}]\n")
            
-        file.write("def my_algorithm(qc: QuantumCircuit, noise_model: NoiseModel, seed=1):\n") 
+        file.write("def my_algorithm(qc: QuantumCircuit, initial_state, noise_model: NoiseModel, seed=1):\n") 
         
         file.write("\t#### INITIALIZE SIMULATOR ######\n")
+        file.write("\tqs, cs = initial_state\n")
         file.write("\tsimulator = QSimulator(noise_model, seed)\n")
+        file.write("\tsimulator.qmemory = qs\n")
+        file.write("\tsimulator.meas_cache = cs\n")
         file.write(f"\tcurrent_state = {self.initial_state}\n\n")
         
         file.write("\twhile True:\n")
@@ -62,6 +67,25 @@ class ImperfectGameAlgorithm:
                     file.write(f"\t\t\t\tcontinue\n")
             file.write(f"\t\t\traise Exception('Invalid (classical) memory state at {state}')\n")
         file.close()
+
+    def check(self, initial_states, is_target_qs, shots=100):
+        for initial_state in initial_states:
+            qs, cs = initial_state
+            for shot in range(shots):
+                simulator = QSimulator(seed=shot, qubits_used=qs.qubits_used)
+                simulator.qmemory = qs
+                simulator.meas_cache = cs
+                
+                current_state = self.initial_state
+            
+                while current_state not in self.target_states:
+                    choosen_action = random.choice(self.states_to_algorithm[current_state])
+                    assert isinstance(choosen_action, AlgorithmNode)
+                    simulator.apply_instructions(choosen_action.instruction_sequence)
+                    current_state = self.next_states[current_state][choosen_action.action_name][simulator.meas_cache]
+                    
+                assert is_target_qs((simulator.qmemory, simulator.meas_cache))
+                
         
 class KnwObs:
     vertices: Set[int]
@@ -228,6 +252,7 @@ class KnwGraph:
             q.push(initial_state)
             visited.add(initial_state)
             if initial_state not in winning_set:
+                print("initial states not in winning set")
                 return algorithm
         
         
