@@ -284,7 +284,6 @@ def clean_deltas(graph: KnwGraph, current_vertex, deltas) -> Set[str]:
     
     if len(count_forwards) > 0:
         max_forwards = max(count_forwards.values())
-        
         for (delta, count) in count_forwards.items():
             if count == max_forwards:
                 new_deltas.add(delta)
