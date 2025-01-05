@@ -64,6 +64,7 @@ def time_limit(seconds):
 class BitflipExperimentID(Enum):
     IPMA = "ipma"
     IPMA2 = "ipma2"
+    IPMA3 = "ipma3"
     CXH = "cxh"
     
     @property
@@ -72,6 +73,7 @@ class BitflipExperimentID(Enum):
     
 class PhaseflipExperimentID(Enum):
     IPMA = "ipma"
+    IPMA3 = "ipma3"
     CXH = "cxh"
     @property
     def exp_name(self):
@@ -139,9 +141,9 @@ def generate_configs(experiment_id: Enum, min_horizon, max_horizon, allowed_hard
             f.close()
 
 def get_allowed_hardware(experiment_id, with_thermalization=False):
-    if experiment_id in [BitflipExperimentID.IPMA, BitflipExperimentID.CXH, GHZExperimentID.EMBED]:
+    if experiment_id in [BitflipExperimentID.IPMA, BitflipExperimentID.CXH, GHZExperimentID.EMBED, BitflipExperimentID.IPMA2, ResetExperimentID.main]:
         return HardwareSpec
-    elif experiment_id in [BitflipExperimentID.IPMA2, GHZExperimentID.EXP1, PhaseflipExperimentID.IPMA, ResetExperimentID.main]:
+    elif experiment_id in [GHZExperimentID.EXP1, PhaseflipExperimentID.IPMA]:
         ipma2_allowed_hardware = []
         for hardware in HardwareSpec:
             noise_model = NoiseModel(hardware, thermal_relaxation=with_thermalization)
@@ -399,6 +401,7 @@ def get_default_flip_algorithm(noise_model, embedding, horizon, experiment_id, g
                 # head = AlgorithmNode("XS", [Instruction(target_qubit, Op.X)], noiseless=True)
             num_meas = horizon - 2 # the initial CX and the flip instruction needed at the end in case we detect an odd parity
         else:
+            assert experiment_id in [BitflipExperimentID.IPMA2, BitflipExperimentID.CXH]
             raise Exception("Implement me")
             num_meas = horizon - 3 # the two initial CX and the flip instruction needed at the end in case we detect an odd parity
     elif experiment_id == ResetExperimentID.main:
@@ -436,7 +439,7 @@ def get_default_algorithm(noise_model, embedding, experiment_id, get_experiments
         node2.next_ins = node3    
         return node1
     if isinstance(experiment_id, BitflipExperimentID):
-        return get_default_flip_algorithm(noise_model, embedding, horizon, BitflipExperimentID.IPMA2, get_experiments_actions, target_qubit=target_qubit)
+        return get_default_flip_algorithm(noise_model, embedding, horizon, experiment_id, get_experiments_actions, target_qubit=target_qubit)
     return get_default_flip_algorithm(noise_model, embedding, horizon, experiment_id, get_experiments_actions, target_qubit=target_qubit)
 
 ###### guarantees #####
@@ -502,7 +505,7 @@ def get_guarantees(noise_model: NoiseModel, batch: int, hardware_spec: HardwareS
     if type(experiment_id)  == GHZExperimentID:        
         default_guarantee = get_simulated_guarantee(noise_model, hardware_spec, embedding, experiment_id, optimization_level=optimization_level, IBMInstanceObj=IBMInstanceObj, factor=factor, get_coupling_map=get_coupling_map)
     else:
-        default_algorithm = get_default_algorithm(noise_model, embedding, experiment_id, get_experiments_actions, horizon)
+        default_algorithm = get_default_algorithm(noise_model, embedding,  experiment_id, get_experiments_actions, horizon)
         pomdp_path = get_pomdp_path(config, hardware_spec, embedding_index)
         default_guarantee = round(get_custom_guarantee(default_algorithm, pomdp_path, config),3)
     return my_guarantee, default_guarantee
@@ -583,7 +586,26 @@ def get_best_lambda_per_hardware(config):
                 answer[hardware_spec] = max(answer[hardware_spec], lambda_)
     return answer
         
-
+def load_all_lambdas(experiment_id):
+    allowed_hardware = get_allowed_hardware(experiment_id)
+    batches = get_num_qubits_to_hardware(False, allowed_hardware=allowed_hardware)
+    answer = dict()
+    for (batch_name, hardware_spec) in batches.items():
+        config_path = get_config_path(experiment_id, batch_name)
+        config = load_config_file(config_path, type(experiment_id))
+        config_lambdas = parse_lambdas_file(config)
+        for (hardware, embeddings_dict) in config_lambdas.items():
+            hardware_spec = find_enum_object(hardware, HardwareSpec)
+            assert hardware_spec not in answer.keys()
+            answer[hardware_spec] = dict()
+            for (embedding_index, horizon_dict) in embeddings_dict.items():
+                if embedding_index not in answer[hardware_spec].keys():
+                    answer[hardware_spec][embedding_index] = dict()
+                for (horizon, lambda_) in horizon_dict.items():
+                    answer[hardware_spec][embedding_index][horizon] = lambda_
+    return answer
+        
+        
 ### POMDPS ####
 def generate_pomdp(experiment_id: GHZExperimentID, hardware_spec: HardwareSpec, 
                 embedding: Dict[int, int], pomdp_write_path: str, get_experiments_actions, ProblemInstanceObj, horizon, guard=default_guard,
@@ -779,7 +801,7 @@ def get_diff_algorithms(experiment_id, allowed_hardware, get_hardware_embeddings
                 
             for (index, embedding) in enumerate(embeddings):
                 actions_to_instructions = dict()
-                actions = get_experiments_actions(noise_model, get_default_embedding(len(embedding.keys())), experiment_id)
+                actions = get_experiments_actions(noise_model, embedding, experiment_id)
                 for action in actions:
                     actions_to_instructions[action.name] = action.instruction_sequence
                 actions_to_instructions["halt"] = []
@@ -790,16 +812,18 @@ def get_diff_algorithms(experiment_id, allowed_hardware, get_hardware_embeddings
                     
                     algorithm_path = os.path.join(all_algorithms_path, f"{hardware_spec.value}_{index}_{horizon}.json")
                     f_algorithm = open(algorithm_path)
-                    algorithm = AlgorithmNode(serialized=json.load(f_algorithm), actions_to_instructions=actions_to_instructions)
-                    f_algorithm.close()
-                    if not (algorithm in all_algorithms[horizon]):
-                        all_algorithms[horizon].append(algorithm)
-                        comments[horizon].append(hardware_spec.value+'-'+str(index))
-                    else:
-                        for (index_old_alg, old_alg) in enumerate(all_algorithms[horizon]):
-                            if old_alg == algorithm:
-                                comments[horizon][index_old_alg] = f"{comments[horizon][index_old_alg]},{hardware_spec.value}-{index}"
-                                break
+                    json_loaded = json.load(f_algorithm)
+                    if json_loaded != "None":
+                        algorithm = AlgorithmNode(serialized=json_loaded, actions_to_instructions=actions_to_instructions)
+                        f_algorithm.close()
+                        if not (algorithm in all_algorithms[horizon]):
+                            all_algorithms[horizon].append(algorithm)
+                            comments[horizon].append(hardware_spec.value+'-'+str(index))
+                        else:
+                            for (index_old_alg, old_alg) in enumerate(all_algorithms[horizon]):
+                                if old_alg == algorithm:
+                                    comments[horizon][index_old_alg] = f"{comments[horizon][index_old_alg]},{hardware_spec.value}-{index}"
+                                    break
     return all_algorithms, comments, actions
 
 def generate_diff_algorithms_file(experiment_id, allowed_hardware, get_hardware_embeddings, get_experiments_actions, with_thermalization=False):
@@ -867,8 +891,8 @@ def check_pomdp_files(config, embeddings):
         hardware_spec = find_enum_object(hardware_spec_, HardwareSpec)
         for (embedding_index, _) in enumerate(embeddings[hardware_spec]["embeddings"]):
             pomdp_path = get_pomdp_path(config, hardware_spec, embedding_index)
-            if os.path.isfile(pomdp_path):
-                print(f"NO POMDP file for {hardware_spec}-{embedding_index} ({config['experiment_id']}-{config['name']})")
+            if not os.path.isfile(pomdp_path):
+                print(f"NO POMDP file for {hardware_spec}-{embedding_index} ({config['experiment_id']}-{config['name']}), {pomdp_path}")
                 continue
     
 def check_algorithms_files(config, embeddings):

@@ -112,7 +112,7 @@ def get_pivot_qubits(noise_model: NoiseModel, experiment_id: PhaseflipExperiment
                 success1 = noise_data.get_ind_probability(1,1)
                 noises.append(ReadoutNoise(qubit, success0, success1))
         else:
-            assert experiment_id == PhaseflipExperimentID.IPMA
+            assert experiment_id in [PhaseflipExperimentID.IPMA, PhaseflipExperimentID.IPMA3]
             if noise_model.get_qubit_outdegree(qubit) > 1:
                 noise_data = noise_model.instructions_to_channel[Instruction(qubit, Op.MEAS)]
                 assert isinstance(noise_data, MeasChannel)
@@ -197,7 +197,7 @@ class IBMPhaseFlipInstance:
         return self.phaseflip_instance.is_target_qs((qs, None))
 
 def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: PhaseflipExperimentID):
-    if experiment_id == PhaseflipExperimentID.IPMA:
+    if experiment_id in [PhaseflipExperimentID.IPMA, PhaseflipExperimentID.IPMA3]:
         if noise_model.basis_gates in [BasisGates.TYPE1, BasisGates.TYPE6]:
             Z0 = POMDPAction("Z0", [Instruction(embedding[0], Op.U3, params=[0.0, 0.0, pi])])
         else:
@@ -225,7 +225,15 @@ def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], e
             
         P2 = POMDPAction("P2", [Instruction(embedding[2], Op.MEAS)])
         
-        return [P2, Z0, H]
+        if experiment_id == PhaseflipExperimentID.IPMA:
+            return [P2, Z0, H]
+        else:
+            assert experiment_id == PhaseflipExperimentID.IPMA3
+            if noise_model.basis_gates in [BasisGates.TYPE1]:
+                X2 = POMDPAction("X2", [Instruction(embedding[2], Op.U3, params=[pi, 2*pi, pi])])
+            else:
+                X2 = POMDPAction("X2", [Instruction(embedding[2], Op.X)])
+            return [P2, Z0, H, X2]
     else:
         assert experiment_id == PhaseflipExperimentID.CXH
         if noise_model.basis_gates in [BasisGates.TYPE1, BasisGates.TYPE6]:
@@ -265,16 +273,20 @@ if __name__ == "__main__":
     if arg_backend == "gen_configs":
         # step 0
         generate_configs(experiment_id=PhaseflipExperimentID.IPMA, min_horizon=1, max_horizon=7, allowed_hardware=allowed_hardware)
+        generate_configs(experiment_id=PhaseflipExperimentID.IPMA3, min_horizon=1, max_horizon=7, allowed_hardware=allowed_hardware)
         # generate_configs(experiment_id=PhaseflipExperimentID.CXH, min_horizon=4, max_horizon=7, allowed_hardware=allowed_hardware)
     elif arg_backend == "embeddings":
         # generate paper embeddings
         batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=allowed_hardware)
         for num_qubits in batches.keys():
-            ipma_config_path = get_config_path(PhaseflipExperimentID.IPMA, num_qubits)
-            generate_embeddings(PhaseflipExperimentID.IPMA, num_qubits, get_hardware_embeddings)
+            # ipma_config_path = get_config_path(PhaseflipExperimentID.IPMA, num_qubits)
+            # generate_embeddings(PhaseflipExperimentID.IPMA, num_qubits, get_hardware_embeddings)
             
-            cxh_config_path = get_config_path( PhaseflipExperimentID.CXH, num_qubits)
-            generate_embeddings(PhaseflipExperimentID.CXH, num_qubits, get_hardware_embeddings)
+            ipma_config_path = get_config_path(PhaseflipExperimentID.IPMA3, num_qubits)
+            generate_embeddings(PhaseflipExperimentID.IPMA3, num_qubits, get_hardware_embeddings)
+            
+            # cxh_config_path = get_config_path( PhaseflipExperimentID.CXH, num_qubits)
+            # generate_embeddings(PhaseflipExperimentID.CXH, num_qubits, get_hardware_embeddings)
     elif arg_backend == "all_pomdps":
         # TODO: clean me up
         # step 2: generate all pomdps
@@ -282,7 +294,8 @@ if __name__ == "__main__":
         # generate_pomdps(config_path)
         batches = get_num_qubits_to_hardware(WITH_TERMALIZATION, allowed_hardware=allowed_hardware)
         for num_qubits in batches.keys():
-            generate_pomdps(PhaseflipExperimentID.IPMA, num_qubits, get_experiments_actions, PhaseFlipInstance, bitflips_guard)
+            # generate_pomdps(PhaseflipExperimentID.IPMA, num_qubits, get_experiments_actions, PhaseFlipInstance, bitflips_guard)
+            generate_pomdps(PhaseflipExperimentID.IPMA3, num_qubits, get_experiments_actions, PhaseFlipInstance, bitflips_guard)
     elif arg_backend == "mc_ipma":
         generate_mc_guarantees_file(PhaseflipExperimentID.IPMA, allowed_hardware, get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=WITH_TERMALIZATION) 
     elif arg_backend == "alg_ipma":
