@@ -55,6 +55,11 @@ rho_qubit1 = [
     [0, 0],
     [0, 1],
 ]
+
+rho_qubit_plus = [
+    [0.5, 0.5],
+    [0.5, 0.5],
+]
         
 bell_state_pts = [bell0_real_rho, bell1_real_rho, bell2_real_rho, bell3_real_rho]
 
@@ -945,10 +950,18 @@ def get_ig_algorithm_path(experiment_id):
     name = experiment_id.exp_name
     
     project_path = get_project_path()
-    file_path = os.path.join(project_path, "results", name, experiment_id.value)
+    file_path = os.path.join(project_path, "results", name, experiment_id.value + ".py")
+    return file_path
+
+def get_logs_path(experiment_id):
+    name = experiment_id.exp_name
+    
+    project_path = get_project_path()
+    file_path = os.path.join(project_path, "results", name, experiment_id.value + ".log")
     return file_path
     
 def gen_ig_algorithm(experiment_id, num_qubits, get_experiments_actions, ProblemInstance, guard, max_horizon=10000):
+    logs_path = get_logs_path(experiment_id)
     ig_setup(experiment_id)
     
     Precision.PRECISION = 10
@@ -975,4 +988,4 @@ def gen_ig_algorithm(experiment_id, num_qubits, get_experiments_actions, Problem
     output_path = os.path.join(get_ig_algorithm_path(experiment_id))
     algorithm.dump(output_path, actions)
     
-    algorithm.check(problem_instance.initial_states, problem_instance.is_target_qs)
+    algorithm.check(problem_instance.initial_states, problem_instance.is_target_qs, logs_path=logs_path)

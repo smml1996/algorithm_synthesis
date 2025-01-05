@@ -1,6 +1,7 @@
 from cmath import cos, isclose, sin
 from math import sqrt, pi
 import math
+import random
 from typing import List, Optional
 
 from numpy import conjugate
@@ -292,10 +293,10 @@ def handle_write(quantum_state: QuantumState, gate_data: GateData, is_inverse=Fa
             result = write2(quantum_state, gate_data, is_inverse)
     else:
         if gate_data.label == Op.RESET:
-            result = write1(quantum_state, GateData(Op.P0, gate_data.address, None), is_inverse=is_inverse)
-            if result is None:
-                result = write1(quantum_state, GateData(Op.P1, gate_data.address, None), is_inverse=is_inverse)
-                result = write1(quantum_state, GateData(Op.X, gate_data.address, None), is_inverse=is_inverse)
+            meas_instruction = Instruction(gate_data.address, Op.MEAS)
+            q0, prob0 = get_seq_probability(quantum_state, [meas_instruction.get_gate_data(is_meas_0=True)])
+            q1, prob1 = get_seq_probability(quantum_state, [meas_instruction.get_gate_data(is_meas_0=False)])
+            result = random.choices([q0, q1], weights=[prob0, prob1], k=1)[0]
         else:
             result = write1(quantum_state, gate_data, is_inverse=is_inverse)
     if normalize and (not (result is None)):

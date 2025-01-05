@@ -15,6 +15,9 @@ class ImperfectGameAlgorithm:
         self.initial_state = None
         self.target_states = set()
     
+    def is_empty(self):
+        return len(self.target_states) == 0
+    
     def does_state_exists(self, state):
         return state in self.states_to_algorithm.keys()
     
@@ -68,10 +71,17 @@ class ImperfectGameAlgorithm:
             file.write(f"\t\t\traise Exception('Invalid (classical) memory state at {state}')\n")
         file.close()
 
-    def check(self, initial_states, is_target_qs, shots=100):
+    def check(self, initial_states, is_target_qs, shots=100, logs_path=None):
+        if logs_path is None:
+            logs_file = None
+        else:
+            logs_file = open(logs_path, "w")
+            all_logs = []
         for initial_state in initial_states:
             qs, cs = initial_state
             for shot in range(shots):
+                current_log = []
+                current_log.append(f"initial_state=({qs.__str__()},{cs.__str__()})")
                 simulator = QSimulator(seed=shot, qubits_used=qs.qubits_used)
                 simulator.qmemory = qs
                 simulator.meas_cache = cs
@@ -82,9 +92,18 @@ class ImperfectGameAlgorithm:
                     choosen_action = random.choice(self.states_to_algorithm[current_state])
                     assert isinstance(choosen_action, AlgorithmNode)
                     simulator.apply_instructions(choosen_action.instruction_sequence)
+                    current_log.append(f"{current_state} -- {choosen_action.action_name} -- {simulator.qmemory} -- {simulator.meas_cache}")
                     current_state = self.next_states[current_state][choosen_action.action_name][simulator.meas_cache]
                     
                 assert is_target_qs((simulator.qmemory, simulator.meas_cache))
+                if current_log not in all_logs:
+                    all_logs.append(current_log)
+                
+        for log in all_logs:
+            logs_file.write("\n".join(log))
+            logs_file.write("\n***********\n")
+        if logs_file:
+            logs_file.close()
                 
         
 class KnwObs:
@@ -239,9 +258,18 @@ class KnwGraph:
     def get_algorithm(self) -> ImperfectGameAlgorithm:
         '''returns a dictionary that maps a state (integer) to AlgorithmNode
         '''
-        winning_set = find_winning_set(self)
-        
         assert self.initial_states is not None
+        winning_set = find_winning_set(self)
+        algorithm = ImperfectGameAlgorithm()
+        q = Queue()
+        visited = set()
+        for initial_state in self.initial_states:
+            q.push(initial_state)
+            visited.add(initial_state)
+            if initial_state not in winning_set:
+                print("initial states not in winning set")
+                return algorithm
+        
         # assign to each diff. observable a state (int)
         obs_to_indices = dict()
         count_obs = 0
@@ -252,18 +280,8 @@ class KnwGraph:
                 obs_to_indices[obs] = count_obs
                 count_obs += 1
                 
-        algorithm = ImperfectGameAlgorithm()
         algorithm.initial_state = obs_to_indices[self.initial_states[0].observable]
-        q = Queue()
-        visited = set()
-        for initial_state in self.initial_states:
-            q.push(initial_state)
-            visited.add(initial_state)
-            if initial_state not in winning_set:
-                print("initial states not in winning set")
-                return algorithm
-        
-        
+
         while not q.is_empty():
             current_vertex = q.pop()
             current_state = obs_to_indices[current_vertex.observable]
@@ -320,6 +338,7 @@ def clean_deltas(graph: KnwGraph, current_vertex, deltas) -> Set[str]:
         for (delta, count) in count_forwards.items():
             if count == max_forwards:
                 new_deltas.add(delta)
+                return new_deltas
     return new_deltas
 
 ## FINDING WINNING SET ##

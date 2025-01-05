@@ -78,14 +78,12 @@ def get_experiments_actions(embedding, experiment_id):
         
         RESET = POMDPAction("RESET", [Instruction(embedding[0], Op.RESET),
                                       Instruction(embedding[0], Op.CH, hidden_qubit),
-                                      Instruction(hidden_qubit, Op.WRITE0),
-                                      Instruction(hidden_qubit+1, Op.WRITE0)
                                       ])
         
         DETERMINE0 = POMDPAction("IS0", [Instruction(hidden_qubit, Op.WRITE1)])
         DETERMINEPlus = POMDPAction("ISPlus", [Instruction(hidden_qubit+1, Op.WRITE1)])
-        DONTKNOW = POMDPAction("DONTKNOW", [Instruction(hidden_qubit, Op.WRITE1), Instruction(hidden_qubit+1, Op.WRITE1)])
-        return [H0, H1, CX01, CX10, P0, P1, RESET, DETERMINE0, DETERMINEPlus, DONTKNOW]
+
+        return [H0, H1, CX01, CX10, P0, P1, RESET, DETERMINE0, DETERMINEPlus]
     else:
         raise Exception(f"experiment actions not defined for experiment {experiment_id}")
     
@@ -93,7 +91,7 @@ def get_experiment_id_qubits(experiment_id) -> int:
     return 3
 
 def get_experiment_id_horizon(experiment_id) -> int:
-    return 4
+    return 100000
 
 def guard(vertex: POMDPVertex, embedding: Dict[int, int], action: POMDPAction) -> bool:
     cs = vertex.classical_state

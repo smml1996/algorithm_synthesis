@@ -135,6 +135,31 @@ class POMDPAction:
                 if new_vertex not in result.keys():
                     result[new_vertex] = 0.0
                 result[new_vertex] += seq_prob * channel.probabilities[index]
+                
+    def __handle_reset_instruction(self, instruction: Instruction, channel: QuantumChannel, vertex: POMDPVertex, is_meas1: bool =True, result: Dict[POMDPVertex, float]=None):
+        """_summary_
+
+        Args:
+            instruction (Instruction): _description_
+            channel (QuantumChannel): _description_
+            vertex (POMDPVertex): _description_
+            result (Dict[POMDPVertex, float], optional): _description_. Defaults to None.
+        """
+        assert instruction.op == Op.RESET
+        meas_instruction = Instruction(instruction.target, Op.MEAS)
+        for (index, err_seq) in enumerate(channel.errors): 
+            new_qs, prob_new_qs = get_seq_probability(vertex.quantum_state, [meas_instruction.get_gate_data(is_meas_0=(not is_meas1))])
+            if prob_new_qs > 0:
+                if is_meas1:
+                    x_instruction = Instruction(instruction.target, Op.X)
+                    new_qs = handle_write(new_qs, x_instruction.get_gate_data())
+                errored_seq, seq_prob = get_seq_probability(new_qs, err_seq)
+                seq_prob = prob_new_qs * seq_prob
+                if seq_prob > 0.0:
+                    new_vertex = POMDPVertex(errored_seq, vertex.classical_state)
+                    if new_vertex not in result.keys():
+                        result[new_vertex] = 0.0
+                    result[new_vertex] += seq_prob * channel.probabilities[index]
 
     def __dfs(self, noise_model: NoiseModel, current_vertex: POMDPVertex, index_ins: int) -> Dict[POMDPVertex, float]:
         """perform a dfs to compute successors states of the sequence of instructions.
@@ -167,6 +192,11 @@ class POMDPAction:
 
                 # get successors for 1-measurements
                 self.__handle_measure_instruction(current_instruction, instruction_channel, current_vertex, is_meas1=True, result=temp_result)
+            elif current_instruction.op == Op.RESET:
+                # WARNING: use of reset not known in all models, check when using real hardware specifications
+                self.__handle_reset_instruction(current_instruction, instruction_channel, current_vertex, is_meas1=False, result=temp_result)
+                
+                self.__handle_reset_instruction(current_instruction, instruction_channel, current_vertex, is_meas1=True, result=temp_result)
             else:
                 self.__handle_unitary_instruction(current_instruction, instruction_channel, current_vertex, result=temp_result)
 
@@ -399,7 +429,6 @@ def build_pomdp(actions: List[POMDPAction],
 
     visited = set()
     while not q.is_empty():
-        print(q.len())
         current_v, current_horizon = q.pop()
         if (current_horizon == horizon) or (current_v in visited):
             continue
