@@ -11,10 +11,11 @@ from qiskit import ClassicalRegister, QuantumCircuit, QuantumRegister
 
 from algorithm import AlgorithmNode, dump_algorithms, execute_algorithm
 from ibm_noise_models import HardwareSpec, Instruction, NoiseModel, get_ibm_noise_model, ibm_simulate_circuit, load_config_file
+from imperfect_games import KnwGraph
 from pomdp import POMDPAction, POMDPVertex, build_pomdp, default_guard
 import qmemory
 from qpu_utils import Op
-from utils import find_enum_object, is_matrix_in_list
+from utils import Precision, find_enum_object, is_matrix_in_list
 import subprocess
 
 bell0_real_rho = [
@@ -44,6 +45,16 @@ bell3_real_rho = [
                     [0, -0.5, 0.5, 0],
                     [0, 0, 0, 0],
                 ]
+
+rho_qubit0 = [
+    [1, 0],
+    [0, 0],
+]
+
+rho_qubit1 = [
+    [0, 0],
+    [0, 1],
+]
         
 bell_state_pts = [bell0_real_rho, bell1_real_rho, bell2_real_rho, bell3_real_rho]
 
@@ -658,7 +669,7 @@ def generate_pomdps(experiment_id, batch, get_experiments_actions, ProblemInstan
     times_file.close()
     
 ##### guards ####
-def bitflips_guard(vertex: POMDPVertex, embedding: Dict[int, int], action: POMDPAction):
+def bitflips_guard(vertex: POMDPVertex, embedding: Dict[int, int], action: POMDPAction) -> bool:
     if action.instruction_sequence[0].op != Op.MEAS:
         return True
     assert isinstance(vertex, POMDPVertex)
@@ -923,10 +934,45 @@ def check_files(experiment_id, allowed_hardware, with_thermalization=False):
         check_algorithms_files(config, embeddings)
         
 ## imperfect information games ##
-def setup(experiment_id):
+def ig_setup(experiment_id):
     name = experiment_id.exp_name
     
     project_path = get_project_path()
     dir_path = os.path.join(project_path, "results", name)
     directory_exists(dir_path)
     
+def get_ig_algorithm_path(experiment_id):
+    name = experiment_id.exp_name
+    
+    project_path = get_project_path()
+    file_path = os.path.join(project_path, "results", name, experiment_id.value)
+    return file_path
+    
+def gen_ig_algorithm(experiment_id, num_qubits, get_experiments_actions, ProblemInstance, guard, max_horizon=10000):
+    ig_setup(experiment_id)
+    
+    Precision.PRECISION = 10
+    Precision.update_threshold()
+    
+    noise_model = NoiseModel()
+    
+    embedding = get_default_embedding(num_qubits)
+    problem_instance = ProblemInstance(embedding)
+    actions = get_experiments_actions(embedding, experiment_id)
+    initial_distribution = []
+    
+    for initial_state in problem_instance.initial_states:
+        initial_distribution.append((initial_state, 1/len(problem_instance.initial_states)))
+    
+    print("started building pomdp")
+    pomdp = build_pomdp(actions, noise_model, max_horizon, embedding, initial_distribution=initial_distribution, guard=guard)
+    
+    print("started building knowledge graph")
+    knwgraph = KnwGraph(pomdp, problem_instance.is_target_qs)
+    print("started building algorithm")
+    algorithm = knwgraph.get_algorithm()
+    
+    output_path = os.path.join(get_ig_algorithm_path(experiment_id))
+    algorithm.dump(output_path, actions)
+    
+    algorithm.check(problem_instance.initial_states, problem_instance.is_target_qs)

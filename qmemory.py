@@ -203,6 +203,10 @@ def write2(quantum_state: QuantumState, gate_data: GateData, is_inverse: bool= F
                 gate_data2 = GateData(Op.X, address, None)
                 written_basis = write1(basis_state, gate_data2, is_inverse=is_inverse)
                 assert written_basis is not None
+            elif op == Op.CH:
+                gate_data2 = GateData(Op.H, address, None)
+                written_basis = write1(basis_state, gate_data2, is_inverse=is_inverse)
+                assert written_basis is not None
             elif op == Op.CU3:
                 gate_data2 = GateData(Op.U3, address, None, gate_data.params)
                 written_basis = write1(basis_state, gate_data2, is_inverse=is_inverse)

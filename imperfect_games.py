@@ -183,6 +183,10 @@ class KnwGraph:
                 
                 # compute actual states we could possibly be in
                 real_succs_dict = dict()
+                if actual_pomdp_vertex not in pomdp.transition_matrix.keys():
+                    continue
+                if action.name not in pomdp.transition_matrix[actual_pomdp_vertex].keys():
+                    continue
                 for (succ, prob) in pomdp.transition_matrix[actual_pomdp_vertex][action.name].items():
                     if prob > 0:
                         classical_state = succ.classical_state
@@ -193,6 +197,10 @@ class KnwGraph:
                 # compute knowledge
                 pomdp_obs_to_v = dict()
                 for current_v in current_observable.vertices:
+                    if current_v not in pomdp.transition_matrix.keys():
+                        continue
+                    if action.name not in pomdp.transition_matrix[current_v]:
+                        continue
                     for (succ, prob) in pomdp.transition_matrix[current_v][action.name].items():
                         if prob > 0:
                             classical_state = succ.classical_state

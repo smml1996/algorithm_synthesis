@@ -399,6 +399,7 @@ def build_pomdp(actions: List[POMDPAction],
 
     visited = set()
     while not q.is_empty():
+        print(q.len())
         current_v, current_horizon = q.pop()
         if (current_horizon == horizon) or (current_v in visited):
             continue

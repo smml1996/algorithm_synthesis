@@ -37,6 +37,7 @@ class Op(Enum):
     RX = "RX"
     RY = "RY"
     CZ = "CZ"
+    CH = "CH"
     SWAP= "SWAP"
 
     # MEASUREMENT
@@ -90,7 +91,7 @@ def get_op(op_: str) -> Op:
 
 def is_multiqubit_gate(op: Op):
     assert isinstance(op, Op)
-    if op in [Op.CNOT, Op.CZ, Op.SWAP]:
+    if op in [Op.CNOT, Op.CZ, Op.SWAP, Op.CH]:
         return True
     return False
     
