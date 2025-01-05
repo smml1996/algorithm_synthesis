@@ -970,7 +970,7 @@ def gen_ig_algorithm(experiment_id, num_qubits, get_experiments_actions, Problem
     noise_model = NoiseModel()
     
     embedding = get_default_embedding(num_qubits)
-    problem_instance = ProblemInstance(embedding)
+    problem_instance = ProblemInstance(embedding, experiment_id)
     actions = get_experiments_actions(embedding, experiment_id)
     initial_distribution = []
     
@@ -988,4 +988,5 @@ def gen_ig_algorithm(experiment_id, num_qubits, get_experiments_actions, Problem
     output_path = os.path.join(get_ig_algorithm_path(experiment_id))
     algorithm.dump(output_path, actions)
     
-    algorithm.check(problem_instance.initial_states, problem_instance.is_target_qs, logs_path=logs_path)
+    if not algorithm.is_empty():
+        algorithm.check(problem_instance.initial_states, problem_instance.is_target_qs, logs_path=logs_path)

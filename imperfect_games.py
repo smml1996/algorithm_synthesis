@@ -96,14 +96,15 @@ class ImperfectGameAlgorithm:
                     current_state = self.next_states[current_state][choosen_action.action_name][simulator.meas_cache]
                     
                 assert is_target_qs((simulator.qmemory, simulator.meas_cache))
-                if current_log not in all_logs:
-                    all_logs.append(current_log)
-                
-        for log in all_logs:
-            logs_file.write("\n".join(log))
-            logs_file.write("\n***********\n")
-        if logs_file:
-            logs_file.close()
+                if logs_file is not None:
+                    if current_log not in all_logs:
+                        all_logs.append(current_log)
+        if logs_file is not None:       
+            for log in all_logs:
+                logs_file.write("\n".join(log))
+                logs_file.write("\n***********\n")
+            if logs_file:
+                logs_file.close()
                 
         
 class KnwObs:

@@ -10,7 +10,7 @@ from qiskit.quantum_info import SparsePauliOp
 from utils import are_all_indices_equal, remove_char_at_indices
 
 class QuantumState:
-    sparse_vector : Dict # map basis states to sympy-Symbolic
+    sparse_vector : Dict # map basis states to amplitude
     substitutions: List = []
 
     def __init__(self, init_basis: Optional[int] = None, 

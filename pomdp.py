@@ -430,7 +430,10 @@ def build_pomdp(actions: List[POMDPAction],
     visited = set()
     while not q.is_empty():
         current_v, current_horizon = q.pop()
-        if (current_horizon == horizon) or (current_v in visited):
+        if horizon != -1:
+            if (current_horizon == horizon):
+                continue
+        if current_v in visited:
             continue
         visited.add(current_v)
         # assert current_v not in graph.keys()
@@ -454,7 +457,7 @@ def build_pomdp(actions: List[POMDPAction],
                         graph[current_v][action.name][new_vertex] = 0.0
                     graph[current_v][action.name][new_vertex] += prob
                     if new_vertex not in visited:
-                        if current_horizon + 1 < horizon:
+                        if (horizon == -1) or (current_horizon + 1 < horizon):
                             q.push((new_vertex, current_horizon + 1))
 
     result = POMDP(initial_v, all_vertices, actions, graph)
