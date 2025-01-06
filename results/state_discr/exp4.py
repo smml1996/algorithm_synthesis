@@ -23,35 +23,27 @@ def my_algorithm(qc: QuantumCircuit, initial_state, noise_model: NoiseModel, see
 			# target state reached
 			break
 		if current_state == 27:
-			actions = ['MEAS0', 'H0']
+			actions = ['H0', 'MEAS0']
 			choosen_action = random.choice(actions)
 			simulator.apply_instructions(choosen_action)
+			if choosen_action == H0 and simulator.meas_cache.get_memory_val() == 0:
+				current_state = 26
+				continue
 			if choosen_action == MEAS0 and simulator.meas_cache.get_memory_val() == 0:
 				current_state = 33
 				continue
 			if choosen_action == MEAS0 and simulator.meas_cache.get_memory_val() == 1:
 				current_state = 23
 				continue
-			if choosen_action == H0 and simulator.meas_cache.get_memory_val() == 0:
-				current_state = 26
-				continue
 			raise Exception('Invalid (classical) memory state at 27')
-		if current_state == 33:
-			actions = ['RESET', 'H0']
+		if current_state == 26:
+			actions = ['RESET', 'H0', 'MEAS0']
 			choosen_action = random.choice(actions)
 			simulator.apply_instructions(choosen_action)
 			if choosen_action == RESET and simulator.meas_cache.get_memory_val() == 0:
 				current_state = 27
 				continue
 			if choosen_action == H0 and simulator.meas_cache.get_memory_val() == 0:
-				current_state = 38
-				continue
-			raise Exception('Invalid (classical) memory state at 33')
-		if current_state == 26:
-			actions = ['RESET', 'MEAS0', 'H0']
-			choosen_action = random.choice(actions)
-			simulator.apply_instructions(choosen_action)
-			if choosen_action == RESET and simulator.meas_cache.get_memory_val() == 0:
 				current_state = 27
 				continue
 			if choosen_action == MEAS0 and simulator.meas_cache.get_memory_val() == 0:
@@ -60,10 +52,15 @@ def my_algorithm(qc: QuantumCircuit, initial_state, noise_model: NoiseModel, see
 			if choosen_action == MEAS0 and simulator.meas_cache.get_memory_val() == 1:
 				current_state = 15
 				continue
-			if choosen_action == H0 and simulator.meas_cache.get_memory_val() == 0:
+			raise Exception('Invalid (classical) memory state at 26')
+		if current_state == 33:
+			actions = ['RESET']
+			choosen_action = random.choice(actions)
+			simulator.apply_instructions(choosen_action)
+			if choosen_action == RESET and simulator.meas_cache.get_memory_val() == 0:
 				current_state = 27
 				continue
-			raise Exception('Invalid (classical) memory state at 26')
+			raise Exception('Invalid (classical) memory state at 33')
 		if current_state == 23:
 			actions = ['ISPlus']
 			choosen_action = random.choice(actions)
@@ -72,23 +69,6 @@ def my_algorithm(qc: QuantumCircuit, initial_state, noise_model: NoiseModel, see
 				current_state = 6
 				continue
 			raise Exception('Invalid (classical) memory state at 23')
-		if current_state == 38:
-			actions = ['RESET', 'MEAS0', 'H0']
-			choosen_action = random.choice(actions)
-			simulator.apply_instructions(choosen_action)
-			if choosen_action == RESET and simulator.meas_cache.get_memory_val() == 0:
-				current_state = 27
-				continue
-			if choosen_action == MEAS0 and simulator.meas_cache.get_memory_val() == 0:
-				current_state = 33
-				continue
-			if choosen_action == MEAS0 and simulator.meas_cache.get_memory_val() == 1:
-				current_state = 39
-				continue
-			if choosen_action == H0 and simulator.meas_cache.get_memory_val() == 0:
-				current_state = 33
-				continue
-			raise Exception('Invalid (classical) memory state at 38')
 		if current_state == 15:
 			actions = ['IS0']
 			choosen_action = random.choice(actions)
@@ -97,62 +77,3 @@ def my_algorithm(qc: QuantumCircuit, initial_state, noise_model: NoiseModel, see
 				current_state = 4
 				continue
 			raise Exception('Invalid (classical) memory state at 15')
-		if current_state == 39:
-			actions = ['RESET', 'H0']
-			choosen_action = random.choice(actions)
-			simulator.apply_instructions(choosen_action)
-			if choosen_action == RESET and simulator.meas_cache.get_memory_val() == 1:
-				current_state = 31
-				continue
-			if choosen_action == H0 and simulator.meas_cache.get_memory_val() == 1:
-				current_state = 37
-				continue
-			raise Exception('Invalid (classical) memory state at 39')
-		if current_state == 31:
-			actions = ['MEAS0', 'H0']
-			choosen_action = random.choice(actions)
-			simulator.apply_instructions(choosen_action)
-			if choosen_action == MEAS0 and simulator.meas_cache.get_memory_val() == 0:
-				current_state = 33
-				continue
-			if choosen_action == MEAS0 and simulator.meas_cache.get_memory_val() == 1:
-				current_state = 23
-				continue
-			if choosen_action == H0 and simulator.meas_cache.get_memory_val() == 1:
-				current_state = 30
-				continue
-			raise Exception('Invalid (classical) memory state at 31')
-		if current_state == 37:
-			actions = ['RESET', 'MEAS0', 'H0']
-			choosen_action = random.choice(actions)
-			simulator.apply_instructions(choosen_action)
-			if choosen_action == RESET and simulator.meas_cache.get_memory_val() == 1:
-				current_state = 31
-				continue
-			if choosen_action == MEAS0 and simulator.meas_cache.get_memory_val() == 0:
-				current_state = 33
-				continue
-			if choosen_action == MEAS0 and simulator.meas_cache.get_memory_val() == 1:
-				current_state = 39
-				continue
-			if choosen_action == H0 and simulator.meas_cache.get_memory_val() == 1:
-				current_state = 39
-				continue
-			raise Exception('Invalid (classical) memory state at 37')
-		if current_state == 30:
-			actions = ['RESET', 'MEAS0', 'H0']
-			choosen_action = random.choice(actions)
-			simulator.apply_instructions(choosen_action)
-			if choosen_action == RESET and simulator.meas_cache.get_memory_val() == 1:
-				current_state = 31
-				continue
-			if choosen_action == MEAS0 and simulator.meas_cache.get_memory_val() == 0:
-				current_state = 33
-				continue
-			if choosen_action == MEAS0 and simulator.meas_cache.get_memory_val() == 1:
-				current_state = 15
-				continue
-			if choosen_action == H0 and simulator.meas_cache.get_memory_val() == 1:
-				current_state = 31
-				continue
-			raise Exception('Invalid (classical) memory state at 30')

@@ -339,13 +339,14 @@ def clean_deltas(graph: KnwGraph, current_vertex, deltas) -> Set[str]:
         if post_vertices != graph.equivalence_class[current_vertex.observable]:
             for vertex in post_vertices:
                 if graph.rankings[vertex] < max_current_class_rank:
-                    count_forwards[delta]+= 1
+                    if vertex not in graph.equivalence_class[current_vertex.observable]:
+                        count_forwards[delta]+= 1
     
     if len(count_forwards) > 0:
+        max_forwards = max(count_forwards.values())
         for (delta, count) in count_forwards.items():
-            if count > 0:
+            if count == max_forwards:
                 new_deltas.add(delta)
-                # return new_deltas
     return new_deltas
 
 ## FINDING WINNING SET ##
