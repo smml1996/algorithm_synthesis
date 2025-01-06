@@ -16,8 +16,10 @@ from pomdp import POMDPAction, POMDPVertex
 
 
 class StateDiscrExperimentID(Enum):
-    exp1 = "exp1" # 2 qubits, all possible clifford gates between these two qubits
-    exp2 = "exp2"
+    exp1 = "exp1" # 2 qubits, all possible clifford gates
+    exp2 = "exp2" # 3 qubits, all possible clifford gates
+    exp3 = "exp3" # 3 qubits, MEAS, H and CX
+    exp4 = "exp4" # 1 qubit, extra classical space to store outcomes
     
     @property
     def exp_name(self):
@@ -28,12 +30,16 @@ class IGStateDiscrInstance:
         self.experiment_id = experiment_id
         self.embedding = embedding
         self.initial_states = None
-        if self.experiment_id == StateDiscrExperimentID.exp1:
+        if self.experiment_id in [StateDiscrExperimentID.exp1]:
             assert len(embedding) == 3
             self.hidden_qubit = 2
             self.remove_qubits = [0,1]
+        elif self.experiment_id == StateDiscrExperimentID.exp4:
+            assert len(embedding) == 2
+            self.hidden_qubit = 1
+            self.remove_qubits = [0]
         else:
-            assert self.experiment_id == StateDiscrExperimentID.exp2
+            assert self.experiment_id in [StateDiscrExperimentID.exp2, StateDiscrExperimentID.exp3]
             self.remove_qubits = [0,1,2]
             self.hidden_qubit = 3
         self.get_initial_states()
@@ -67,11 +73,15 @@ class IGStateDiscrInstance:
 def get_experiments_actions(embedding, experiment_id):
     assert isinstance(experiment_id, StateDiscrExperimentID)
     
-    if experiment_id in [StateDiscrExperimentID.exp1, StateDiscrExperimentID.exp2]:
-        if experiment_id == StateDiscrExperimentID.exp1:
+    if experiment_id in [StateDiscrExperimentID.exp1, StateDiscrExperimentID.exp2, StateDiscrExperimentID.exp3, StateDiscrExperimentID.exp4]:
+        if experiment_id in [StateDiscrExperimentID.exp1]:
             num_qubits = 2
             hidden_qubit = 2
             assert len(embedding.keys()) == 3
+        elif experiment_id ==  StateDiscrExperimentID.exp4:
+            num_qubits = 1
+            hidden_qubit = 1
+            assert len(embedding.keys()) == 2
         else:
             num_qubits = 3
             hidden_qubit = 3
@@ -81,7 +91,11 @@ def get_experiments_actions(embedding, experiment_id):
         
         # all clifford gates
         for i in range(num_qubits):
-            for op in [Op.H, Op.S, Op.MEAS]:
+            if experiment_id in [StateDiscrExperimentID.exp3, StateDiscrExperimentID.exp4]:
+                ops = [Op.H, Op.MEAS]
+            else:
+                ops = [Op.H, Op.S, Op.MEAS]
+            for op in ops:
                 actions.append(POMDPAction(f"{op.name}{i}", [Instruction(i, op)]))
             for j in range(i+1, num_qubits):
                 actions.append(POMDPAction(f"CX{i}{j}", [Instruction(j, Op.CNOT, i)]))
@@ -91,9 +105,15 @@ def get_experiments_actions(embedding, experiment_id):
                                       ])
         DETERMINE0 = POMDPAction("IS0", [Instruction(hidden_qubit, Op.WRITE1)])
         DETERMINEPlus = POMDPAction("ISPlus", [Instruction(hidden_qubit+1, Op.WRITE1)])
+        CAncilla0 = POMDPAction("CAncilla0", [Instruction(hidden_qubit+2, Op.WRITE0)])
+        CAncilla1 = POMDPAction("CAncilla1", [Instruction(hidden_qubit+2, Op.WRITE1)])
         actions.append(RESET)
         actions.append(DETERMINE0)
         actions.append(DETERMINEPlus)
+        if experiment_id == StateDiscrExperimentID.exp4:
+            pass
+            # actions.append(CAncilla0)
+            # actions.append(CAncilla1)
         print("******")
         for action in actions:
             print(action.name)
@@ -102,10 +122,12 @@ def get_experiments_actions(embedding, experiment_id):
         raise Exception(f"experiment actions not defined for experiment {experiment_id}")
     
 def get_experiment_id_qubits(experiment_id) -> int:
-    if experiment_id == StateDiscrExperimentID.exp1:
+    if experiment_id in [StateDiscrExperimentID.exp1]:
         return 3
+    elif experiment_id == StateDiscrExperimentID.exp4:
+        return 2
     else:
-        assert experiment_id == StateDiscrExperimentID.exp2
+        assert experiment_id in [StateDiscrExperimentID.exp2, StateDiscrExperimentID.exp3]
         return 4
 
 def get_experiment_id_horizon(experiment_id) -> int:

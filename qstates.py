@@ -15,7 +15,6 @@ class QuantumState:
 
     def __init__(self, init_basis: Optional[int] = None, 
                  init_amplitude = complex(1.0, 0.0), qubits_used=[]):
-        assert len(qubits_used) != 2
         self.sparse_vector = dict()
         if init_basis is not None:
             self.insert_amplitude(init_basis, init_amplitude)

@@ -7,6 +7,8 @@ from pomdp import POMDP, POMDPAction, POMDPVertex
 from simulator import QSimulator
 from utils import Queue
 
+DEBUG = True
+
 class ImperfectGameAlgorithm:
     def __init__(self):
         self.states_to_algorithm = dict()
@@ -154,9 +156,7 @@ class KnwGraph:
         self.vertices = None
         self.initial_states = []
         self.build_graph(pomdp, is_target_qs, max_depth)
-            
-        
-        
+
     def is_target_vertex(self, vertex, is_target_qs):
         assert isinstance(vertex, KnwVertex)
         for pomdp_state in vertex.observable.vertices:
@@ -374,13 +374,14 @@ def apre(graph: KnwGraph, X: Set[KnwVertex], Y: Set[KnwVertex]) -> Set[KnwVertex
 
 
 def find_winning_set(graph: KnwGraph):
-    Y = graph.vertices
+    
     
     Bt = graph.target_vertices
     current_ranking = 0
     for o in graph.target_vertices:
         graph.rankings[o] = 0
-    
+
+    Y = graph.vertices
     while True:
         X = set()
         while True:
