@@ -96,11 +96,18 @@ class ImperfectGameAlgorithm:
                     simulator.apply_instructions(choosen_action.instruction_sequence)
                     current_log.append(f"{current_state} -- {choosen_action.action_name} -- {simulator.qmemory} -- {simulator.meas_cache}")
                     current_state = self.next_states[current_state][choosen_action.action_name][simulator.meas_cache]
-                    
-                assert is_target_qs((simulator.qmemory, simulator.meas_cache))
                 if logs_file is not None:
                     if current_log not in all_logs:
                         all_logs.append(current_log)
+                if not is_target_qs((simulator.qmemory, simulator.meas_cache)):
+                    if logs_file is not None:       
+                        for log in all_logs:
+                            logs_file.write("\n".join(log))
+                            logs_file.write("\n***********\n")
+                        if logs_file:
+                            logs_file.close()
+                    raise Exception("Check failed")
+                
         if logs_file is not None:       
             for log in all_logs:
                 logs_file.write("\n".join(log))
@@ -323,23 +330,22 @@ def clean_deltas(graph: KnwGraph, current_vertex, deltas) -> Set[str]:
         
     max_current_class_rank = max(graph.rankings[v] for v in graph.equivalence_class[current_vertex.observable])
     
-    
-    
     for delta in deltas:
         post_vertices = set()
         assert current_vertex in graph.equivalence_class[current_vertex.observable]
         for vertex in graph.equivalence_class[current_vertex.observable]:
             post_vertices = post_vertices.union(graph.transition_matrix[vertex][delta])
-        for vertex in post_vertices:
-            if graph.rankings[vertex] < max_current_class_rank:
-                count_forwards[delta]+=1
+        
+        if post_vertices != graph.equivalence_class[current_vertex.observable]:
+            for vertex in post_vertices:
+                if graph.rankings[vertex] < max_current_class_rank:
+                    count_forwards[delta]+= 1
     
     if len(count_forwards) > 0:
-        max_forwards = max(count_forwards.values())
         for (delta, count) in count_forwards.items():
-            if count == max_forwards:
+            if count > 0:
                 new_deltas.add(delta)
-                return new_deltas
+                # return new_deltas
     return new_deltas
 
 ## FINDING WINNING SET ##
@@ -367,7 +373,7 @@ def apre(graph: KnwGraph, X: Set[KnwVertex], Y: Set[KnwVertex]) -> Set[KnwVertex
         allow_q = class_allow(graph, q, Y)
         for delta in allow_q:
             post_q = graph.transition_matrix[q][delta]
-            if post_q.issubset(X):
+            if post_q.intersection(X):
                 result.add(q)
                 break
     return result
@@ -378,8 +384,8 @@ def find_winning_set(graph: KnwGraph):
     
     Bt = graph.target_vertices
     current_ranking = 0
-    for o in graph.target_vertices:
-        graph.rankings[o] = 0
+    for v in graph.target_vertices:
+        graph.rankings[v] = 0
 
     Y = graph.vertices
     while True:

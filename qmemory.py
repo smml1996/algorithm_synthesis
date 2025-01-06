@@ -297,6 +297,10 @@ def handle_write(quantum_state: QuantumState, gate_data: GateData, is_inverse=Fa
             q0, prob0 = get_seq_probability(quantum_state, [meas_instruction.get_gate_data(is_meas_0=True)])
             q1, prob1 = get_seq_probability(quantum_state, [meas_instruction.get_gate_data(is_meas_0=False)])
             result = random.choices([q0, q1], weights=[prob0, prob1], k=1)[0]
+            if q1 is not None:
+                if result == q1:
+                    x_instruction = Instruction(gate_data.address, Op.X).get_gate_data()
+                    result = write1(result, x_instruction)
         else:
             result = write1(quantum_state, gate_data, is_inverse=is_inverse)
     if normalize and (not (result is None)):
