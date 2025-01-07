@@ -988,6 +988,6 @@ def gen_ig_algorithm(experiment_id, num_qubits, get_experiments_actions, Problem
     output_path = os.path.join(get_ig_algorithm_path(experiment_id))
     algorithm.dump(output_path, actions)
     
-    print("start checking")
     if not algorithm.is_empty():
+        print("start checking")
         algorithm.check(problem_instance.initial_states, problem_instance.is_target_qs, logs_path=logs_path)
