@@ -3,6 +3,7 @@ from typing import Dict, List, Set, Tuple
 from algorithm import AlgorithmNode
 from copy import deepcopy
 
+from cmemory import cread
 from pomdp import POMDP, POMDPAction, POMDPVertex
 from simulator import QSimulator
 from utils import Queue
@@ -163,6 +164,17 @@ class KnwGraph:
         self.vertices = None
         self.initial_states = []
         self.build_graph(pomdp, is_target_qs, max_depth)
+        
+    def print_observables(self, is_target_qs):
+        for (observable, vertices) in self.equivalence_class.items():
+            print("******")
+            is_first = True
+            for vertex in vertices:
+                if is_first:
+                    print(self.is_target_vertex(vertex, is_target_qs))
+                    is_first = False
+                print(vertex.vertex.quantum_state, vertex.vertex.classical_state)
+            print()
 
     def is_target_vertex(self, vertex, is_target_qs):
         assert isinstance(vertex, KnwVertex)

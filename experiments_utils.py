@@ -982,6 +982,7 @@ def gen_ig_algorithm(experiment_id, num_qubits, get_experiments_actions, Problem
     
     print("started building knowledge graph")
     knwgraph = KnwGraph(pomdp, problem_instance.is_target_qs)
+    # knwgraph.print_observables(problem_instance.is_target_qs)
     print("started building algorithm")
     algorithm = knwgraph.get_algorithm()
     

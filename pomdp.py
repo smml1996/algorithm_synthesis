@@ -108,14 +108,18 @@ class POMDPAction:
             else:
                 new_vertex_correct = POMDPVertex(q, classical_state0) # we receive the correct outcome
                 new_vertex_incorrect = POMDPVertex(q, classical_state1)
-
-            if new_vertex_correct not in result.keys():
-                result[new_vertex_correct] = 0.0
-            if new_vertex_incorrect not in result.keys():
-                result[new_vertex_incorrect] = 0.0
             
-            result[new_vertex_correct] += meas_prob * channel.get_ind_probability(is_meas1, is_meas1)
-            result[new_vertex_incorrect] += meas_prob * channel.get_ind_probability( is_meas1, not is_meas1)
+            prob = meas_prob * channel.get_ind_probability(is_meas1, is_meas1)
+            if prob > 0:
+                if new_vertex_correct not in result.keys():
+                    result[new_vertex_correct] = 0.0
+                result[new_vertex_correct] += prob
+
+            prob = meas_prob * channel.get_ind_probability( is_meas1, not is_meas1)
+            if prob > 0:
+                if new_vertex_incorrect not in result.keys():
+                    result[new_vertex_incorrect] = 0.0
+                result[new_vertex_incorrect] += prob
             assert isclose(channel.get_ind_probability(is_meas1, is_meas1) + channel.get_ind_probability(is_meas1, not is_meas1), 1, rel_tol=Precision.rel_tol)
 
     def __handle_unitary_instruction(self, instruction: Instruction, channel: QuantumChannel, vertex: POMDPVertex, result: Dict[POMDPVertex, float]=None):
