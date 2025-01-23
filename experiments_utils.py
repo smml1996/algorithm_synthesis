@@ -500,14 +500,14 @@ def get_guarantees(noise_model: NoiseModel, batch: int, hardware_spec: HardwareS
     if embedding_index is None:
         embedding_index = get_embedding_index(hardware_spec, embedding, experiment_id, get_hardware_embeddings)
         print("embedding index", embedding_index)
-    my_guarantee = round(get_embedding_guarantee(batch, hardware_spec, embedding_index, horizon, experiment_id),3)
+    my_guarantee = get_embedding_guarantee(batch, hardware_spec, embedding_index, horizon, experiment_id)
     
     if type(experiment_id)  == GHZExperimentID:        
         default_guarantee = get_simulated_guarantee(noise_model, hardware_spec, embedding, experiment_id, optimization_level=optimization_level, IBMInstanceObj=IBMInstanceObj, factor=factor, get_coupling_map=get_coupling_map)
     else:
         default_algorithm = get_default_algorithm(noise_model, embedding,  experiment_id, get_experiments_actions, horizon)
         pomdp_path = get_pomdp_path(config, hardware_spec, embedding_index)
-        default_guarantee = round(get_custom_guarantee(default_algorithm, pomdp_path, config),3)
+        default_guarantee = get_custom_guarantee(default_algorithm, pomdp_path, config)
     return my_guarantee, default_guarantee
 
 def generate_mc_guarantees_file(experiment_id, allowed_hardware: List[HardwareSpec], get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=False, optimization_level=0, IBMInstanceObj=None, file_posfix="", factor=1,get_coupling_map=None):

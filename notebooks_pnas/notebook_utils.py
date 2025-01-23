@@ -16,6 +16,7 @@ from utils import Precision
 from experiments_utils import *
 from ibm_noise_models import MeasChannel, QuantumChannel
 from qpu_utils import is_multiqubit_gate
+from matplotlib.ticker import MultipleLocator
 
 Precision.PRECISION = 8
 Precision.update_threshold()
@@ -475,7 +476,7 @@ def get_df_visualizing_lambdas(experiment_id, diff_algs_to_spec, take_best=True,
     })
     return df, horizon_lines
 
-def get_scatterplot_guarantees_compare(experiment_id, horizon, df, horizon_lines, horizon_to_num_algs, new_palette=None, hue_order=None):
+def get_scatterplot_guarantees_compare(experiment_id, horizon, df, horizon_lines, horizon_to_num_algs, new_palette=None, hue_order=None, y_range=None, y_stepsize=None, img_name=None):
     plt.clf()
     plt.figure(figsize=(15, 10))
     
@@ -509,7 +510,17 @@ def get_scatterplot_guarantees_compare(experiment_id, horizon, df, horizon_lines
 
     g.set(xticklabels=[])
     g.set(xlabel="hardware specification")
-    # plt.ylim(0.45, 1.0001)
+    if y_range is not None:
+        plt.ylim(y_range[0], y_range[1])
+        ax = plt.gca()
+        ax.margins(0.1)  # Add padding (10% margin) without altering visible y-ticks
+        ax.spines['left'].set_bounds(y_range[0], y_range[1])  # Keep the tick labels within -1 to 1
+    
+    if y_stepsize is not None: 
+        plt.gca().yaxis.set_major_locator(MultipleLocator(y_stepsize)) 
     output_dir = os.path.join(get_project_path(), get_experiment_name_path(experiment_id), experiment_id.value)
-    plt.savefig(os.path.join(output_dir, f"scatter_guarantees{horizon}.pdf"), format='pdf')
+    if img_name is None:
+        plt.savefig(os.path.join(output_dir, f"scatter_guarantees{horizon}.pdf"), format='pdf')
+    else:
+        plt.savefig(os.path.join(output_dir, f"{img_name}.pdf"), format='pdf')
     return g
