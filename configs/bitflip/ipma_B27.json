@@ -6,16 +6,7 @@
     "output_dir": "results/bitflip/ipma/B27",
     "algorithms_file": "",
     "hardware": [
-        "fake_hanoi",
-        "fake_cairo",
-        "fake_mumbai",
-        "fake_kolkata",
-        "fake_auckland",
-        "fake_geneva",
-        "fake_montreal",
-        "fake_paris",
-        "fake_sydney",
-        "fake_toronto"
+        "fake_paris"
     ],
     "opt_technique": "max",
     "verbose": 0,

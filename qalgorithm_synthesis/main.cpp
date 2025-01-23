@@ -98,7 +98,6 @@ int main(int argc, char **argv) {
 
             string hardware = el.key();
             int count = el.value()["count"];
-
             for (int embedding_index = 0; embedding_index < count; embedding_index ++) {
                 filesystem::path instance_pomdp_path = pomdps_path / (hardware+"_"+ to_string(embedding_index) + ".txt");
                 auto pomdp = parse_pomdp_file(instance_pomdp_path);
