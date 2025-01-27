@@ -476,9 +476,9 @@ def get_df_visualizing_lambdas(experiment_id, diff_algs_to_spec, take_best=True,
     })
     return df, horizon_lines
 
-def get_scatterplot_guarantees_compare(experiment_id, horizon, df, horizon_lines, horizon_to_num_algs, new_palette=None, hue_order=None, y_range=None, y_stepsize=None, img_name=None):
+def get_scatterplot_guarantees_compare(experiment_id, horizon, df, horizon_lines, horizon_to_num_algs, new_palette=None, hue_order=None, y_range=None, y_stepsize=None, img_name=None, figsize=(15,10)):
     plt.clf()
-    plt.figure(figsize=(15, 10))
+    plt.figure(figsize=figsize)
     
     # Set Seaborn context
     sns.set(style="white", font_scale=1.5)
