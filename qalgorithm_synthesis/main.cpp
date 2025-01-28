@@ -2,82 +2,138 @@
 #include <ctime>
 #include "pomdp.cpp"
 #include "json.hpp"
+#include <type_traits>
+#include <cassert>
+#include <filesystem>  // C++17 and above
+
 
 // for convenience
 using json = nlohmann::json;
 
 using namespace  std;
+
+auto all_keys_required = {"name", "min_horizon", "max_horizon", "output_dir", "opt_technique", "verbose"};
+
+/// @brief 
+/// @param argc 
+/// @param argv 
+/// @return 
 int main(int argc, char **argv) {
     string arg1 = argv[1];
+    
     if ( arg1.compare("bellmaneq") == 0) {
-        cout << "running EXP" << EXP_INDEX << endl;
-        string backend = argv[2];
-        backend = "fake_" + backend;
-        cout << "backend: "<< backend << endl;
-        ofstream lambdas_file(DIR_PREFIX + "lambdas"+ EXP_INDEX + "/" + backend + ".txt");
-        lambdas_file << "embedding,horizon,lambda,time\n";
-        lambdas_file.flush();
-        for (int embedding_index = 0; embedding_index < backends_to_embeddings[backend]; embedding_index ++) {
-            auto pomdp = parse_pomdp_file(
-                    DIR_PREFIX + "pomdps"+ EXP_INDEX + "/"+backend+"_"+ to_string(embedding_index));
-            Belief initial_belief = get_initial_belief(pomdp);
-            for (int horizon = 4; horizon < 8; horizon++) {
-                long time_before = time(nullptr);
-                auto result = get_bellman_value(pomdp, initial_belief, horizon);
-                long time_after = time(nullptr);
-                auto lambda = result.second;
-                lambdas_file << embedding_index << "," << horizon << "," << lambda << ","
-                             << (time_after-time_before) << "\n";
-                lambdas_file.flush();
-                write_algorithm_file(result.first,
-                                     DIR_PREFIX+"algorithms" + EXP_INDEX+ "/"+backend+"_"+ to_string(embedding_index)+"_"+ to_string(horizon),
-                                     get_inverse_mapping(backend, embedding_index));
-            }
+        cerr << "opening config file: " << argv[2] << endl; 
 
+        std::ifstream f(argv[2]); // parse configuration file
+        json config_json = json::parse(f);
+        f.close();
+        
+        for (auto key : all_keys_required) { // check that config file has all we need
+            if (!config_json.contains(key)) {
+                string key_ = key;
+                throw std::invalid_argument(key_ + "not in config file");
+            }
+        }
+
+
+        // print config file
+        for (auto& el : config_json.items()) {
+            std::cerr << el.key() << " : " << el.value() << "\n\n";
+        }
+
+        string experiment_name = config_json["name"];
+        string experiment_id = config_json["experiment_id"];
+        int min_horizon = config_json["min_horizon"];
+        int max_horizon = config_json["max_horizon"];
+        string opt_technique = config_json["opt_technique"];
+        filesystem::path project_path = get_project_path();
+        filesystem::path output_dir = project_path / config_json["output_dir"];
+        filesystem::path embeddings_file_ = "embeddings.json";
+        filesystem::path embeddings_path  = output_dir / embeddings_file_;
+        
+        filesystem::path pomdps_path = output_dir / "pomdps/";
+        // check embedding file exists
+        if (!std::filesystem::exists(embeddings_path)) {
+            throw std::runtime_error("Embedding files does not exist");
+        } 
+
+        // open embeddings file
+        std::ifstream embeddings_file(embeddings_path);
+        json all_embeddings = json::parse(embeddings_file);
+        embeddings_file.close();
+
+        // checking output dir exists (or create)
+        if (!std::filesystem::exists(output_dir)) {
+            std::cerr << "Output dir does not exists. Creating directory..." << std::endl;
+            if (std::filesystem::create_directory(output_dir)) {
+                std::cerr << "Directory created successfully." << std::endl;
+            } else {
+                std::cerr << "Failed to create directory or it already exists.\n" << std::endl;
+            }
+        } else {
+            cerr << "output directory exists" << endl;
+        }
+  
+        filesystem::path algorithms_path = output_dir / "algorithms";
+        // create directory where algorithms should be stored (if it does not already exists)
+        if (!std::filesystem::exists(algorithms_path)) {
+            std::cerr << "algorithms dir does not exists. Creating directory..." << std::endl;
+            if (std::filesystem::create_directory(algorithms_path)) {
+                std::cerr << "algorithms directory created successfully." << std::endl;
+            } else {
+                std::cerr << "Failed to create algorithms directory or it already exists.\n" << std::endl;
+            }
+        } else {
+            cerr << "algorithms directory exists" << endl;
+        }
+
+        // we output the computed lambdas in the following file:
+        filesystem::path lambdas_file_path = output_dir / "lambdas.csv";
+        ofstream lambdas_file(lambdas_file_path);
+        lambdas_file << "hardware,embedding,horizon,lambda,time\n";
+        lambdas_file.flush();
+
+        for (auto& el : all_embeddings.items()) {
+            if (el.key() == "count") continue;
+
+            string hardware = el.key();
+            int count = el.value()["count"];
+            for (int embedding_index = 0; embedding_index < count; embedding_index ++) {
+                filesystem::path instance_pomdp_path = pomdps_path / (hardware+"_"+ to_string(embedding_index) + ".txt");
+                auto pomdp = parse_pomdp_file(instance_pomdp_path);
+
+                Belief initial_belief = get_initial_belief(pomdp);
+                for (int horizon = min_horizon; horizon < max_horizon+1; horizon++) {
+                    cerr << "Running experiment: " << hardware << embedding_index << " h="<< horizon << endl;
+                    long time_before = time(nullptr);
+                    auto result = get_bellman_value(pomdp, initial_belief, horizon, opt_technique);
+                    long time_after = time(nullptr);
+                    auto lambda = result.second;
+                    cout << lambda << endl;
+                    lambdas_file << hardware << "," << embedding_index << "," << horizon << "," << lambda << ","
+                                << (time_after-time_before) << "\n";
+                    lambdas_file.flush();
+                    filesystem::path instance_algo_path = algorithms_path / (hardware+"_"+ to_string(embedding_index)+"_"+ to_string(horizon)+".json");
+                    write_algorithm_file(result.first, instance_algo_path);
+                }
+            }
         }
         lambdas_file.close();
     } else if (arg1.compare("exact") == 0){
+        string algorithm_path = argv[2]; 
+        string pomdp_path = argv[3];
+        // getting the algorithms for a given horizon and experiment index
+        std::ifstream f(algorithm_path);
+        json algorithms_data = json::parse(f);
+        f.close();
+        Algorithm* algorithm = new Algorithm(algorithms_data);
+        auto pomdp = parse_pomdp_file(pomdp_path);
+        Belief initial_belief = get_initial_belief(pomdp);
+        auto acc = get_algorithm_acc(pomdp, algorithm, initial_belief);
+        cout << acc << endl;
 
-        auto experiment_index = to_string(argv[2][0] - '0');
-        if (experiment_index.compare("0") == 0){
-            experiment_index="";
-        }
-        string experiment_folder = "analysis_results" +  experiment_index + '/';
-        cout << experiment_folder << endl;
-        ofstream output_file(experiment_folder + "backends_vs.csv");
-        output_file << "horizon,diff_index,real_hardware,acc\n";
-
-        for (int horizon = 4; horizon < 8; horizon++) {
-
-            // getting the algorithms for a given horizon and experiment index
-            std::ifstream f(experiment_folder + "diff" + to_string(horizon )+ ".json");
-            cout << experiment_folder + "diff" + to_string(horizon)+ ".json" << endl;
-            json algorithms_data = json::parse(f);
-            int count_algorithms = algorithms_data["count"];
-            auto algorithms = algorithms_data["algorithms"];
-            f.close();
-            // we iterate over all algorithms to test them in all embeddings
-            for(auto alg_index = 0; alg_index < count_algorithms; alg_index++) {
-                Algorithm* algorithm = new Algorithm(algorithms[to_string(alg_index)]);
-                for(auto it = backends_to_embeddings.begin(); it != backends_to_embeddings.end(); it++) {
-                    auto backend = it->first;
-                    for(auto embedding_index = 0; embedding_index < it->second; embedding_index++) {
-                        auto pomdp = parse_pomdp_file(
-                                "pomdps" + experiment_index + "/"+backend+"_"+ to_string(embedding_index));
-                        Belief initial_belief = get_initial_belief(pomdp);
-                        unordered_map<int, int> mapping = get_mapping(backend, embedding_index, experiment_index);
-                        auto acc = get_algorithm_acc(pomdp, algorithm, initial_belief, mapping);
-                        output_file << horizon << "," << alg_index << "," << backend << embedding_index << "," << acc << "\n";
-                    }
-                }
-                output_file.flush();
-            }
-
-        }
-
-        output_file.close();
     } else {
-        cout << "nothing matches" << endl;
+        cerr << "nothing matches" << endl;
     }
 
     return 0;

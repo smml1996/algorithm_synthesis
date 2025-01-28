@@ -7,18 +7,21 @@
 #include <string>
 #include "utils.cpp"
 #include <fstream>
+#include <cassert>
 
 using namespace  std;
+
+static auto HALT_ACTION = "halt";
+static auto HALT = new Algorithm(HALT_ACTION, nullptr, nullptr, nullptr, 0);
 
 class POMDP {
 public:
     //            from                      I         to    prob
     unordered_map< int , unordered_map< string, map< int, MyFloat > > > probabilities;
     int initial_state{};
-
+    unordered_set<string> actions{};
     unordered_map<int, int> gamma{};
-    unordered_set<int> target_vertices{};
-    unordered_map< string, vector< Instruction > > actions_to_instructions;
+    unordered_map<int, MyFloat> rewards{}; // maps a vertex to its reward
 
     void insert_probability(const int &from,const string &action, const int &to, const MyFloat &prob) {
         this->probabilities[from][action][to] = prob;
@@ -37,44 +40,34 @@ public:
         return this->insert_probability(from, action, to, prob);
     }
 
+    void safe_insert_action(const string &action){
+        if (this->actions.find(action) == this->actions.end()) {
+            this->actions.insert(action);
+        } else {
+            throw std::runtime_error("action " + action + " is being inserted more than once");
+        }
+    }
+
     void insert_gamma(const int &v, const int &obs) {
         assert(this->gamma.find(v) == this->gamma.end());
         this->gamma[v] = obs;
     }
 
-    bool is_target_vertex(const int &id) {
-        return this->target_vertices.find(id) != this->target_vertices.end();
+    MyFloat get_vertex_reward(const int &id) {
+        return this->rewards[id];
     }
 
-    bool insert_target_v(const int &id) {
-        if (this->is_target_vertex(id)) {
+    bool insert_reward(const int &id, const MyFloat&reward ) {
+        if (this->rewards.find(id) == this->rewards.end()) {
+            this->rewards.insert({id, reward});
+            return true;
+        } else {
             return false;
         }
-
-        this->target_vertices.insert(id);
-        return true;
     }
 };
 
-pair<int, int> check_states_integrity(const string &line) {
-    vector<string> out1;
-    split_str(line, ' ', out1);
-
-    assert(out1.size() == 2);
-    assert(out1[0] == "STATES:");
-
-    vector<string> out2;
-    split_str(out1[1], ',', out2);
-    int prev = stoi(out2[0]);
-    int state0 = prev;
-    for (int i = 1; i < out2.size(); i++) {
-        assert(stoi(out2[i]) == prev + 1);
-        prev = stoi(out2[i]);
-    }
-    return make_pair(state0, prev); // all the states-ids are within this range
-}
-
-void fill_pomdp_gamma(POMDP &pomdp, const pair<int, int> &states_range, const string &line){
+void fill_pomdp_gamma(POMDP &pomdp, const string &line){
     vector<string> out1;
     split_str(line, ' ', out1);
 
@@ -90,24 +83,27 @@ void fill_pomdp_gamma(POMDP &pomdp, const pair<int, int> &states_range, const st
         assert(out3.size() == 2);
         int v = stoi(out3[0]);
         int obs = stoi(out3[1]);
-        assert(v >= states_range.first);
-        assert(v <= states_range.second);
         pomdp.insert_gamma(v, obs);
     }
 }
 
-void fill_target_vertices(POMDP &pomdp, const string &line) {
+void fill_rewards(POMDP &pomdp, const string &line) {
     vector<string> elements;
     split_str(line, ' ', elements);
 
     assert(elements.size() ==  2);
-    assert(elements[0] == "TARGETV:");
+    assert(elements[0] == "REWARDS:");
 
-    vector<string> vertices;
-    split_str(elements[1], ',', vertices);
+    vector<string> vertices_to_rewards;
+    split_str(elements[1], ',', vertices_to_rewards);
 
-    for (const auto & vertice : vertices) {
-        assert(pomdp.insert_target_v(stoi(vertice)));
+    for (const auto & vertex_to_reward : vertices_to_rewards) {
+        vector<string> elements;
+        split_str(vertex_to_reward, ':', elements);
+        assert(elements.size() == 2);
+        int v = stoi(elements[0]);
+        MyFloat r(elements[1]);
+        assert(pomdp.insert_reward(v, r));
     }
 
 }
@@ -115,13 +111,12 @@ void fill_target_vertices(POMDP &pomdp, const string &line) {
 POMDP parse_pomdp_file (const string& fname) {
     POMDP pomdp;
 
-    ifstream f(fname + ".txt");
+    ifstream f(fname);
     string line;
     if (getline (f, line)) {
         assert (line == "BEGINPOMDP");
     } else {
-        cout << "error POMDP reading file" << endl;
-        assert(false);
+        throw std::runtime_error("Error reading POMDP file: "+ fname);
     }
 
 
@@ -135,17 +130,15 @@ POMDP parse_pomdp_file (const string& fname) {
     pomdp.initial_state = initial_state;
 
     // STATES:
-    getline(f, line);
-    pair<int, int> states_range = check_states_integrity(line); // this is the line of all the states of the POMDP
-    assert(initial_state == states_range.first);
+    getline(f, line); // this is the line of all the states of the POMDP
 
     // target vertices
     getline(f, line);
-    fill_target_vertices(pomdp, line);
+    fill_rewards(pomdp, line);
 
     // GAMMA:
     getline(f, line);
-    fill_pomdp_gamma(pomdp, states_range, line);
+    fill_pomdp_gamma(pomdp, line);
 
     // Actions
     getline(f, line);
@@ -154,41 +147,9 @@ POMDP parse_pomdp_file (const string& fname) {
     while(line != "ENDACTIONS"){
         vector<string> elements;
         split_str(line, ' ', elements);
-        assert(elements.size() == 4);
-        string channel_name = elements[0];
-        assert(pomdp.actions_to_instructions.find(channel_name) == pomdp.actions_to_instructions.end()); // it should be a unique name that we havent already used
-        pomdp.actions_to_instructions[channel_name] = vector<Instruction>();
-
-        vector<string> instructions;
-        split_str(elements[1], ',', instructions);
-
-        vector<string> controls;
-        split_str(elements[2], ',', controls);
-
-        vector<string> targets;
-        split_str(elements[3], ',', targets);
-
-        assert(instructions.size() == controls.size());
-        assert(targets.size() == controls.size());
-
-        for (int i = 0; i < instructions.size(); i++) {
-            int control;
-            if (controls[i] == "None") {
-                control = -1;
-            } else {
-                control = stoi(controls[i]);
-            }
-            int target = stoi(targets[i]);
-
-
-            Instruction ins;
-            ins.instruction = instructions[i];
-            ins.target = target;
-            ins.control = control;
-
-            pomdp.actions_to_instructions[channel_name].push_back(ins);
-        }
-
+        assert(elements.size() == 1);
+        string action = elements[0];
+        pomdp.safe_insert_action(action);
         getline(f, line);
     }
 
@@ -212,34 +173,20 @@ POMDP parse_pomdp_file (const string& fname) {
 
 // TODO: change POMDP to const
 
-pair<Algorithm *, Algorithm*> get_instructions_algorithm(const vector<Instruction> &instructions) {
-    assert(!instructions.empty());
+pair<Algorithm*, MyFloat> get_bellman_value(POMDP &pomdp, Belief &current_belief, const int &horizon, const string &opt_technique) {
+    MyFloat curr_belief_val = current_belief.get_belief_reward(pomdp.rewards);
 
-    auto *initial_node = new Algorithm(instructions[0], nullptr, nullptr, nullptr);
-    Algorithm *current_node = initial_node;
-    for (int i = 1; i < instructions.size(); i++){
-        current_node = new Algorithm(instructions[i], nullptr, nullptr, nullptr);
-        initial_node->next_ins = current_node;
-    }
-
-    return make_pair(initial_node, current_node);
-
-}
-
-pair<Algorithm*, MyFloat> get_bellman_value(POMDP &pomdp, Belief &current_belief, const int &horizon) {
-
-    MyFloat curr_belief_val = current_belief.get_vertices_probs(pomdp.target_vertices);
 
     if (horizon == 0) {
-        return make_pair((Algorithm *) nullptr, curr_belief_val);
+        return make_pair(HALT, curr_belief_val);
     }
 
     vector< pair< Algorithm*, MyFloat > > bellman_values;
 
-    bellman_values.emplace_back((Algorithm *) nullptr, curr_belief_val);
+    bellman_values.emplace_back(HALT, curr_belief_val);
 
-    for(auto it = pomdp.actions_to_instructions.begin(); it != pomdp.actions_to_instructions.end(); it++) {
-        string action = it->first;
+    for(auto it = pomdp.actions.begin(); it != pomdp.actions.end(); it++) {
+        string action = *it;
 
         // build next_beliefs, separate them by different observables
         map<int, Belief> obs_to_next_beliefs;
@@ -250,7 +197,8 @@ pair<Algorithm*, MyFloat> get_bellman_value(POMDP &pomdp, Belief &current_belief
             if(prob.second > zero) {
                 for (auto &it_next_v: pomdp.probabilities[current_v][action]) {
                     if (it_next_v.second > zero) {
-                        obs_to_next_beliefs[pomdp.gamma[it_next_v.first]].add_val(it_next_v.first,
+                        auto successor = it_next_v.first;
+                        obs_to_next_beliefs[pomdp.gamma[it_next_v.first]].add_val(successor,
                                                                                   prob.second * it_next_v.second);
                     }
                 }
@@ -264,7 +212,7 @@ pair<Algorithm*, MyFloat> get_bellman_value(POMDP &pomdp, Belief &current_belief
             MyFloat bellman_val;
 
             for(auto & obs_to_next_belief : obs_to_next_beliefs) {
-                auto temp = get_bellman_value(pomdp, obs_to_next_belief.second, horizon-1);
+                auto temp = get_bellman_value(pomdp, obs_to_next_belief.second, horizon-1, opt_technique);
                 next_algorithms.push_back(temp.first);
                 bellman_val = bellman_val + temp.second;
             }
@@ -272,28 +220,45 @@ pair<Algorithm*, MyFloat> get_bellman_value(POMDP &pomdp, Belief &current_belief
             assert(!next_algorithms.empty());
             assert(next_algorithms.size() < 3);
 
-            Algorithm *new_alg_node;
-            pair<Algorithm*, Algorithm*> algs_pointer = get_instructions_algorithm(it->second);
-            new_alg_node = algs_pointer.first;
+            Algorithm *new_alg_node = new Algorithm(*it, nullptr, nullptr, nullptr);
             if (next_algorithms.size() == 1) {
-                algs_pointer.second->next_ins = next_algorithms[0];
+                new_alg_node->next_ins = next_algorithms[0];
+                new_alg_node->depth = next_algorithms[0]->depth + 1;
             } else {
                 // since maps are ordered by values:
-                algs_pointer.second->case0 = next_algorithms[0]; // this should be a measure to 0
-                algs_pointer.second->case1 = next_algorithms[1]; // This should be a measure to 1
+                new_alg_node->case0 = next_algorithms[0]; // this should be a measure to 0
+                new_alg_node->case1 = next_algorithms[1]; // This should be a measure to 1
+                new_alg_node->depth = max(next_algorithms[0]->depth, next_algorithms[1]->depth) +1;
             }
 
             bellman_values.emplace_back(new_alg_node, bellman_val);
         }
     }
 
-    MyFloat max_val;
+    MyFloat max_val; // this is initialized as zero
     for(auto & bellman_value : bellman_values) {
-        max_val = max(max_val, bellman_value.second);
+        if (opt_technique == "max") {
+            max_val = max(max_val, bellman_value.second);
+        } else {
+            assert(opt_technique == "min");
+            max_val = min(max_val, bellman_value.second);
+        }
+        
+    }
+
+    int shortest_alg_with_max_val = -1;
+    for(auto & bellman_value : bellman_values) {
+        if (bellman_value.second == max_val) {
+            if (shortest_alg_with_max_val == -1) {
+                shortest_alg_with_max_val = bellman_value.first->depth;
+            } else {
+                shortest_alg_with_max_val = min(shortest_alg_with_max_val, bellman_value.first->depth);
+            }
+        }
     }
 
     for(auto & bellman_value : bellman_values) {
-        if (bellman_value.second == max_val) {
+        if (bellman_value.second == max_val and bellman_value.first->depth == shortest_alg_with_max_val) {
             return bellman_value;
         }
     }
@@ -313,29 +278,16 @@ Belief get_initial_belief(POMDP &pomdp) {
     return initial_belief;
 }
 
-MyFloat get_algorithm_acc(POMDP &pomdp, Algorithm*& algorithm, Belief &current_belief, const unordered_map<int, int> &embedding) {
-    MyFloat curr_belief_val = current_belief.get_vertices_probs(pomdp.target_vertices);
+MyFloat get_algorithm_acc(POMDP &pomdp, Algorithm*& algorithm, Belief &current_belief) {
+    MyFloat curr_belief_val = current_belief.get_belief_reward(pomdp.rewards);
+
     if (algorithm == nullptr) {
         return curr_belief_val;
     }
-
-    string current_action;
-    if (algorithm->instruction.control  == -1){
-        current_action = algorithm->instruction.instruction + to_string(embedding.find(algorithm->instruction.target)->second);
-    } else {
-        current_action = algorithm->instruction.instruction + to_string(embedding.find(algorithm->instruction.target)->second) + "_" +
-                to_string(embedding.find(algorithm->instruction.control)->second);
+    string action = algorithm->action;
+    if (action == HALT_ACTION) {
+        return curr_belief_val;
     }
-
-    if(pomdp.actions_to_instructions.find(current_action) == pomdp.actions_to_instructions.end()) {
-        cout << "could not find "<<current_action << " in pomdp actions. The available POMDP actions are: \n";
-        for(auto it = pomdp.actions_to_instructions.begin(); it != pomdp.actions_to_instructions.end(); it++){
-            cout << it->first << endl;
-        }
-        assert(false);
-    }
-
-    string action = current_action;
 
     // build next_beliefs, separate them by different observables
     map<int, Belief> obs_to_next_beliefs;
@@ -362,13 +314,13 @@ MyFloat get_algorithm_acc(POMDP &pomdp, Algorithm*& algorithm, Belief &current_b
             if (algorithm->next_ins != nullptr) {
                 assert(algorithm->case0 == nullptr);
                 assert(algorithm->case1 == nullptr);
-                temp = get_algorithm_acc(pomdp, algorithm->next_ins, obs_to_next_belief.second, embedding);
+                temp = get_algorithm_acc(pomdp, algorithm->next_ins, obs_to_next_belief.second);
             }else{
                 if(obs_to_next_belief.first == 0) {
-                    temp = get_algorithm_acc(pomdp, algorithm->case0, obs_to_next_belief.second, embedding);
+                    temp = get_algorithm_acc(pomdp, algorithm->case0, obs_to_next_belief.second);
                 } else {
                     assert(obs_to_next_belief.first == 1);
-                    temp =  get_algorithm_acc(pomdp, algorithm->case1, obs_to_next_belief.second, embedding);
+                    temp =  get_algorithm_acc(pomdp, algorithm->case1, obs_to_next_belief.second);
                 }
             }
 

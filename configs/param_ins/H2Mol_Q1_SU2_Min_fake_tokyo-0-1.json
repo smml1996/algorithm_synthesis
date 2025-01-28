@@ -1,0 +1,14 @@
+{
+    "name": "fake_tokyo-0-1",
+    "experiment_id": "H2Mol_Q1_SU2_Min",
+    "min_horizon": 4,
+    "max_horizon": 4,
+    "output_dir": "/Users/stefaniemuroyalei/Documents/algorithm_synthesis/results/param_ins/H2Mol_Q1_SU2_Min/fake_tokyo-0-1",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_tokyo"
+    ],
+    "opt_technique": "min",
+    "verbose": 0,
+    "reps": 1
+}

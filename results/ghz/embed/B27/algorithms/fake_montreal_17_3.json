@@ -1,0 +1,21 @@
+{
+    "action": "H1",
+    "case0": "None",
+    "case1": "None",
+    "next": {
+        "action": "CX12",
+        "case0": "None",
+        "case1": "None",
+        "next": {
+            "action": "CX20",
+            "case0": "None",
+            "case1": "None",
+            "next": {
+                "action": "halt",
+                "case0": "None",
+                "case1": "None",
+                "next": "None"
+            }
+        }
+    }
+}

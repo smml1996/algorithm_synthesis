@@ -1,0 +1,14 @@
+{
+    "name": "B28",
+    "experiment_id": "cxh",
+    "min_horizon": 4,
+    "max_horizon": 7,
+    "output_dir": "results/bitflip/cxh/B28",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_cambridge"
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
+}

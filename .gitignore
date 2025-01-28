@@ -1,22 +1,18 @@
-cmake-build-debug
-CMakeFiles
-qprogram_synthesis
-.idea/*
-*.log
-Makefile
-CMakeCache.txt
-cmake_install.cmake
-.DS_Store
-algorithms/__pycache__/
+problems/sscript.sh
+problems/server_script.sh
 .vscode
-_deps/
+.settings
+.DS_Store
 qalgorithm_synthesis
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+_deps/
+qalgorithm_synthesis/qalgorithm_synthesis
+qalgorithm_synthesis/CTestTestfile.cmake
 
+*.sh
 # C extensions
 *.so
 
@@ -39,6 +35,18 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+
+cmake-build-debug
+CMakeFiles
+qprogram_synthesis
+.idea/*
+*.log
+CMakeLists.txt
+Makefile
+CMakeCache.txt
+cmake_install.cmake
+algorithms/__pycache__/
+algorithms1/__pycache__/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -173,4 +181,9 @@ cython_debug/
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
+.idea/
+
+qalgorithm_synthesis/Testing/Temporary/CTestCostData.txt
+qalgorithm_synthesis/fp_test\[1]_include.cmake
+qalgorithm_synthesis/fp_test
+qalgorithm_synthesis/fp_test\[1]_tests.cmake

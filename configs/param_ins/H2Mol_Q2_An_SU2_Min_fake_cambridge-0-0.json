@@ -1,0 +1,14 @@
+{
+    "name": "fake_cambridge-0-0",
+    "experiment_id": "H2Mol_Q2_An_SU2_Min",
+    "min_horizon": 6,
+    "max_horizon": 6,
+    "output_dir": "/Users/stefaniemuroyalei/Documents/algorithm_synthesis/results/param_ins/H2Mol_Q2_An_SU2_Min/fake_cambridge-0-0",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_cambridge"
+    ],
+    "opt_technique": "min",
+    "verbose": 0,
+    "reps": 0
+}
