@@ -3,6 +3,7 @@ problems/server_script.sh
 .vscode
 .settings
 .DS_Store
+qalgorithm_synthesis
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -184,8 +185,5 @@ cython_debug/
 
 qalgorithm_synthesis/Testing/Temporary/CTestCostData.txt
 qalgorithm_synthesis/fp_test\[1]_include.cmake
-.settings
-.settings
 qalgorithm_synthesis/fp_test
 qalgorithm_synthesis/fp_test\[1]_tests.cmake
-.settings
