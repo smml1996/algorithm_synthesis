@@ -23,6 +23,7 @@ class ZeroPlusExperimentID(Enum):
     ONEQ10PI = "oneq10pi"
     TWOQ1 = "twoq1" # cx(1,2), H(2), T(2), TD(2), meas(2).
     TWOQCH = "twoqch" # ch(1,2), meas(1), meas(2), x(2)
+    TWOQP = "twoqp"
     @property
     def exp_name(self):
         return "zeroplus"
@@ -48,7 +49,7 @@ class ZeroPlusInstance:
             assert len(self.embedding.keys()) == 3
             self.hidden_index = 1
             self.remove_qubits = [self.embedding[0]]
-        elif self.experiment_id in [ZeroPlusExperimentID.TWOQ1, ZeroPlusExperimentID.TWOQCH]:
+        elif self.experiment_id in [ZeroPlusExperimentID.TWOQ1, ZeroPlusExperimentID.TWOQCH, ZeroPlusExperimentID.TWOQP]:
             assert 2 in self.embedding.keys()
             assert len(self.embedding.keys()) == 4 # 2 + 2 qubit for hidden indices
             self.hidden_index = 2
@@ -109,6 +110,21 @@ def get_experiments_actions(noise_model, embedding, experiment_id):
                     cx_instruction = Instruction(embedding[j], Op.CNOT, embedding[i])
                     if cx_instruction in noise_model.instructions_to_channel.keys():
                         actions.append(POMDPAction(f"CX{i}{j}", [cx_instruction]))
+    elif experiment_id == ZeroPlusExperimentID.TWOQP:
+        meas_instruction1 = Instruction(embedding[0], Op.MEAS).to_basis_gate_impl(noise_model.basis_gates)
+        meas_instruction2 = Instruction(embedding[1], Op.MEAS).to_basis_gate_impl(noise_model.basis_gates)
+        actions.append(POMDPAction("MEAS0", meas_instruction1 + meas_instruction2))
+        
+        cx_instruction = Instruction(embedding[1], Op.CNOT, embedding[0])
+        actions.append(POMDPAction("CX01", [cx_instruction]))
+        
+        for i in [4, 8]:
+            ry_instruction = Instruction(embedding[0], Op.RY, params=[pi/i]).to_basis_gate_impl(noise_model.basis_gates)
+            nry_instruction = Instruction(embedding[1], Op.RY, params=[-pi/i]).to_basis_gate_impl(noise_model.basis_gates)
+            actions.append(POMDPAction(f"RY{i}", ry_instruction))
+            actions.append(POMDPAction(f"RY-{i}", nry_instruction + [cx_instruction]))
+        print("Total actions:", len(actions))
+        
     elif experiment_id == ZeroPlusExperimentID.ONEQ10PI:
         meas_instruction = Instruction(embedding[0], Op.MEAS).to_basis_gate_impl(noise_model.basis_gates)
         actions.append(POMDPAction("MEAS", meas_instruction))
@@ -210,7 +226,7 @@ def get_hardware_scenarios(hardware_spec: HardwareSpec, experiment_id) -> List[D
            embedding[1] = get_unused_qubit(noise_model, used_qubits=[i])
            embedding[2] = get_unused_qubit(noise_model, used_qubits=[i, embedding[1]])
            answer.append(deepcopy(embedding))
-    elif experiment_id in [ZeroPlusExperimentID.TWOQ1, ZeroPlusExperimentID.TWOQCH]:
+    elif experiment_id in [ZeroPlusExperimentID.TWOQ1, ZeroPlusExperimentID.TWOQCH, ZeroPlusExperimentID.TWOQP]:
         most_noisy_coupler = noise_model.get_most_noisy_couplers()[0][0]
         embedding = dict()
         control = most_noisy_coupler[0]
@@ -232,6 +248,9 @@ def halt_guard(vertex: POMDPVertex, embedding: Dict[int, int], action: POMDPActi
 if __name__ == "__main__":
     arg = sys.argv[1]
     
+    min_horizon = None
+    max_horizon = None
+    setup = True
     if arg == "oneq":
         experiment_id = ZeroPlusExperimentID.ONEQ
     elif arg == "twoq1":
@@ -240,6 +259,17 @@ if __name__ == "__main__":
         experiment_id = ZeroPlusExperimentID.TWOQCH
     elif arg == "oneq10":
         experiment_id = ZeroPlusExperimentID.ONEQ10PI
+        min_horizon = 3
+        max_horizon = 5
+    elif arg == "twoqp":
+        if sys.argv[2] == "setup":
+            setup = True
+        else:
+            setup = False
+            num_qubits = f"B{sys.argv[2]}"
+        experiment_id = ZeroPlusExperimentID.TWOQP
+        min_horizon = 3
+        max_horizon = 5
     else:
         raise Exception("argument does not match anything")
     
@@ -248,20 +278,30 @@ if __name__ == "__main__":
     settings = get_project_settings()
     project_path = settings["PROJECT_PATH"]
     
+    assert min_horizon is not None
+    assert max_horizon is not None
+    
     print(experiment_id)
-    print("generating config files")
-    generate_configs(experiment_id=experiment_id, min_horizon=3, max_horizon=5)
-    
-    print("generating embedding files...")
-    batches = get_num_qubits_to_hardware(WITH_THERMALIZATION)
-    for num_qubits in batches.keys():
-        config_path = get_config_path(experiment_id, num_qubits)
-        generate_embeddings(experiment_id, num_qubits, get_hardware_embeddings=get_hardware_scenarios)
-    
+    if setup == True:
+        print("generating config files")
+        generate_configs(experiment_id=experiment_id, min_horizon=min_horizon, max_horizon=max_horizon)
+        
+        print("generating embedding files...")
+        batches = get_num_qubits_to_hardware(WITH_THERMALIZATION)
+        
+        for num_qubits in batches.keys():
+            config_path = get_config_path(experiment_id, num_qubits)
+            generate_embeddings(experiment_id, num_qubits, get_hardware_embeddings=get_hardware_scenarios)
+        
     project_settings = get_project_settings()
-    for num_qubits in batches.keys():
-        config_path = get_config_path(experiment_id, num_qubits)
-        generate_pomdps(experiment_id, num_qubits, get_experiments_actions, ZeroPlusInstance, guard=halt_guard)
+    if experiment_id != ZeroPlusExperimentID.TWOQP:
+        for num_qubits in batches.keys():
+            config_path = get_config_path(experiment_id, num_qubits)
+            generate_pomdps(experiment_id, num_qubits, get_experiments_actions, ZeroPlusInstance, guard=halt_guard)
         # run_bellmaneq(project_settings, config_path)
+    else:
+        if setup == False:
+            config_path = get_config_path(experiment_id, num_qubits)
+            generate_pomdps(experiment_id, num_qubits, get_experiments_actions, ZeroPlusInstance, guard=halt_guard)
  
         
