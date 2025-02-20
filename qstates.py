@@ -3,7 +3,7 @@ from copy import deepcopy
 from typing import Any, List, Optional, Dict, Tuple
 import numpy as np
 from numpy import conjugate
-from qpu_utils import Precision, get_complex, int_to_bin, bin_to_int
+from qpu_utils import Precision, get_complex, int_to_bin, bin_to_int, remove_unused
 from scipy.linalg import expm
 from qiskit.quantum_info import SparsePauliOp
 
@@ -185,6 +185,7 @@ class QuantumState:
             result.append(temp)
         for ket in range(initial_dim):
             bin_ket = int_to_bin(ket, zero_padding=len(qubits_used)) # this is the original ket, we get the binary representation
+            bin_ket = remove_unused(bin_ket, qubits_used)
             assert len(bin_ket) == len(qubits_used)
             assert isinstance(bin_ket, str)
             bin_new_ket = bin_ket[:index] + bin_ket[index+1:] # now we create a binary string without the bit that we want to remove (located at index)
@@ -192,6 +193,7 @@ class QuantumState:
             index_new_ket = bin_to_int(bin_new_ket) # index of the row in the result(-ing density matrix)
             for bra in range(initial_dim):
                 bin_bra = int_to_bin(bra, zero_padding=len(qubits_used)) # original bra
+                bin_bra = remove_unused(bin_bra, qubits_used)
                 bin_new_bra = bin_bra[:index] + bin_bra[index+1:] # remove the bit in the index we dont want
                 index_new_bra = bin_to_int(bin_new_bra) # index of the row in the result(-ing density matrix)   
 
@@ -216,18 +218,19 @@ class QuantumState:
         real_indices = []
         for index in remove_indices:
             real_indices.append(QuantumState._get_real_index(qubits_used, index))
-            
         result = np.zeros((final_dim, final_dim))
         for ket in self.sparse_vector.keys():
             bin_ket = int_to_bin(ket, zero_padding=len(qubits_used))
-            bin_new_ket = remove_char_at_indices(bin_ket, real_indices)
+            bin_ket_ = remove_unused(bin_ket, qubits_used, padding=len(qubits_used))
+            bin_new_ket = remove_char_at_indices(bin_ket_, real_indices)
             index_new_ket = bin_to_int(bin_new_ket) # index of the row in the result(-ing density matrix)
             for bra in self.sparse_vector.keys():
                 current_val = (self.get_amplitude(ket) * conjugate(self.get_amplitude(bra))).real
                 bin_bra = int_to_bin(bra, zero_padding=len(qubits_used)) # original bra
-                bin_new_bra = remove_char_at_indices(bin_bra, real_indices)
+                bin_bra_ = remove_unused(bin_bra, qubits_used, padding=len(qubits_used))
+                bin_new_bra = remove_char_at_indices(bin_bra_, real_indices)
                 index_new_bra = bin_to_int(bin_new_bra)        
-                if are_all_indices_equal(bin_ket, bin_bra, real_indices):
+                if are_all_indices_equal(bin_ket_, bin_bra_, real_indices):
                     result[index_new_ket][index_new_bra] += current_val
         return result
                 

@@ -1,0 +1,15 @@
+{
+    "name": "B65",
+    "experiment_id": "oneq",
+    "min_horizon": 2,
+    "max_horizon": 7,
+    "output_dir": "results/zeroplus/oneq/B65",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_brooklyn",
+        "fake_manhattan"
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
+}

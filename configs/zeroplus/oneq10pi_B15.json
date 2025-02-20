@@ -1,0 +1,14 @@
+{
+    "name": "B15",
+    "experiment_id": "oneq10pi",
+    "min_horizon": 3,
+    "max_horizon": 4,
+    "output_dir": "results/zeroplus/oneq10pi/B15",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_melbourne"
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
+}

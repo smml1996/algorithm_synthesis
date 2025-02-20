@@ -398,7 +398,8 @@ def build_pomdp(actions: List[POMDPAction],
                 embedding: Dict[int, int],
                 initial_state: Tuple[QuantumState, ClassicalState] = None,
                 initial_distribution: List[
-                    Tuple[Tuple[QuantumState, ClassicalState], float]]=None, guard: Any = default_guard) -> POMDP:
+                    Tuple[Tuple[QuantumState, ClassicalState], float]]=None, guard: Any = default_guard,
+                qubits_used=None) -> POMDP:
     """_summary_
 
     Args:
@@ -409,7 +410,10 @@ def build_pomdp(actions: List[POMDPAction],
         guard (Any): POMDPVertex X embedding X action -> {true, false} says whether in the current set of physical qubits (embedding) of the current vertex (POMDPVertex), an action is permissible.
     """
     if initial_state is None:
-        initial_state = (QuantumState(0, qubits_used=list(embedding.values())), ClassicalState())
+        if qubits_used is None:
+            initial_state = (QuantumState(0, qubits_used=list(embedding.values())), ClassicalState())
+        else:
+            initial_state = (QuantumState(0, qubits_used=qubits_used), ClassicalState())
     
     # graph is a dictionary that maps an origin vertex, a channel (str), to another target vertex  and a float which is the probability of transition from the origin vertex to the target vertex
     graph: Dict[POMDPVertex, Dict[str, Dict[POMDPVertex, float]]] = dict()

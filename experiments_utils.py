@@ -376,6 +376,16 @@ def get_markov_chain_results(project_settings, algorithm_path, pomdp_path) ->flo
         print("tried mc with args", args)
         print(result.stderr)
         raise Exception(f"Could not convert executable to float when running {args}")
+    
+def run_bellmaneq(project_settings, config_path):
+    executable_path = project_settings["CPP_EXEC_PATH"]
+    args = ["bellmaneq", config_path]
+    result = subprocess.run([executable_path] + args, capture_output=True, text=True)
+    
+    try:
+        print(result.stdout)
+    except:
+        raise Exception(args, result.stderr)
 
 #### default algorithms #####   
 def get_default_ghz(noise_model, embedding) -> AlgorithmNode:
@@ -623,19 +633,16 @@ def load_all_lambdas(experiment_id):
         
         
 ### POMDPS ####
-def generate_pomdp(experiment_id: GHZExperimentID, hardware_spec: HardwareSpec, 
+def generate_pomdp(experiment_id: Any, hardware_spec: HardwareSpec, 
                 embedding: Dict[int, int], pomdp_write_path: str, get_experiments_actions, ProblemInstanceObj, horizon, guard=default_guard,
                 return_pomdp=False, 
                 WITH_THERMALIZATION=False,
                 optimize_graph=True):
     noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_THERMALIZATION)
-    problem_instance = ProblemInstanceObj(embedding)
+    problem_instance = ProblemInstanceObj(embedding, experiment_id)
     actions = get_experiments_actions(noise_model, embedding, experiment_id)
-    initial_distribution = []
-    for initial_state in problem_instance.initial_state:
-        initial_distribution.append((initial_state, 1/len(problem_instance.initial_state)))
     start_time = time.time()
-    pomdp = build_pomdp(actions, noise_model, horizon, embedding, initial_distribution=initial_distribution, guard=guard)
+    pomdp = build_pomdp(actions, noise_model, horizon, embedding, initial_distribution=problem_instance.initial_distribution, guard=guard, qubits_used=problem_instance.qubits_used)
     if optimize_graph:
         pomdp.optimize_graph(problem_instance)
     end_time = time.time()

@@ -1,0 +1,41 @@
+{
+    "action": "MEAS0",
+    "case0": {
+        "action": "MEAS0",
+        "case0": {
+            "action": "IS0",
+            "case0": "None",
+            "case1": "None",
+            "next": {
+                "action": "halt",
+                "case0": "None",
+                "case1": "None",
+                "next": "None"
+            }
+        },
+        "case1": {
+            "action": "ISPlus",
+            "case0": "None",
+            "case1": "None",
+            "next": {
+                "action": "halt",
+                "case0": "None",
+                "case1": "None",
+                "next": "None"
+            }
+        },
+        "next": "None"
+    },
+    "case1": {
+        "action": "ISPlus",
+        "case0": "None",
+        "case1": "None",
+        "next": {
+            "action": "halt",
+            "case0": "None",
+            "case1": "None",
+            "next": "None"
+        }
+    },
+    "next": "None"
+}

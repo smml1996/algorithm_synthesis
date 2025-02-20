@@ -1,0 +1,19 @@
+{
+    "name": "B20",
+    "experiment_id": "twoqch",
+    "min_horizon": 2,
+    "max_horizon": 3,
+    "output_dir": "results/zeroplus/twoqch/B20",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_johannesburg",
+        "fake_almaden",
+        "fake_boeblingen",
+        "fake_poughkeepsie",
+        "fake_singapore",
+        "fake_tokyo"
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
+}

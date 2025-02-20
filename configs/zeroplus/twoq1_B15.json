@@ -1,0 +1,14 @@
+{
+    "name": "B15",
+    "experiment_id": "twoq1",
+    "min_horizon": 5,
+    "max_horizon": 6,
+    "output_dir": "results/zeroplus/twoq1/B15",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_melbourne"
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
+}

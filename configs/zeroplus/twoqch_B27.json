@@ -1,0 +1,23 @@
+{
+    "name": "B27",
+    "experiment_id": "twoqch",
+    "min_horizon": 2,
+    "max_horizon": 3,
+    "output_dir": "results/zeroplus/twoqch/B27",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_hanoi",
+        "fake_cairo",
+        "fake_mumbai",
+        "fake_kolkata",
+        "fake_auckland",
+        "fake_geneva",
+        "fake_montreal",
+        "fake_paris",
+        "fake_sydney",
+        "fake_toronto"
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
+}

@@ -404,8 +404,12 @@ class Instruction:
         if basis_gates in [BasisGates.TYPE1, BasisGates.TYPE6]:
             if self.op == Op.H:
                 return [Instruction(self.target, Op.U2, params=[0.0, pi])]
+            if self.op == Op.Z:
+                return [Instruction(self.target, Op.U1, params=[pi])]
             if self.op == Op.T:
                 return [Instruction(self.target, Op.U1, params=[pi/4])]
+            if self.op == Op.TD:
+                return [Instruction(self.target, Op.U1, params=[-pi/4])]
             if self.op == Op.S:
                 return [Instruction(self.target, Op.U1, params=[pi/2])]
             if self.op == Op.RX:
@@ -417,12 +421,26 @@ class Instruction:
             if self.op == Op.X:
                 assert basis_gates != BasisGates.TYPE6
                 return [Instruction(self.target, Op.U3, params=[pi, 0.0, pi], symbols=self.symbols)]
+            if self.op == Op.CH:
+                H1 = Instruction(self.target, Op.H).to_basis_gate_impl(basis_gates=basis_gates)
+                CX = [Instruction(self.target, Op.CNOT, self.control)]
+                T1 = Instruction(self.target, Op.T).to_basis_gate_impl(basis_gates=basis_gates)
+                TD = Instruction(self.target, Op.TD).to_basis_gate_impl(basis_gates=basis_gates)
+                return H1 + CX + T1 + CX + TD + H1
         else:
             assert basis_gates in [BasisGates.TYPE2, BasisGates.TYPE3, BasisGates.TYPE7]
             if self.op == Op.H:
                 return [Instruction(self.target, Op.RZ, params=[pi/2]),
                 Instruction(self.target, Op.SX),
                 Instruction(self.target, Op.RZ, params=[pi/2])]
+            if self.op == Op.CH:
+                H1 = Instruction(self.target, Op.H).to_basis_gate_impl(basis_gates=basis_gates)
+                CX = [Instruction(self.target, Op.CNOT, self.control)]
+                T1 = Instruction(self.target, Op.T).to_basis_gate_impl(basis_gates=basis_gates)
+                TD = Instruction(self.target, Op.TD).to_basis_gate_impl(basis_gates=basis_gates)
+                return H1 + CX + T1 + CX + TD + H1
+            if self.op == Op.Z:
+                return [Instruction(self.target, Op.RZ, params=[pi])]
             if self.op == Op.U3:
                 ry_symbols = None
                 rz_symbols2 = None
@@ -442,6 +460,8 @@ class Instruction:
                 return rz_lambda + ry_theta + rz_phi
             if self.op == Op.T:
                 return [Instruction(self.target, Op.RZ, params=[pi/4])]
+            if self.op == Op.TD:
+                return [Instruction(self.target, Op.RZ, params=[-pi/4])]
             if self.op == Op.S:
                 return [Instruction(self.target, Op.RZ, params=[-pi/2])]
             if self.op == Op.SD:
@@ -749,7 +769,7 @@ class NoiseModel:
     qubit_to_outdegree: Dict[int, int]
     
     def load_noise_model(self, thermal_relaxation):
-        ibm_noise_model = get_ibm_noise_model(self.hardware_specification, thermal_relaxation=thermal_relaxation)
+        ibm_noise_model = get_ibm_noise_model(self.hardware_spec, thermal_relaxation=thermal_relaxation)
         assert isinstance(ibm_noise_model, IBMNoiseModel)
         self.basis_gates = get_basis_gate_type([get_op(op) for op in ibm_noise_model.basis_gates])
         self.instructions_to_channel = dict()
@@ -852,6 +872,49 @@ class NoiseModel:
         else:
             return 0
         
+    def get_most_noisy_control(self, target):
+        answer_qubit = None
+        succ_prob = None
+        for (control, targets) in self.digraph.items():
+            for target_ in targets:
+                if target_ == target:
+                    instruction  = Instruction(target, Op.CNOT, control)
+                    channel = self.instructions_to_channel[instruction]
+                    assert isinstance(channel, QuantumChannel)
+                    if answer_qubit is None:
+                        answer_qubit = control
+                        succ_prob = channel.estimated_success_prob
+                    elif succ_prob > channel.estimated_success_prob:
+                        answer_qubit = control
+                        succ_prob = channel.estimated_success_prob
+        return answer_qubit
+                    
+    
+    def get_most_noisy_target(self, control):
+        answer_qubit = None
+        succ_prob = None
+        for target in self.digraph[control]:
+            instruction = Instruction(target, Op.CNOT, control)
+            channel = self.instructions_to_channel[instruction]
+            assert isinstance(channel, QuantumChannel)
+            succ_prob_ = channel.estimated_success_prob
+            if answer_qubit is None:
+                answer_qubit = target
+                succ_prob = succ_prob_
+            elif succ_prob_ < succ_prob:
+                succ_prob = succ_prob_
+                answer_qubit = target
+        return answer_qubit
+
+    def get_most_noisy_neighbour(self, qubit: int, is_target=True) -> List[int]:
+        ''' we are looking for a qubit that can serve as control in a CX gate if is_target=True.
+        Otherwise, we are looking for a neighbouring qubit that can serve as target in a CX gate.
+        '''
+        if is_target:
+            return self.get_most_noisy_target(qubit)
+        return self.get_most_noisy_control(qubit)
+        
+    
     def get_qubit_couplers(self, target: int, is_target=True) -> List[int]:
         ''' Returns a list of pairs (qubit_control, QuantumChannel) in which the instruction is a multiqubit gate whose target is the given qubit
         '''
@@ -873,7 +936,7 @@ class NoiseModel:
         result = sorted(result, key=lambda x : x[1].estimated_success_prob, reverse=False)
         return result
     
-    def get_most_noisy_couplers(self):
+    def get_most_noisy_couplers(self) -> List:
         result = []
         for (instruction, channel) in self.instructions_to_channel.items():
             assert isinstance(instruction, Instruction)

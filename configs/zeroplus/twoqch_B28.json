@@ -1,0 +1,14 @@
+{
+    "name": "B28",
+    "experiment_id": "twoqch",
+    "min_horizon": 2,
+    "max_horizon": 3,
+    "output_dir": "results/zeroplus/twoqch/B28",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_cambridge"
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
+}
