@@ -134,6 +134,7 @@ def get_pivot_qubits(noise_model: NoiseModel, only_most_noisy=False):
     return result
 
 def get_selected_couplers(noise_model, target, only_most_noisy=False):
+    assert isinstance(noise_model, NoiseModel)
     couplers = noise_model.get_qubit_couplers(target)
     first_pair = (couplers[0], couplers[1]) # most noisy pair of couplers for this target
     if only_most_noisy:
