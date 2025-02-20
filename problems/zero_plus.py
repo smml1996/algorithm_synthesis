@@ -113,10 +113,10 @@ def get_experiments_actions(noise_model, embedding, experiment_id):
         meas_instruction = Instruction(embedding[0], Op.MEAS).to_basis_gate_impl(noise_model.basis_gates)
         actions.append(POMDPAction("MEAS", meas_instruction))
         
-        for i in range(4, 6):
-            rz_instruction = Instruction(embedding[0], Op.RZ, params=[pi/i]).to_basis_gate_impl(noise_model.basis_gates)
+        for i in range(2, 10, 2):
+            # rz_instruction = Instruction(embedding[0], Op.RZ, params=[pi/i]).to_basis_gate_impl(noise_model.basis_gates)
             # nrz_instruction = Instruction(embedding[0], Op.RZ, params=[-pi/i]).to_basis_gate_impl(noise_model.basis_gates)
-            actions.append(POMDPAction(f"RZ{i}", rz_instruction))
+            # actions.append(POMDPAction(f"RZ{i}", rz_instruction))
             # actions.append(POMDPAction(f"RZ-{i}", nrz_instruction))
             
             ry_instruction = Instruction(embedding[0], Op.RY, params=[pi/i]).to_basis_gate_impl(noise_model.basis_gates)
@@ -250,7 +250,7 @@ if __name__ == "__main__":
     
     print(experiment_id)
     print("generating config files")
-    generate_configs(experiment_id=experiment_id, min_horizon=3, max_horizon=4)
+    generate_configs(experiment_id=experiment_id, min_horizon=3, max_horizon=5)
     
     print("generating embedding files...")
     batches = get_num_qubits_to_hardware(WITH_THERMALIZATION)
