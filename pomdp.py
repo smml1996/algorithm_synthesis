@@ -452,7 +452,7 @@ def build_pomdp(actions: List[POMDPAction],
 
         for action in actions:
             assert isinstance(action, POMDPAction)
-            if guard(current_v, embedding, action):
+            if guard(current_v, embedding, action, current_horizon):
                 assert action.name not in graph[current_v].keys()
                 graph[current_v][action.name] = dict()
 

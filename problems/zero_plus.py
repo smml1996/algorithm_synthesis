@@ -146,13 +146,13 @@ def get_experiments_actions(noise_model, embedding, experiment_id):
         actions.append(POMDPAction("MEAS", meas_instruction))
           
         ry_instruction = Instruction(embedding[0], Op.RY, params=[pi/4]).to_basis_gate_impl(noise_model.basis_gates)
-        actions.append(POMDPAction(f"RY4", ry_instruction))
+        actions.append(POMDPAction(f"RYOpt", ry_instruction))
             
-        for i in [1,2,3]:
-            ry_instruction = Instruction(embedding[0], Op.RY, params=[pi/4 + np.radians(i)]).to_basis_gate_impl(noise_model.basis_gates)
+        for i in [1,2]:
+            ry_instruction = Instruction(embedding[0], Op.RY, params=[pi/4 + (np.radians(i)/10)]).to_basis_gate_impl(noise_model.basis_gates)
             actions.append(POMDPAction(f"RY{i}", ry_instruction))
             
-            ry_instruction = Instruction(embedding[0], Op.RY, params=[pi/4 - np.radians(i)]).to_basis_gate_impl(noise_model.basis_gates)
+            ry_instruction = Instruction(embedding[0], Op.RY, params=[pi/4 - (np.radians(i)/10)]).to_basis_gate_impl(noise_model.basis_gates)
             actions.append(POMDPAction(f"RY-{i}", ry_instruction))
         
         print("Total actions:", len(actions))
@@ -256,10 +256,8 @@ def get_hardware_scenarios(hardware_spec: HardwareSpec, experiment_id) -> List[D
     return answer
     
 def halt_guard(vertex: POMDPVertex, embedding: Dict[int, int], action: POMDPAction, horizon) -> bool:
-    if action.name[0] == "R":
-        return horizon == 0
-    if action.name == "MEAS":
-        return horizon == 1
+    if horizon == 0:
+        return action.name[0] == "R"
     cs = vertex.classical_state
     hidden_index = len(embedding.keys()) - 2
     return cread(cs, embedding[hidden_index]) == 0 and cread(cs, embedding[hidden_index+1]) == 0
@@ -283,7 +281,7 @@ if __name__ == "__main__":
     elif arg == "oneqdeltamany":
         experiment_id = ZeroPlusExperimentID.ONEQDELTAMANY
         min_horizon = 3
-        max_horizon = 3
+        max_horizon = 5
     elif arg == "twoqp":
         if sys.argv[2] == "setup":
             setup = True

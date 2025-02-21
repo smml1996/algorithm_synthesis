@@ -1,9 +1,9 @@
 {
     "name": "B15",
-    "experiment_id": "oneqdeltamany",
+    "experiment_id": "twoqp",
     "min_horizon": 3,
     "max_horizon": 5,
-    "output_dir": "results/zeroplus/oneqdeltamany/B15",
+    "output_dir": "results/zeroplus/twoqp/B15",
     "algorithms_file": "",
     "hardware": [
         "fake_melbourne"

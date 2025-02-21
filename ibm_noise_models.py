@@ -506,6 +506,8 @@ class KrausOperator:
     
 def is_identity(seq: List[GateData]):
     for s in seq:
+        if isinstance(s, KrausOperator):
+            return False
         assert(isinstance(s, GateData))
         assert isinstance(s.label, Op)
         if s.label != Op.I:

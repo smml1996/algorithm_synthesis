@@ -2,7 +2,7 @@
     "name": "B127",
     "experiment_id": "oneqdeltamany",
     "min_horizon": 3,
-    "max_horizon": 3,
+    "max_horizon": 5,
     "output_dir": "results/zeroplus/oneqdeltamany/B127",
     "algorithms_file": "",
     "hardware": [
