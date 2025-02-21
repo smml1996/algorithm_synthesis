@@ -1,0 +1,14 @@
+{
+    "name": "B28",
+    "experiment_id": "oneqdeltamany",
+    "min_horizon": 3,
+    "max_horizon": 3,
+    "output_dir": "results/zeroplus/oneqdeltamany/B28",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_cambridge"
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
+}

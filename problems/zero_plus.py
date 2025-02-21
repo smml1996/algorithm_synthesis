@@ -23,6 +23,7 @@ WITH_THERMALIZATION = False
 class ZeroPlusExperimentID(Enum):
     ONEQ = "oneq"
     ONEQDELTA = "oneqdelta"
+    ONEQDELTAMANY = "oneqdeltamany"
     TWOQ1 = "twoq1" # cx(1,2), H(2), T(2), TD(2), meas(2).
     TWOQCH = "twoqch" # ch(1,2), meas(1), meas(2), x(2)
     TWOQP = "twoqp"
@@ -47,7 +48,7 @@ class ZeroPlusInstance:
         assert 0 in self.embedding.keys()
         assert 1 in self.embedding.keys()
         self.qubits_used = [self.embedding[0], self.embedding[1]]
-        if self.experiment_id in [ZeroPlusExperimentID.ONEQ, ZeroPlusExperimentID.ONEQDELTA]:
+        if self.experiment_id in [ZeroPlusExperimentID.ONEQ, ZeroPlusExperimentID.ONEQDELTA, ZeroPlusExperimentID.ONEQDELTAMANY]:
             assert len(self.embedding.keys()) == 3
             self.hidden_index = 1
             self.remove_qubits = [self.embedding[0]]
@@ -140,6 +141,21 @@ def get_experiments_actions(noise_model, embedding, experiment_id):
         ry_5_instruction = Instruction(embedding[0], Op.RY, params=[np.radians(-5)]).to_basis_gate_impl(noise_model.basis_gates)
         actions.append(POMDPAction(f"RY-5", ry_5_instruction))
         print("Total actions:", len(actions))
+    elif experiment_id == ZeroPlusExperimentID.ONEQDELTAMANY:
+        meas_instruction = Instruction(embedding[0], Op.MEAS).to_basis_gate_impl(noise_model.basis_gates)
+        actions.append(POMDPAction("MEAS", meas_instruction))
+          
+        ry_instruction = Instruction(embedding[0], Op.RY, params=[pi/4]).to_basis_gate_impl(noise_model.basis_gates)
+        actions.append(POMDPAction(f"RY4", ry_instruction))
+            
+        for i in [1,2,3]:
+            ry_instruction = Instruction(embedding[0], Op.RY, params=[pi/4 + np.radians(i)]).to_basis_gate_impl(noise_model.basis_gates)
+            actions.append(POMDPAction(f"RY{i}", ry_instruction))
+            
+            ry_instruction = Instruction(embedding[0], Op.RY, params=[pi/4 - np.radians(i)]).to_basis_gate_impl(noise_model.basis_gates)
+            actions.append(POMDPAction(f"RY-{i}", ry_instruction))
+        
+        print("Total actions:", len(actions))
     elif experiment_id == ZeroPlusExperimentID.TWOQ1:
         cx_instruction = Instruction(embedding[1], Op.CNOT, embedding[0])
         actions.append(POMDPAction("CX01", [cx_instruction]))
@@ -218,7 +234,7 @@ def get_hardware_scenarios(hardware_spec: HardwareSpec, experiment_id) -> List[D
     noise_model = NoiseModel(hardware_spec, thermal_relaxation=False)
     answer = []
     pivot_qubits = get_pivot_qubits(noise_model)
-    if experiment_id in [ZeroPlusExperimentID.ONEQ, ZeroPlusExperimentID.ONEQDELTA]:
+    if experiment_id in [ZeroPlusExperimentID.ONEQ, ZeroPlusExperimentID.ONEQDELTA, ZeroPlusExperimentID.ONEQDELTAMANY]:
        for i in pivot_qubits:
            embedding = dict()
            embedding[0] = i
@@ -239,7 +255,11 @@ def get_hardware_scenarios(hardware_spec: HardwareSpec, experiment_id) -> List[D
         raise Exception(f"get_hardware_scenarios for experiment {experiment_id} not implemented")
     return answer
     
-def halt_guard(vertex: POMDPVertex, embedding: Dict[int, int], action: POMDPAction) -> bool:
+def halt_guard(vertex: POMDPVertex, embedding: Dict[int, int], action: POMDPAction, horizon) -> bool:
+    if action.name[0] == "R":
+        return horizon == 0
+    if action.name == "MEAS":
+        return horizon == 1
     cs = vertex.classical_state
     hidden_index = len(embedding.keys()) - 2
     return cread(cs, embedding[hidden_index]) == 0 and cread(cs, embedding[hidden_index+1]) == 0
@@ -260,6 +280,10 @@ if __name__ == "__main__":
         experiment_id = ZeroPlusExperimentID.ONEQDELTA
         min_horizon = 3
         max_horizon = 6
+    elif arg == "oneqdeltamany":
+        experiment_id = ZeroPlusExperimentID.ONEQDELTAMANY
+        min_horizon = 3
+        max_horizon = 3
     elif arg == "twoqp":
         if sys.argv[2] == "setup":
             setup = True
