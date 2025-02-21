@@ -3,6 +3,8 @@ from enum import Enum
 from math import pi
 import os, sys
 from typing import Dict, List
+
+import numpy as np
 sys.path.append(os.getcwd()+"/..")
 
 from utils import are_matrices_equal, Precision
@@ -20,7 +22,7 @@ WITH_THERMALIZATION = False
 
 class ZeroPlusExperimentID(Enum):
     ONEQ = "oneq"
-    ONEQ10PI = "oneq10pi"
+    ONEQDELTA = "oneqdelta"
     TWOQ1 = "twoq1" # cx(1,2), H(2), T(2), TD(2), meas(2).
     TWOQCH = "twoqch" # ch(1,2), meas(1), meas(2), x(2)
     TWOQP = "twoqp"
@@ -45,7 +47,7 @@ class ZeroPlusInstance:
         assert 0 in self.embedding.keys()
         assert 1 in self.embedding.keys()
         self.qubits_used = [self.embedding[0], self.embedding[1]]
-        if self.experiment_id in [ZeroPlusExperimentID.ONEQ, ZeroPlusExperimentID.ONEQ10PI]:
+        if self.experiment_id in [ZeroPlusExperimentID.ONEQ, ZeroPlusExperimentID.ONEQDELTA]:
             assert len(self.embedding.keys()) == 3
             self.hidden_index = 1
             self.remove_qubits = [self.embedding[0]]
@@ -125,22 +127,19 @@ def get_experiments_actions(noise_model, embedding, experiment_id):
             actions.append(POMDPAction(f"RY-{i}", nry_instruction + [cx_instruction]))
         print("Total actions:", len(actions))
         
-    elif experiment_id == ZeroPlusExperimentID.ONEQ10PI:
+    elif experiment_id == ZeroPlusExperimentID.ONEQDELTA:
         meas_instruction = Instruction(embedding[0], Op.MEAS).to_basis_gate_impl(noise_model.basis_gates)
         actions.append(POMDPAction("MEAS", meas_instruction))
+                    
+        ry_instruction = Instruction(embedding[0], Op.RY, params=[pi/4]).to_basis_gate_impl(noise_model.basis_gates)
+        actions.append(POMDPAction(f"RY4", ry_instruction))
         
-        for i in range(2, 10, 2):
-            # rz_instruction = Instruction(embedding[0], Op.RZ, params=[pi/i]).to_basis_gate_impl(noise_model.basis_gates)
-            # nrz_instruction = Instruction(embedding[0], Op.RZ, params=[-pi/i]).to_basis_gate_impl(noise_model.basis_gates)
-            # actions.append(POMDPAction(f"RZ{i}", rz_instruction))
-            # actions.append(POMDPAction(f"RZ-{i}", nrz_instruction))
-            
-            ry_instruction = Instruction(embedding[0], Op.RY, params=[pi/i]).to_basis_gate_impl(noise_model.basis_gates)
-            # nry_instruction = Instruction(embedding[0], Op.RY, params=[-pi/i]).to_basis_gate_impl(noise_model.basis_gates)
-            actions.append(POMDPAction(f"RY{i}", ry_instruction))
-            # actions.append(POMDPAction(f"RY-{i}", nry_instruction))
+        ry5_instruction = Instruction(embedding[0], Op.RY, params=[np.radians(5)]).to_basis_gate_impl(noise_model.basis_gates)
+        actions.append(POMDPAction(f"RY5", ry5_instruction))
+        
+        ry_5_instruction = Instruction(embedding[0], Op.RY, params=[np.radians(-5)]).to_basis_gate_impl(noise_model.basis_gates)
+        actions.append(POMDPAction(f"RY-5", ry_5_instruction))
         print("Total actions:", len(actions))
-            
     elif experiment_id == ZeroPlusExperimentID.TWOQ1:
         cx_instruction = Instruction(embedding[1], Op.CNOT, embedding[0])
         actions.append(POMDPAction("CX01", [cx_instruction]))
@@ -219,7 +218,7 @@ def get_hardware_scenarios(hardware_spec: HardwareSpec, experiment_id) -> List[D
     noise_model = NoiseModel(hardware_spec, thermal_relaxation=False)
     answer = []
     pivot_qubits = get_pivot_qubits(noise_model)
-    if experiment_id in [ZeroPlusExperimentID.ONEQ, ZeroPlusExperimentID.ONEQ10PI]:
+    if experiment_id in [ZeroPlusExperimentID.ONEQ, ZeroPlusExperimentID.ONEQDELTA]:
        for i in pivot_qubits:
            embedding = dict()
            embedding[0] = i
@@ -257,10 +256,10 @@ if __name__ == "__main__":
         experiment_id = ZeroPlusExperimentID.TWOQ1
     elif arg == "twoqch":
         experiment_id = ZeroPlusExperimentID.TWOQCH
-    elif arg == "oneq10":
-        experiment_id = ZeroPlusExperimentID.ONEQ10PI
+    elif arg == "oneqdelta":
+        experiment_id = ZeroPlusExperimentID.ONEQDELTA
         min_horizon = 3
-        max_horizon = 5
+        max_horizon = 6
     elif arg == "twoqp":
         if sys.argv[2] == "setup":
             setup = True
