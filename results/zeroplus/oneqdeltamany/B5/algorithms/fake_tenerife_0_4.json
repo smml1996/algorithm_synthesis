@@ -1,0 +1,41 @@
+{
+    "action": "RYOpt",
+    "case0": "None",
+    "case1": "None",
+    "next": {
+        "action": "MEAS",
+        "case0": {
+            "action": "RY2",
+            "case0": "None",
+            "case1": "None",
+            "next": {
+                "action": "IS0",
+                "case0": "None",
+                "case1": "None",
+                "next": {
+                    "action": "halt",
+                    "case0": "None",
+                    "case1": "None",
+                    "next": "None"
+                }
+            }
+        },
+        "case1": {
+            "action": "RY2",
+            "case0": "None",
+            "case1": "None",
+            "next": {
+                "action": "ISPlus",
+                "case0": "None",
+                "case1": "None",
+                "next": {
+                    "action": "halt",
+                    "case0": "None",
+                    "case1": "None",
+                    "next": "None"
+                }
+            }
+        },
+        "next": "None"
+    }
+}

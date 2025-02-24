@@ -1,8 +1,17 @@
 {
-    "action": "RY-1",
-    "case0": "None",
-    "case1": "None",
-    "next": {
+    "action": "MEAS",
+    "case0": {
+        "action": "IS0",
+        "case0": "None",
+        "case1": "None",
+        "next": {
+            "action": "halt",
+            "case0": "None",
+            "case1": "None",
+            "next": "None"
+        }
+    },
+    "case1": {
         "action": "MEAS",
         "case0": {
             "action": "IS0",
@@ -27,5 +36,6 @@
             }
         },
         "next": "None"
-    }
+    },
+    "next": "None"
 }
