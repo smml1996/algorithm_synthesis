@@ -253,6 +253,7 @@ def get_qs_probability(quantum_state, address, is_zero=False, is_floor=True):
 def get_seq_probability(quantum_state: QuantumState, seq: List[GateData], is_floor=True):
     count_meas = 0
     for s in seq:
+        print(type(s))
         assert isinstance(s, GateData)
         assert s.label != Op.MEAS
         if s.label == Op.P0 or s.label == Op.P1:

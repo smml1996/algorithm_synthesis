@@ -1,5 +1,5 @@
 from cmath import isclose
-from ibm_noise_models import Instruction, MeasChannel, NoiseModel, QuantumChannel
+from ibm_noise_models import Instruction, KrausOperator, MeasChannel, NoiseModel, QuantumChannel
 from qmemory import get_seq_probability, handle_write
 from qpu_utils import Op
 from utils import Precision, Queue
@@ -132,6 +132,7 @@ class POMDPAction:
             result (Dict[POMDPVertex, float], optional): _description_. Defaults to None.
         """
         for (index, err_seq) in enumerate(channel.errors): 
+            assert len(err_seq) > 0
             new_qs = handle_write(vertex.quantum_state, instruction.get_gate_data())
             errored_seq, seq_prob = get_seq_probability(new_qs, err_seq)
             if seq_prob > 0.0:
@@ -452,7 +453,7 @@ def build_pomdp(actions: List[POMDPAction],
 
         for action in actions:
             assert isinstance(action, POMDPAction)
-            if guard(current_v, embedding, action, current_horizon):
+            if guard(current_v, embedding, action):
                 assert action.name not in graph[current_v].keys()
                 graph[current_v][action.name] = dict()
 

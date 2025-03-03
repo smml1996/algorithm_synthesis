@@ -478,41 +478,6 @@ class Instruction:
                     return answer
                 
         raise Exception(f"Cannot translate {self.op} to basis gates {basis_gates}")
-        
-class KrausOperator:
-    def __init__(self, operators, qubit) -> None:
-        for operator in operators:
-            assert operator.shape == (2,2) # for now we are dealing only with single qubit operators
-        self.operators = operators # these are matrices
-        self.target = qubit
-
-    def serialize(self):
-        serialized_operators = []
-        for op in self.operators:
-            curr_op = []
-            for l in op:
-                temp_l = []
-                for element in l:
-                    temp_l.append({'real': element.real, 'im': element.imag})
-                curr_op.append(temp_l)
-            serialized_operators.append(curr_op)
-            
-
-        return {
-            'type': 'kraus',
-            'target': self.target,
-            'ops': serialized_operators,
-        }
-    
-def is_identity(seq: List[GateData]):
-    for s in seq:
-        if isinstance(s, KrausOperator):
-            return False
-        assert(isinstance(s, GateData))
-        assert isinstance(s.label, Op)
-        if s.label != Op.I:
-            return False
-    return True
 
 class QuantumChannel:
     def __init__(self, all_ins_sequences, all_probabilities, target_qubits, optimize=False, flatten=False) -> None:
@@ -725,6 +690,42 @@ class QuantumChannel:
             return QuantumChannel.optimize_err_sequence(answer)
         else:
             return answer
+
+class KrausOperator:
+    def __init__(self, operators, qubit) -> None:
+        for operator in operators:
+            assert operator.shape == (2,2) # for now we are dealing only with single qubit operators
+        self.operators = operators # these are matrices
+        self.target = qubit
+
+    def serialize(self):
+        serialized_operators = []
+        for op in self.operators:
+            curr_op = []
+            for l in op:
+                temp_l = []
+                for element in l:
+                    temp_l.append({'real': element.real, 'im': element.imag})
+                curr_op.append(temp_l)
+            serialized_operators.append(curr_op)
+            
+
+        return {
+            'type': 'kraus',
+            'target': self.target,
+            'ops': serialized_operators,
+        }
+    
+def is_identity(seq: List[GateData]):
+    for s in seq:
+        if isinstance(s, KrausOperator):
+            return False
+        assert(isinstance(s, GateData))
+        assert isinstance(s.label, Op)
+        if s.label != Op.I:
+            return False
+    return True
+
 
 
 class MeasChannel:
