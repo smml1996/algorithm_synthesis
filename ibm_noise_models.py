@@ -5,10 +5,10 @@ from math import pi
 from typing import Any, Dict, List, Optional
 import numpy as np
 from qiskit import QuantumCircuit, transpile
-from qiskit.providers.fake_provider import *
+from qiskit_ibm_runtime.fake_provider import *
 from qiskit_aer.noise import NoiseModel as IBMNoiseModel
 from qiskit_aer import AerSimulator
-from qiskit.extensions import XGate, ZGate, CXGate, UGate, SXGate, RZGate, CCXGate, CZGate, CCZGate, HGate
+from qiskit.circuit.library import XGate, ZGate, CXGate, UGate, SXGate, RZGate, CCXGate, CZGate, CCZGate, HGate
 from qpu_utils import *
 import json
 
@@ -17,18 +17,29 @@ from utils import CONFIG_KEYS, Precision, find_enum_object, invert_dict, myceil,
 
 class HardwareSpec(Enum):
     # Quantum hardware names available in Qiskit
-    TENERIFE = "fake_tenerife"
+    ALGIERS = "fake_algiers"
+    # BRISBANE = "fake_brisbane" # uses ECR gate
+    # CUSCO = "fake_cusco" # uses ECR gate
+    FEZ = "fake_fez"
+    # KAWASAKI = "fake_kawasaki" # uses ecr gate
+    # KYIV = "fake_kyiv" # uses ecr gate
+    # KYOTO = "fake_kyoto" # uses ecr gate
+    MAKARRESH = "fake_makarresh"
+    # OSAKA = "fake_osaka" # uses ecr gate
+    TORINO = "fake_torino"
+    VALENCIA = "fake_valencia"
+    
     JOHANNESBURG = "fake_johannesburg"
     PERTH = "fake_perth"
     LAGOS = "fake_lagos"
     NAIROBI = "fake_nairobi"
     HANOI = "fake_hanoi"
-    CAIRO = "fake_cairo"
+    # CAIRO = "fake_cairo" # uses ecr gate
     MUMBAI = "fake_mumbai"
     KOLKATA = "fake_kolkata"
-    # PRAGUE = "fake_prague"
+    PRAGUE = "fake_prague"
     ALMADEN = "fake_almaden"
-    # ARMONK = "fake_armonk"
+    ARMONK = "fake_armonk"
     ATHENS = "fake_athens"
     AUCKLAND = "fake_auckland"
     BELEM = "fake_belem"
@@ -54,11 +65,9 @@ class HardwareSpec(Enum):
     POUGHKEEPSIE = "fake_poughkeepsie"
     ROCHESTER = "fake_rochester"
     ROME = "fake_rome"
-    # RUESCHLIKON = "fake_rueschlikon"
     SANTIAGO = "fake_santiago"
     SINGAPORE = "fake_singapore"
     SYDNEY = "fake_sydney"
-    TOKYO = "fake_tokyo"
     TORONTO = "fake_toronto"
     VIGO = "fake_vigo"
     WASHINGTON = "fake_washington"
@@ -91,102 +100,118 @@ def load_config_file(path: str, experimentID: Enum):
 
 def get_ibm_noise_model(hardware_spec: HardwareSpec, thermal_relaxation=True) -> IBMNoiseModel:
     backend_ = hardware_spec
-    if backend_ == HardwareSpec.TENERIFE:
-        backend = FakeTenerife()
+    if backend_ == HardwareSpec.ALGIERS:
+        backend = FakeAlgiers()
+    # elif backend_ == HardwareSpec.BRISBANE:
+    #     backend = FakeBrisbane()
+    # elif backend_ == HardwareSpec.CUSCO:
+    #     backend = FakeCusco()
+    elif backend_ == HardwareSpec.FEZ:
+        backend = FakeFez()
+    # elif backend_ == HardwareSpec.KAWASAKI:
+    #     backend = FakeKawasaki()
+    # elif backend_ == HardwareSpec.KYIV:
+    #     backend = FakeKyiv()
+    # elif backend_ == HardwareSpec.KYOTO:
+    #     backend = FakeKyoto()
+    elif backend_ == HardwareSpec.MAKARRESH:
+        backend = FakeMarrakesh()
+    # elif backend_ == HardwareSpec.OSAKA:
+    #     backend = FakeOsaka()
+    elif backend_ == HardwareSpec.TORINO:
+        backend = FakeTorino()
+    elif backend_ == HardwareSpec.VALENCIA:
+        backend = FakeValenciaV2()
     elif backend_ == HardwareSpec.JOHANNESBURG:
-        backend = FakeJohannesburg()
+        backend = FakeJohannesburgV2()
     elif backend_ == HardwareSpec.PERTH:
         backend = FakePerth()
     elif backend_ == HardwareSpec.LAGOS:
-        backend = FakeLagos()
+        backend = FakeLagosV2()
     elif backend_ == HardwareSpec.NAIROBI:
-        backend = FakeNairobi()
+        backend = FakeNairobiV2()
     elif backend_ ==  HardwareSpec.HANOI:
-        backend = FakeHanoi()
-    elif backend_ == HardwareSpec.CAIRO:
-        backend = FakeCairo()
+        backend = FakeHanoiV2()
+    # elif backend_ == HardwareSpec.CAIRO:
+    #     backend = FakeCairoV2()
     elif backend_ == HardwareSpec.MUMBAI:
-        backend = FakeMumbai()
+        backend = FakeMumbaiV2()
     elif backend_ == HardwareSpec.KOLKATA:
-        backend = FakeKolkata()
-    # elif backend_ == HardwareSpec.PRAGUE:
-    #     backend = FakePrague()
+        backend = FakeKolkataV2()
+    elif backend_ == HardwareSpec.PRAGUE:
+        backend = FakePrague()
     elif backend_ == HardwareSpec.ALMADEN:
-        backend = FakeAlmaden()
-    # elif backend_ == HardwareSpec.ARMONK:
-    #     backend = FakeArmonk()
+        backend = FakeAlmadenV2()
+    elif backend_ == HardwareSpec.ARMONK:
+        backend = FakeArmonkV2()
     elif backend_ == HardwareSpec.ATHENS:
-        backend = FakeAthens()
+        backend = FakeAthensV2()
     elif backend_ == HardwareSpec.AUCKLAND:
         backend = FakeAuckland()
     elif backend_ == HardwareSpec.BELEM:
-        backend = FakeBelem()
+        backend = FakeBelemV2()
     elif backend_ == HardwareSpec.BOEBLINGEN:
-        backend = FakeBoeblingen()
+        backend = FakeBoeblingenV2()
     elif backend_ == HardwareSpec.BOGOTA:
-        backend = FakeBogota()
+        backend = FakeBogotaV2()
     elif backend_ == HardwareSpec.BROOKLYN:
-        backend = FakeBrooklyn()
+        backend = FakeBrooklynV2()
     elif backend_ == HardwareSpec.BURLINGTON:
-        backend = FakeBurlington()
+        backend = FakeBurlingtonV2()
     elif backend_ == HardwareSpec.CAMBRIDGE:
-        backend = FakeCambridge()
+        backend = FakeCambridgeV2()
     elif backend_ == HardwareSpec.CASABLANCA:
-        backend = FakeCasablanca()
+        backend = FakeCasablancaV2()
     elif backend_ == HardwareSpec.ESSEX:
-        backend = FakeEssex()
+        backend = FakeEssexV2()
     elif backend_ == HardwareSpec.GENEVA:
         backend = FakeGeneva()
     elif backend_ == HardwareSpec.GUADALUPE:
-        backend = FakeGuadalupe()
+        backend = FakeGuadalupeV2()
     elif backend_ == HardwareSpec.LIMA:
-        backend = FakeLima()
+        backend = FakeLimaV2()
     elif backend_ == HardwareSpec.LONDON:
-        backend = FakeLondon()
+        backend = FakeLondonV2()
     elif backend_ == HardwareSpec.MANHATTAN:
-        backend = FakeManhattan()
+        backend = FakeManhattanV2()
     elif backend_ == HardwareSpec.MANILA:
-        backend = FakeManila()
+        backend = FakeManilaV2()
     elif backend_ == HardwareSpec.MELBOURNE:
-        backend = FakeMelbourne()
+        backend = FakeMelbourneV2()
     elif backend_ == HardwareSpec.MONTREAL:
-        backend = FakeMontreal()
+        backend = FakeMontrealV2()
     elif backend_ == HardwareSpec.OSLO:
         backend = FakeOslo()
     elif backend_ == HardwareSpec.OURENSE:
-        backend = FakeOurense()
+        backend = FakeOurenseV2()
     elif backend_ == HardwareSpec.JAKARTA:
-        backend = FakeJakarta()
+        backend = FakeJakartaV2()
     elif backend_ == HardwareSpec.PARIS:
-        backend = FakeParis()
+        backend = FakeParisV2()
     elif backend_ == HardwareSpec.QUITO:
-        backend = FakeQuito()
+        backend = FakeQuitoV2()
     elif backend_ == HardwareSpec.POUGHKEEPSIE:
-        backend = FakePoughkeepsie()
+        backend = FakePoughkeepsieV2()
     elif backend_ == HardwareSpec.ROCHESTER:
-        backend = FakeRochester()
+        backend = FakeRochesterV2()
     elif backend_ == HardwareSpec.ROME:
-        backend = FakeRome()
-    # elif backend_ == HardwareSpec.RUESCHLIKON:
-    #     backend = FakeRueschlikon()
+        backend = FakeRomeV2()
     elif backend_ == HardwareSpec.SANTIAGO:
-        backend = FakeSantiago()
+        backend = FakeSantiagoV2()
     elif backend_ == HardwareSpec.SINGAPORE:
-        backend = FakeSingapore()
+        backend = FakeSingaporeV2()
     elif backend_ == HardwareSpec.SYDNEY:
-        backend = FakeSydney()
-    elif backend_ == HardwareSpec.TOKYO:
-        backend = FakeTokyo()
+        backend = FakeSydneyV2()
     elif backend_ == HardwareSpec.TORONTO:
-        backend = FakeToronto()
+        backend = FakeTorontoV2()
     elif backend_ == HardwareSpec.VIGO:
-        backend = FakeVigo()
+        backend = FakeVigoV2()
     elif backend_ == HardwareSpec.WASHINGTON:
-        backend = FakeWashington()
+        backend = FakeWashingtonV2()
     elif backend_ == HardwareSpec.YORKTOWN:
-        backend = FakeYorktown()
+        backend = FakeYorktownV2()
     elif backend_ == HardwareSpec.JAKARTA:
-        backend = FakeJakarta()
+        backend = FakeJakartaV2()
     else:
         raise Exception("Could not retrieve backend", hardware_spec)
     ibm_noise_model = IBMNoiseModel.from_backend(backend, thermal_relaxation=thermal_relaxation)

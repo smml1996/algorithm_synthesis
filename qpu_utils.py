@@ -55,23 +55,36 @@ class Op(Enum):
 
     DELAY = "DELAY"
     CUSTOM = "CUSTOM"
+    
+    FOR_LOOP = 'FOR_LOOP'
+    IF_ELSE = 'IF_ELSE'
+    SWITCH_CASE = 'SWITCH_CASE'
     def __repr__(self) -> str:
         return self.__str__()
     
 class BasisGates(Enum):
-    TYPE1 = [Op.CNOT, Op.I, Op.U1, Op.U2, Op.U3]
-    TYPE2 = [Op.CNOT, Op.DELAY, Op.I, Op.MEAS, Op.RESET, Op.RZ, Op.SX, Op.X]
-    TYPE3 = [Op.CNOT, Op.I, Op.RESET, Op.RZ, Op.SX, Op.X]
-    TYPE4 = [Op.CZ, Op.DELAY, Op.I, Op.MEAS, Op.RESET, Op.RZ, Op.SX, Op.X]
-    TYPE5 = [Op.I, Op.RZ, Op.SX, Op.X]
-    TYPE6 = [Op.CNOT, Op.I, Op.SX, Op.U1, Op.U2, Op.U3, Op.X]
-    TYPE7 = [Op.CNOT, Op.I, Op.RZ, Op.SX, Op.X]
-
+    TYPE1 = set([Op.CNOT, Op.U1, Op.U2, Op.U3])
+    TYPE2 = set([Op.CNOT, Op.MEAS, Op.RESET, Op.RZ, Op.SX, Op.X])
+    TYPE3 = set([Op.CNOT, Op.RESET, Op.RZ, Op.SX, Op.X])
+    TYPE4 = set([Op.CZ, Op.MEAS, Op.RESET, Op.RZ, Op.SX, Op.X])
+    TYPE5 = set([Op.RZ, Op.SX, Op.X])
+    TYPE6 = set([Op.CNOT, Op.SX, Op.U1, Op.U2, Op.U3, Op.X])
+    TYPE7 = set([Op.CNOT, Op.RZ, Op.SX, Op.X])
+    TYPE8 = set([Op.U1, Op.RESET, Op.U3, Op.MEAS, Op.U2, Op.CNOT])
+    TYPE9 = set([Op.RESET, Op.MEAS, Op.RZ, Op.SX, Op.X])
+    
 def get_basis_gate_type(basis_gates):
+    filtered_basis_gates = []
+    
+    for basis_gate in basis_gates:
+        if not (basis_gate in [Op.FOR_LOOP, Op.IF_ELSE, Op.SWITCH_CASE, Op.DELAY, Op.I]):
+            filtered_basis_gates.append(basis_gate)
+
+    filtered_basis_gates = set(filtered_basis_gates)
     for b in BasisGates:
-        if b.value == basis_gates:
+        if b.value == filtered_basis_gates:
             return b
-    raise Exception(f"No type matches with the current basis gates ({basis_gates})")
+    raise Exception(f"No type matches with the current basis gates ({filtered_basis_gates})")
     
 def is_pauli(op: Op):
     return op in [Op.X, Op.Z, Op.Y, Op.I]
