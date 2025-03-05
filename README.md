@@ -7,10 +7,10 @@ In order to synthesize algorithms we have to first generate the Partially Observ
     - [For the POMDPs generator](#for-the-pomdps-generator)
     - [For algorithm synthesis](#for-algorithm-synthesis)
   - [Usage](#usage)
-    - [Generate a configuration file](#generate-a-configuration-file)
-    - [Generate an embeddings file](#generate-an-embeddings-file)
-    - [Generate the POMDPs](#generate-the-pomdps)
-    - [Synthesize algorithms](#synthesize-algorithms)
+    1. [Generate a configuration file](#generate-a-configuration-file)
+    2. [Generate an embeddings file](#generate-an-embeddings-file)
+    3. [Generate the POMDPs](#generate-the-pomdps)
+    4. [Synthesize algorithms](#synthesize-algorithms)
    
 ## Hardware Specifications<a name="hardware-specifications"></a>
 The quantum hardware specifications we consider are available in Qiskit and are the following:
