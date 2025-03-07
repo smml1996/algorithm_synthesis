@@ -18,14 +18,14 @@ from utils import CONFIG_KEYS, Precision, find_enum_object, invert_dict, myceil,
 class HardwareSpec(Enum):
     # Quantum hardware names available in Qiskit
     ALGIERS = "fake_algiers"
-    # BRISBANE = "fake_brisbane" # uses ECR gate
-    # CUSCO = "fake_cusco" # uses ECR gate
+    BRISBANE = "fake_brisbane" # uses ECR gate
+    CUSCO = "fake_cusco" # uses ECR gate
     FEZ = "fake_fez"
-    # KAWASAKI = "fake_kawasaki" # uses ecr gate
-    # KYIV = "fake_kyiv" # uses ecr gate
-    # KYOTO = "fake_kyoto" # uses ecr gate
+    KAWASAKI = "fake_kawasaki" # uses ecr gate
+    KYIV = "fake_kyiv" # uses ecr gate
+    KYOTO = "fake_kyoto" # uses ecr gate
     MAKARRESH = "fake_makarresh"
-    # OSAKA = "fake_osaka" # uses ecr gate
+    OSAKA = "fake_osaka" # uses ecr gate
     TORINO = "fake_torino"
     VALENCIA = "fake_valencia"
     
@@ -34,7 +34,7 @@ class HardwareSpec(Enum):
     LAGOS = "fake_lagos"
     NAIROBI = "fake_nairobi"
     HANOI = "fake_hanoi"
-    # CAIRO = "fake_cairo" # uses ecr gate
+    CAIRO = "fake_cairo" # uses ecr gate
     MUMBAI = "fake_mumbai"
     KOLKATA = "fake_kolkata"
     PRAGUE = "fake_prague"
@@ -102,22 +102,22 @@ def get_ibm_noise_model(hardware_spec: HardwareSpec, thermal_relaxation=True) ->
     backend_ = hardware_spec
     if backend_ == HardwareSpec.ALGIERS:
         backend = FakeAlgiers()
-    # elif backend_ == HardwareSpec.BRISBANE:
-    #     backend = FakeBrisbane()
-    # elif backend_ == HardwareSpec.CUSCO:
-    #     backend = FakeCusco()
+    elif backend_ == HardwareSpec.BRISBANE:
+        backend = FakeBrisbane()
+    elif backend_ == HardwareSpec.CUSCO:
+        backend = FakeCusco()
     elif backend_ == HardwareSpec.FEZ:
         backend = FakeFez()
-    # elif backend_ == HardwareSpec.KAWASAKI:
-    #     backend = FakeKawasaki()
-    # elif backend_ == HardwareSpec.KYIV:
-    #     backend = FakeKyiv()
-    # elif backend_ == HardwareSpec.KYOTO:
-    #     backend = FakeKyoto()
+    elif backend_ == HardwareSpec.KAWASAKI:
+        backend = FakeKawasaki()
+    elif backend_ == HardwareSpec.KYIV:
+        backend = FakeKyiv()
+    elif backend_ == HardwareSpec.KYOTO:
+        backend = FakeKyoto()
     elif backend_ == HardwareSpec.MAKARRESH:
         backend = FakeMarrakesh()
-    # elif backend_ == HardwareSpec.OSAKA:
-    #     backend = FakeOsaka()
+    elif backend_ == HardwareSpec.OSAKA:
+        backend = FakeOsaka()
     elif backend_ == HardwareSpec.TORINO:
         backend = FakeTorino()
     elif backend_ == HardwareSpec.VALENCIA:
@@ -132,8 +132,8 @@ def get_ibm_noise_model(hardware_spec: HardwareSpec, thermal_relaxation=True) ->
         backend = FakeNairobiV2()
     elif backend_ ==  HardwareSpec.HANOI:
         backend = FakeHanoiV2()
-    # elif backend_ == HardwareSpec.CAIRO:
-    #     backend = FakeCairoV2()
+    elif backend_ == HardwareSpec.CAIRO:
+        backend = FakeCairoV2()
     elif backend_ == HardwareSpec.MUMBAI:
         backend = FakeMumbaiV2()
     elif backend_ == HardwareSpec.KOLKATA:
@@ -825,7 +825,7 @@ class NoiseModel:
                 target = error_target_qubits[1]
                 target_qubits = [control, target]
 
-                assert op in [Op.CNOT, Op.CZ]
+                assert is_multiqubit_gate(op)
                 if target not in self.qubit_to_indegree.keys():
                     self.qubit_to_indegree[target] = 0
                 if control not in self.qubit_to_outdegree.keys():

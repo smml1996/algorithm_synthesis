@@ -283,14 +283,33 @@ def handle_write(quantum_state: QuantumState, gate_data: GateData, is_inverse=Fa
         if op == Op.SWAP:
             index1 = gate_data.target
             assert len(gate_data.controls) == 1
-            index2 = gate_data.controls[0]
+            index2 = gate_data.control
             
-            cx_gate1 = GateData(Op.CNOT, index2, controls=[index1])
-            cx_gate2 = GateData(Op.CNOT, index1, controls=[index2])
-            result = handle_write(quantum_state, cx_gate1)
-            result = handle_write(quantum_state, cx_gate2)
-            result = handle_write(quantum_state, cx_gate1)
+            cx_gate1 = GateData(Op.CNOT, index2, controls=index1)
+            cx_gate2 = GateData(Op.CNOT, index1, controls=index2)
+            result = handle_write(quantum_state, cx_gate1, normalize=False)
+            result = handle_write(result, cx_gate2, normalize=False)
+            result = handle_write(result, cx_gate1, normalize=False)
+        elif op == Op.RZX:
+            angle = gate_data.params[0]
+            H1 = Instruction(gate_data.target, Op.H).get_gate_data()
+            CX01 = Instruction(gate_data.target, Op.CNOT, control=gate_data.control).get_gate_data()
+            RZ1 = Instruction(gate_data.target, Op.RZ, params=[angle])
+            result = handle_write(quantum_state, H1, normalize=False)
+            result = handle_write(result, CX01, normalize=False)
+            result = handle_write(result, RZ1, normalize=False)
+            result = handle_write(result, CX01, normalize=False)
+            result = handle_write(result, H1, normalize=False)
+        elif op == Op.ECR:
+            angle = pi / 4
+            RZX = Instruction(gate_data.target, Op.RZX, control=gate_data.control, params=[angle]).get_gate_data()
+            RZXneg = Instruction(gate_data.target, Op.RZX, control=gate_data.control, params=[-angle]).get_gate_data()
+            X0 = Instruction(gate_data.control, Op.X)
+            result = handle_write(quantum_state, RZX, normalize=False)
+            result = handle_write(result, X0, normalize=False)
+            result = handle_write(result, RZXneg, normalize=False)
         else:
+            assert op == Op.CNOT
             result = write2(quantum_state, gate_data, is_inverse)
     else:
         if gate_data.label == Op.RESET:

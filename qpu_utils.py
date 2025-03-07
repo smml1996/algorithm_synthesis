@@ -27,15 +27,17 @@ class Op(Enum):
     TD = "TD"
     T = "T"
     
-
+    RZ = "RZ"
+    RX = "RX"
+    RY = "RY"
+    
     # HADAMARD
     H = "H"
 
     # MULTI-QUBIT GATES
     CNOT = "CNOT"
-    RZ = "RZ"
-    RX = "RX"
-    RY = "RY"
+    ECR = "ECR"
+    RZX = "RZX"
     CZ = "CZ"
     CH = "CH"
     SWAP= "SWAP"
@@ -73,6 +75,10 @@ class BasisGates(Enum):
     TYPE8 = set([Op.U1, Op.RESET, Op.U3, Op.MEAS, Op.U2, Op.CNOT])
     TYPE9 = set([Op.RESET, Op.MEAS, Op.RZ, Op.SX, Op.X])
     
+    # basis sets with ECR
+    TYPE10 = set([Op.RZ, Op.MEAS, Op.RESET, Op.SX, Op.ECR, Op.X])
+    TYPE11 = set([Op.RZ, Op.MEAS, Op.RESET, Op.SX, Op.ECR, Op.X, Op.CNOT])
+    
 def get_basis_gate_type(basis_gates):
     filtered_basis_gates = []
     
@@ -104,7 +110,7 @@ def get_op(op_: str) -> Op:
 
 def is_multiqubit_gate(op: Op):
     assert isinstance(op, Op)
-    if op in [Op.CNOT, Op.CZ, Op.SWAP, Op.CH]:
+    if op in [Op.CNOT, Op.CZ, Op.SWAP, Op.CH, Op.ECR, Op.RZX]:
         return True
     return False
     
@@ -179,10 +185,10 @@ class GateData: # this was previously called GateData
     controls: Optional[int]
     params: Optional[List[float]]
 
-    def __init__(self, label, address, controls=None, params=None) -> None:
+    def __init__(self, label, address, control=None, params=None) -> None:
         self.label = label
         self.address = address
-        self.control = controls
+        self.control = control
         self.params = params
 
     def __eq__(self, other: object) -> bool:
