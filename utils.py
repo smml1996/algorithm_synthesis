@@ -101,7 +101,7 @@ def invert_dict(d: Dict[Any, Any]) -> Dict[Any, Any]:
 
 def get_kraus_matrix_probability(matrix: List[List[float]], a0: complex, a1: complex, return_new_ampl=False):
     """
-
+    if return_new_ampl is false, then it only returns the probability of the kraus matrix happening
     Args:
         matrix (List[List[float]]): kraus matrix
         [

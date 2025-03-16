@@ -524,7 +524,6 @@ class QuantumChannel:
             assert len(self.errors) > 0
 
         if flatten:
-            assert False # TODO: Remove me
             self.flatten()
 
         self.estimated_success_prob = self._get_success_probability()
@@ -552,8 +551,7 @@ class QuantumChannel:
                     temp = max(temp, float(myceil(self.probabilities[index], Precision.PRECISION)))
         return temp
 
-    @staticmethod
-    def flatten_sequence(err_seq):
+    def flatten_sequence(self, err_seq):
         sequences = []
         for err in err_seq:
             if isinstance(err, Instruction):
@@ -563,7 +561,6 @@ class QuantumChannel:
                     for seq in sequences:
                         seq.append(err)
             else:
-                assert False
                 assert isinstance(err, KrausOperator)
                 if len(sequences) == 0:
                     for matrix in err.operators:
@@ -583,11 +580,13 @@ class QuantumChannel:
         return sequences
 
     def flatten(self):
+        total_probabilities = sum(self.probabilities)
+        assert isclose(total_probabilities, 1.0, rel_tol=Precision.rel_tol)
         new_probabilities = []
         new_errors = []
 
         for (err_seq, prob) in zip(self.errors, self.probabilities):
-            flattened_sequences = QuantumChannel.flatten_sequence(err_seq)
+            flattened_sequences = self.flatten_sequence(err_seq)
 
             for flattened_seq in flattened_sequences:
                 new_probabilities.append(prob)
