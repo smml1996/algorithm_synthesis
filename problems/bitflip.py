@@ -679,7 +679,7 @@ if __name__ == "__main__":
         # for num_qubits in batches.keys():
         #     generate_pomdps(BitflipExperimentID.IPMA, num_qubits, get_experiments_actions, BitFlipInstance, guard=bitflips_guard)
             
-        #     generate_pomdps(BitflipExperimentID.CXH, num_qubits, get_experiments_actions, BitFlipInstance, guard=bitflips_guard)
+        # generate_pomdps(BitflipExperimentID.CXH, num_qubits, get_experiments_actions, BitFlipInstance, guard=bitflips_guard)
         
         # IPMA 2
         batches = get_num_qubits_to_hardware(WITH_TERMALIZATION)

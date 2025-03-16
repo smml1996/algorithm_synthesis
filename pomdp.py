@@ -10,21 +10,24 @@ from typing import Any, Optional, Set, Tuple, List, Dict
 INIT_CHANNEL = "INIT_"
 class POMDPVertex:
     local_counter = 1
-    def __init__(self, quantum_state: QuantumState, classical_state: ClassicalState):
+    def __init__(self, quantum_state: QuantumState, classical_state: ClassicalState, hidden_index=None):
         assert isinstance(quantum_state, QuantumState)
         assert isinstance(classical_state, ClassicalState)
         self.id = POMDPVertex.local_counter
         POMDPVertex.local_counter += 1
         self.quantum_state = quantum_state
         self.classical_state = classical_state
+        self.hidden_index = hidden_index
 
     def __hash__(self):
         return self.id
     
     def __eq__(self, other):
-        return (self.quantum_state == other.quantum_state) and (self.classical_state == other.classical_state)
+        return (self.quantum_state == other.quantum_state) and (self.classical_state == other.classical_state) and (self.hidden_index == other.hidden_index)
     
     def __str__(self) -> str:
+        if self.hidden_index is not None:
+            return f"V(id={self.id}, {self.quantum_state}, {self.classical_state}, {self.hidden_index})"    
         return f"V(id={self.id}, {self.quantum_state}, {self.classical_state})"
 
     def __repr__(self):
@@ -99,15 +102,16 @@ class POMDPAction:
         q, meas_prob = get_seq_probability(vertex.quantum_state, [gatedata])
 
         if meas_prob > 0.0:
+            hidden_index = vertex.hidden_index
             classical_state0 = cwrite(vertex.classical_state, Op.WRITE0, instruction.target)
             classical_state1 = cwrite(vertex.classical_state, Op.WRITE1, instruction.target)
 
             if is_meas1:
-                new_vertex_correct = POMDPVertex(q, classical_state1) # we receive the correct outcome
-                new_vertex_incorrect = POMDPVertex(q, classical_state0)
+                new_vertex_correct = POMDPVertex(q, classical_state1, hidden_index=hidden_index) # we receive the correct outcome
+                new_vertex_incorrect = POMDPVertex(q, classical_state0, hidden_index=hidden_index)
             else:
-                new_vertex_correct = POMDPVertex(q, classical_state0) # we receive the correct outcome
-                new_vertex_incorrect = POMDPVertex(q, classical_state1)
+                new_vertex_correct = POMDPVertex(q, classical_state0, hidden_index=hidden_index) # we receive the correct outcome
+                new_vertex_incorrect = POMDPVertex(q, classical_state1, hidden_index=hidden_index)
             
             prob = meas_prob * channel.get_ind_probability(is_meas1, is_meas1)
             if prob > 0:
@@ -136,7 +140,7 @@ class POMDPAction:
             new_qs = handle_write(vertex.quantum_state, instruction.get_gate_data())
             errored_seq, seq_prob = get_seq_probability(new_qs, err_seq)
             if seq_prob > 0.0:
-                new_vertex = POMDPVertex(errored_seq, vertex.classical_state)
+                new_vertex = POMDPVertex(errored_seq, vertex.classical_state, hidden_index=vertex.hidden_index)
                 if new_vertex not in result.keys():
                     result[new_vertex] = 0.0
                 result[new_vertex] += seq_prob * channel.probabilities[index]
@@ -161,7 +165,7 @@ class POMDPAction:
                 errored_seq, seq_prob = get_seq_probability(new_qs, err_seq)
                 seq_prob = prob_new_qs * seq_prob
                 if seq_prob > 0.0:
-                    new_vertex = POMDPVertex(errored_seq, vertex.classical_state)
+                    new_vertex = POMDPVertex(errored_seq, vertex.classical_state, hidden_index=vertex.hidden_index)
                     if new_vertex not in result.keys():
                         result[new_vertex] = 0.0
                     result[new_vertex] += seq_prob * channel.probabilities[index]
@@ -187,7 +191,7 @@ class POMDPAction:
         temp_result = dict()
         if current_instruction.is_classical():
             new_classical_state = cwrite(current_vertex.classical_state, current_instruction.op, current_instruction.target)
-            new_vertex = POMDPVertex(current_vertex.quantum_state, new_classical_state)
+            new_vertex = POMDPVertex(current_vertex.quantum_state, new_classical_state, hidden_index=current_vertex.hidden_index)
             temp_result[new_vertex] = 1.0
         else:
             instruction_channel = noise_model.get_instruction_channel(current_instruction)
@@ -374,16 +378,16 @@ class POMDP:
             
             
             
-def get_vertex(all_vertices, quantum_state, classical_state) -> Optional[POMDPVertex]:
+def get_vertex(all_vertices, quantum_state, classical_state, hidden_index) -> Optional[POMDPVertex]:
     for v in all_vertices:
-        if (v.quantum_state == quantum_state) and (v.classical_state == classical_state):
+        if (v.quantum_state == quantum_state) and (v.classical_state == classical_state) and (hidden_index == v.hidden_index):
             return v
     return None
 
-def create_new_vertex(all_vertices, quantum_state, classical_state):
-    v = get_vertex(all_vertices, quantum_state, classical_state)
+def create_new_vertex(all_vertices, quantum_state, classical_state, hidden_index: int):
+    v = get_vertex(all_vertices, quantum_state, classical_state, hidden_index)
     if v is None:
-        v = POMDPVertex(quantum_state, classical_state)
+        v = POMDPVertex(quantum_state, classical_state, hidden_index=hidden_index)
         all_vertices.append(v)
     return v
 
@@ -400,7 +404,8 @@ def build_pomdp(actions: List[POMDPAction],
                 initial_state: Tuple[QuantumState, ClassicalState] = None,
                 initial_distribution: List[
                     Tuple[Tuple[QuantumState, ClassicalState], float]]=None, guard: Any = default_guard,
-                qubits_used=None) -> POMDP:
+                qubits_used=None,
+                set_hidden_index=False) -> POMDP:
     """_summary_
 
     Args:
@@ -422,7 +427,7 @@ def build_pomdp(actions: List[POMDPAction],
 
     q  = Queue()
 
-    initial_v = create_new_vertex(all_vertices, initial_state[0], initial_state[1])
+    initial_v = create_new_vertex(all_vertices, initial_state[0], initial_state[1], hidden_index=None)
     if initial_distribution is None:
         q.push((initial_v, 0)) # second element denotes that this vertex is at horizon 0
     else:
@@ -430,8 +435,12 @@ def build_pomdp(actions: List[POMDPAction],
             raise Exception("Initial distribution must sum to 1")
         graph[initial_v] = dict()
         graph[initial_v][INIT_CHANNEL] = dict()
-        for (hybrid_state, prob) in initial_distribution:
-            v =  create_new_vertex(all_vertices, hybrid_state[0], hybrid_state[1])
+        for (index, (hybrid_state, prob)) in enumerate(initial_distribution):
+            if set_hidden_index:
+                hidden_index = index
+            else:
+                hidden_index = None
+            v =  create_new_vertex(all_vertices, hybrid_state[0], hybrid_state[1], hidden_index)
             assert v not in graph[initial_v][INIT_CHANNEL].keys()
             graph[initial_v][INIT_CHANNEL][v] = prob
             q.push((v, 0)) # second element denotes that this vertex is at horizon 0
@@ -462,7 +471,7 @@ def build_pomdp(actions: List[POMDPAction],
                 for (succ, prob) in successors.items():
                     assert isinstance(succ, POMDPVertex)
                     
-                    new_vertex = create_new_vertex(all_vertices, succ.quantum_state, succ.classical_state)
+                    new_vertex = create_new_vertex(all_vertices, succ.quantum_state, succ.classical_state, succ.hidden_index)
                     # assert new_vertex not in graph[current_v][action.name].keys()
                     if new_vertex not in graph[current_v][action.name].keys():
                         graph[current_v][action.name][new_vertex] = 0.0
