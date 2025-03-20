@@ -1,0 +1,33 @@
+{
+    "action": "CX",
+    "children": [
+        {
+            "action": "P2",
+            "children": [
+                {
+                    "action": "halt",
+                    "children": [],
+                    "classical_state": 0,
+                    "depth": 0
+                },
+                {
+                    "action": "X0",
+                    "children": [
+                        {
+                            "action": "halt",
+                            "children": [],
+                            "classical_state": 1,
+                            "depth": 0
+                        }
+                    ],
+                    "classical_state": 1,
+                    "depth": 1
+                }
+            ],
+            "classical_state": 0,
+            "depth": 2
+        }
+    ],
+    "classical_state": 0,
+    "depth": 3
+}

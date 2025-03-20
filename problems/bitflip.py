@@ -45,6 +45,14 @@ class BitFlipInstance:
         assert 1 in self.embedding.keys()
         assert 2 in self.embedding.keys()
         assert len(self.embedding.keys()) == 3
+        
+    def get_initial_distribution(self):
+        answer = []
+        
+        for initial_state in self.initial_state:
+            answer.append((initial_state, 1/len(self.initial_state)))
+        
+        return answer
     
     def get_initial_states(self):
         """
@@ -79,11 +87,13 @@ class BitFlipInstance:
 
     def get_reward(self, hybrid_state) -> float:
         qs , _ = hybrid_state
-        current_rho = qs.single_partial_trace(index=self.embedding[2])
+        assert isinstance(qs, QuantumState)
+        
+        current_rho = qs.multi_partial_trace(remove_indices=[self.embedding[2]])
         initial_qs, _ = self.initial_state[0]
-        bell0_rho = initial_qs.single_partial_trace(index=self.embedding[2])
+        bell0_rho = initial_qs.multi_partial_trace(remove_indices=[self.embedding[2]])
         initial_qs,_ = self.initial_state[2]
-        bell1_rho = initial_qs.single_partial_trace(index=self.embedding[2])
+        bell1_rho = initial_qs.multi_partial_trace(remove_indices=[self.embedding[2]])
         assert len(bell0_rho) == 4
         assert len(bell1_rho) == 4
         if are_matrices_equal(current_rho, bell0_rho) or are_matrices_equal(current_rho, bell1_rho):

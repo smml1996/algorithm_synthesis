@@ -120,6 +120,17 @@ int main(int argc, char **argv) {
             }
         }
         lambdas_file.close();
+    } else if (arg1.compare("singlebellmaneq") == 0){
+        // path, horizon, output_path
+        filesystem::path pomdp_path = argv[2];
+        int horizon = stoi(argv[3]);
+        filesystem::path algorithm_path = argv[4];
+
+        auto pomdp = parse_pomdp_file(pomdp_path);
+        Belief initial_belief = get_initial_belief(pomdp);
+        auto result = get_bellman_value(pomdp, initial_belief, horizon, "max");
+        write_algorithm_file(result.first, algorithm_path);
+        cout << result.second << endl;
     } else if (arg1.compare("exact") == 0){
         string algorithm_path = argv[2]; 
         string pomdp_path = argv[3];

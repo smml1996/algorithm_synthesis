@@ -132,15 +132,12 @@ def int_to_bin(n: int, zero_padding=None) -> str:
     return result
 
 def remove_unused(bin_string, used_qubits, padding) -> str:
-    
     answer = ""
-    
     for (index, c) in enumerate(bin_string):
         if index not in used_qubits:
             assert c == "0"
         else:
             answer += c
-            
     while len(answer) < padding:
         answer += "0"
     return answer

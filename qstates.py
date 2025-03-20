@@ -165,7 +165,6 @@ class QuantumState:
         if index not in qubits_used:
             raise Exception(f"Cannot remove index {index} from quantum state with qubits{qubits_used}")
 
-        
         if rho is None:
             rho = self.get_density_matrix()
 
@@ -185,7 +184,7 @@ class QuantumState:
             result.append(temp)
         for ket in range(initial_dim):
             bin_ket = int_to_bin(ket, zero_padding=len(qubits_used)) # this is the original ket, we get the binary representation
-            bin_ket = remove_unused(bin_ket, qubits_used)
+            bin_ket = remove_unused(bin_ket, qubits_used, padding=len(qubits_used))
             assert len(bin_ket) == len(qubits_used)
             assert isinstance(bin_ket, str)
             bin_new_ket = bin_ket[:index] + bin_ket[index+1:] # now we create a binary string without the bit that we want to remove (located at index)
@@ -193,13 +192,12 @@ class QuantumState:
             index_new_ket = bin_to_int(bin_new_ket) # index of the row in the result(-ing density matrix)
             for bra in range(initial_dim):
                 bin_bra = int_to_bin(bra, zero_padding=len(qubits_used)) # original bra
-                bin_bra = remove_unused(bin_bra, qubits_used)
+                bin_bra = remove_unused(bin_bra, qubits_used, padding=len(qubits_used))
                 bin_new_bra = bin_bra[:index] + bin_bra[index+1:] # remove the bit in the index we dont want
                 index_new_bra = bin_to_int(bin_new_bra) # index of the row in the result(-ing density matrix)   
 
                 if bin_ket[index] == bin_bra[index]:
                     result[index_new_ket][index_new_bra] += rho[ket][bra]
-
         assert len(result) == initial_dim/2
         return result
 

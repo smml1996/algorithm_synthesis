@@ -76,38 +76,27 @@ public:
 class Algorithm {
 public:
     string action;
+    vector<Algorithm*> children;
+    int classical_state;
     int depth;
-    Algorithm *next_ins;
-    Algorithm *case0; // We assume that single-qubit measurements are possible only, therefore only two cases
-    Algorithm *case1;
 
-    Algorithm(string action, Algorithm *next_ins, Algorithm *case0, Algorithm *case1, int depth=-1){
+    Algorithm(string action, int classical_state, int depth=-1){
         this->action = std::move(action);
-        this->next_ins = next_ins;
-        this->case0 = case0;
-        this->case1 = case1;
+        this->classical_state = classical_state;
         this->depth = depth;
     }
 
     Algorithm(json data){
         this->action = data["action"];
-
-        if (data["next"] == "None"){
-            this->next_ins = nullptr;
-        }else{
-            this->next_ins = new Algorithm(data["next"]);
-        }
-
-        if (data["case0"] == "None") {
-            this->case0 = nullptr;
-        } else {
-            this->case0 = new Algorithm(data["case0"]);
-        }
-
-        if (data["case1"] == "None") {
-            this->case1 = nullptr;
-        } else{
-            this->case1 = new Algorithm(data["case1"]);
+        this->depth = data["depth"];
+        this->classical_state = data["classical_state"];
+        if (data["children"] != "None"){
+            for (int i = 0; i < data["children"].size(); i++) {
+                if (data["children"][i] != "None") {
+                    this->children.push_back(new Algorithm(data["children"][i]));
+                }
+                
+            }
         }
     }
 
@@ -115,33 +104,18 @@ public:
         if (this == nullptr) {
             return "None";
         }
-        json serialized_next_ins;
 
-        if (this->next_ins == nullptr) {
-            serialized_next_ins = "None";
-        } else {
-            serialized_next_ins = this->next_ins->serialize();
-        }
+        vector<json> children;
 
-        json serialized_case0;
-        if(this->case0  == nullptr) {
-            serialized_case0 = "None";
-        } else {
-            serialized_case0 = this->case0->serialize();
-        }
-
-        json serialized_case1;
-        if(this->case1 == nullptr) {
-            serialized_case1 = "None";
-        } else {
-            serialized_case1 = this->case1->serialize();
+        for (int i = 0; i < this->children.size(); i++) {
+            children.push_back(this->children[i]->serialize());
         }
 
         json result;
         result["action"] = this->action;
-        result["next"] = serialized_next_ins;
-        result["case0"] = serialized_case0;
-        result["case1"] = serialized_case1; 
+        result["classical_state"] = this->classical_state;
+        result["children"] = children;
+        result["depth"] = depth;
         return result;
     }
 };

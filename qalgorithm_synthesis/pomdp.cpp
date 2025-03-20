@@ -12,7 +12,7 @@
 using namespace  std;
 
 static auto HALT_ACTION = "halt";
-static auto HALT = new Algorithm(HALT_ACTION, nullptr, nullptr, nullptr, 0);
+
 
 class POMDP {
 public:
@@ -175,16 +175,24 @@ POMDP parse_pomdp_file (const string& fname) {
 
 pair<Algorithm*, MyFloat> get_bellman_value(POMDP &pomdp, Belief &current_belief, const int &horizon, const string &opt_technique) {
     MyFloat curr_belief_val = current_belief.get_belief_reward(pomdp.rewards);
-
-
+    int current_classical_state = -1;
+    for(auto & prob : current_belief.probs) {
+        if (current_classical_state == -1) {
+            current_classical_state = pomdp.gamma[prob.first];
+        } else {
+            assert(pomdp.gamma[prob.first] == current_classical_state);
+        }
+    }
+    assert(current_classical_state >= 0);
+    auto halt_algorithm = new Algorithm(HALT_ACTION, current_classical_state, 0);
     if (horizon == 0) {
-        return make_pair(HALT, curr_belief_val);
+        return make_pair(halt_algorithm, curr_belief_val);
     }
 
     vector< pair< Algorithm*, MyFloat > > bellman_values;
 
-    bellman_values.emplace_back(HALT, curr_belief_val);
-
+    bellman_values.emplace_back(halt_algorithm, curr_belief_val);
+    
     for(auto it = pomdp.actions.begin(); it != pomdp.actions.end(); it++) {
         string action = *it;
 
@@ -204,33 +212,20 @@ pair<Algorithm*, MyFloat> get_bellman_value(POMDP &pomdp, Belief &current_belief
                 }
             }
         }
-
-        assert(obs_to_next_beliefs.size() < 3);
         
         if (!obs_to_next_beliefs.empty()) {
-            vector<Algorithm *>next_algorithms;
+            Algorithm *new_alg_node = new Algorithm(*it, current_classical_state);
             MyFloat bellman_val;
 
+            int max_depth = 0;
             for(auto & obs_to_next_belief : obs_to_next_beliefs) {
                 auto temp = get_bellman_value(pomdp, obs_to_next_belief.second, horizon-1, opt_technique);
-                next_algorithms.push_back(temp.first);
+                new_alg_node->children.push_back(temp.first);
+                max_depth = max(temp.first->depth, max_depth);
                 bellman_val = bellman_val + temp.second;
             }
 
-            assert(!next_algorithms.empty());
-            assert(next_algorithms.size() < 3);
-
-            Algorithm *new_alg_node = new Algorithm(*it, nullptr, nullptr, nullptr);
-            if (next_algorithms.size() == 1) {
-                new_alg_node->next_ins = next_algorithms[0];
-                new_alg_node->depth = next_algorithms[0]->depth + 1;
-            } else {
-                // since maps are ordered by values:
-                new_alg_node->case0 = next_algorithms[0]; // this should be a measure to 0
-                new_alg_node->case1 = next_algorithms[1]; // This should be a measure to 1
-                new_alg_node->depth = max(next_algorithms[0]->depth, next_algorithms[1]->depth) +1;
-            }
-
+            new_alg_node->depth = max_depth + 1;
             bellman_values.emplace_back(new_alg_node, bellman_val);
         }
     }
@@ -300,33 +295,21 @@ MyFloat get_algorithm_acc(POMDP &pomdp, Algorithm*& algorithm, Belief &current_b
                 if (it_next_v.second > zero) {
                     obs_to_next_beliefs[pomdp.gamma[it_next_v.first]].add_val(it_next_v.first,
                                                                               prob.second * it_next_v.second);
+                }else {
+                    assert(it_next_v.second == zero);
                 }
             }
         }
     }
-
-    assert(obs_to_next_beliefs.size() < 3);
+    assert(algorithm->children.size() == obs_to_next_beliefs.size());
 
     if (!obs_to_next_beliefs.empty()) {
         MyFloat bellman_val;
-        for(auto & obs_to_next_belief : obs_to_next_beliefs) {
-            MyFloat temp;
-            if (algorithm->next_ins != nullptr) {
-                assert(algorithm->case0 == nullptr);
-                assert(algorithm->case1 == nullptr);
-                temp = get_algorithm_acc(pomdp, algorithm->next_ins, obs_to_next_belief.second);
-            }else{
-                if(obs_to_next_belief.first == 0) {
-                    temp = get_algorithm_acc(pomdp, algorithm->case0, obs_to_next_belief.second);
-                } else {
-                    assert(obs_to_next_belief.first == 1);
-                    temp =  get_algorithm_acc(pomdp, algorithm->case1, obs_to_next_belief.second);
-                }
-            }
-
-            bellman_val = bellman_val + temp;
+        
+        for (int i = 0; i < algorithm->children.size(); i++) {
+            assert(obs_to_next_beliefs.find(algorithm->children[i]->classical_state) != obs_to_next_beliefs.end());
+            bellman_val = bellman_val + get_algorithm_acc(pomdp, algorithm->children[i], obs_to_next_beliefs[algorithm->children[i]->classical_state]);
         }
-
         return bellman_val;
     } else {
         return curr_belief_val;

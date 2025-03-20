@@ -5,7 +5,7 @@ from math import ceil
 import os
 import signal
 import time
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from qiskit import ClassicalRegister, QuantumCircuit, QuantumRegister
 
@@ -351,10 +351,14 @@ def get_algorithm_path(config, hardware_spec, embedding_index, horizon):
 
 
 ################# C++ code ###############
-def get_bellman_value(project_settings, config_path) -> float:
+def get_bellman_value(project_settings, path, from_pomdp_path: bool=False, horizon: Optional[int]=None, output_path: Optional[str]=None) -> float:
     # # Path to your executable and optional arguments
     executable_path = project_settings["CPP_EXEC_PATH"]
-    args = ["bellmaneq", config_path]  # Optional arguments for the executable
+    if not from_pomdp_path:
+        args = ["bellmaneq", path]
+    else:
+        assert horizon is not None
+        args = ["singlebellmaneq", path, str(horizon), output_path]  # Optional arguments for the executable
 
     # # Running the executable
     result = subprocess.run([executable_path] + args, capture_output=True, text=True)
@@ -363,6 +367,7 @@ def get_bellman_value(project_settings, config_path) -> float:
     except:
         print(result.stderr)
         raise Exception(f"Could not convert executable to float when running {args}")
+    
     
 def get_markov_chain_results(project_settings, algorithm_path, pomdp_path) ->float:
     executable_path = project_settings["CPP_EXEC_PATH"]
