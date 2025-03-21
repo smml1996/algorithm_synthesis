@@ -256,8 +256,6 @@ def get_hardware_scenarios(hardware_spec: HardwareSpec, experiment_id) -> List[D
     return answer
     
 def halt_guard(vertex: POMDPVertex, embedding: Dict[int, int], action: POMDPAction, horizon) -> bool:
-    if horizon == 0:
-        return action.name[0] == "R"
     cs = vertex.classical_state
     hidden_index = len(embedding.keys()) - 2
     return cread(cs, embedding[hidden_index]) == 0 and cread(cs, embedding[hidden_index+1]) == 0
