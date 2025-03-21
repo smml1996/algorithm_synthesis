@@ -169,7 +169,7 @@ if __name__ == "__main__":
     
     # print("Generating configuration files...")
     # generate_configs(experiment_id, min_horizon=3, max_horizon=5)
-    
+    arg = sys.argv[1]
     batches = get_num_qubits_to_hardware(WITH_THERMALIZATION, allowed_hardware)
     
     # print("generating embedding files...")
@@ -177,9 +177,10 @@ if __name__ == "__main__":
     #     config_path = get_config_path(experiment_id, num_qubits)
     #     generate_embeddings(experiment_id, num_qubits, get_hardware_embeddings=get_hardware_scenarios)
         
-    for num_qubits in batches.keys():
-        config_path = get_config_path(experiment_id, num_qubits)
-        generate_pomdps(experiment_id, num_qubits, get_experiments_actions, ZeroPlusInstance, guard=twoq_guard)
+    # for num_qubits in batches.keys():
+    num_qubits = batches[arg]
+    config_path = get_config_path(experiment_id, num_qubits)
+    generate_pomdps(experiment_id, num_qubits, get_experiments_actions, ZeroPlusInstance, guard=twoq_guard)
     
     
     
