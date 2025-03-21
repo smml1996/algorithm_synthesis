@@ -103,8 +103,9 @@ class POMDPAction:
 
         if meas_prob > 0.0:
             hidden_index = vertex.hidden_index
-            classical_state0 = cwrite(vertex.classical_state, Op.WRITE0, instruction.target)
-            classical_state1 = cwrite(vertex.classical_state, Op.WRITE1, instruction.target)
+            assert instruction.real_target != -1
+            classical_state0 = cwrite(vertex.classical_state, Op.WRITE0, instruction.real_target)
+            classical_state1 = cwrite(vertex.classical_state, Op.WRITE1, instruction.real_target)
 
             if is_meas1:
                 new_vertex_correct = POMDPVertex(q, classical_state1, hidden_index=hidden_index) # we receive the correct outcome
@@ -298,7 +299,7 @@ class POMDP:
         f.write(f"REWARDS: {target_v_line}\n")
 
         # gamma: vertex -> observable
-        gamma_line = ",".join([str(s.id)+":" + str(s.classical_state) for s in self.states])
+        gamma_line = ",".join([str(s.id)+":" + str(s.classical_state.get_memory_val()) for s in self.states])
         f.write(f"GAMMA: {gamma_line}\n")
         f.write("BEGINACTIONS\n")
         for action in self.actions:

@@ -59,9 +59,11 @@ class AlgorithmNode:
 def execute_algorithm(node: AlgorithmNode, qpu: QuantumCircuit, count_ins=0, cbits=None):    
     if node is not None:
         instruction_to_ibm(qpu, node.instruction_sequence, noiseless=node.noiseless)
-    
         for child in node.children:
-            with qpu.if_test((cbits, child.classical_state)):
+            if len(node.children) > 1:
+                with qpu.if_test((cbits, child.classical_state)):
+                    execute_algorithm(child, qpu, count_ins+1, cbits=cbits)
+            else:
                 execute_algorithm(child, qpu, count_ins+1, cbits=cbits)
     
 def get_algorithm(current_node, tabs="\t"):
@@ -70,8 +72,11 @@ def get_algorithm(current_node, tabs="\t"):
     assert isinstance(current_node, AlgorithmNode)
     result = f"{tabs}instruction_to_ibm(qc, basis_gates, {current_node.action_name})\n"
     for child in current_node.children:
-        result += f"{tabs}with qc.if_test((cbits, {child.classical_state})):\n"
-        child_alg = get_algorithm(child, tabs= f"{tabs}\t")
+        if len(current_node.children) > 1:
+            result += f"{tabs}with qc.if_test((cbits, {child.classical_state})):\n"
+            child_alg = get_algorithm(child, tabs= f"{tabs}\t")
+        else:
+            child_alg = get_algorithm(child, tabs= f"{tabs}")
         result += child_alg
     return result
 

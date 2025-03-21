@@ -198,7 +198,8 @@ def get_hardware_embeddings(backend: HardwareSpec, experiment_id) -> List[Dict[i
 class IBMBitFlipInstance:
     def __init__(self, embedding) -> None:
         self.embedding = embedding
-        
+        self.num_qubits = len(self.embedding.keys())
+        self.num_bits = len(self.embedding.keys())
         new_embedding = dict()
         values = sorted(self.embedding.values())
         for (key, value) in self.embedding.items():
@@ -230,7 +231,7 @@ class IBMBitFlipInstance:
                     assert qs.get_amplitude(index) == 0.0
                     qs.insert_amplitude(index, amp) 
 
-        return self.bitflip_instance.is_target_qs((qs, None))
+        return self.bitflip_instance.get_reward((qs, None))
 
 
 def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: BitflipExperimentID):
@@ -240,7 +241,7 @@ def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], e
         else:
             X0 = POMDPAction("X0", [Instruction(embedding[0], Op.X)])
             
-        P2 = POMDPAction("P2", [Instruction(embedding[2], Op.MEAS)])
+        P2 = POMDPAction("P2", [Instruction(embedding[2], Op.MEAS, real_target=2)])
         CX02 = POMDPAction("CX02", [Instruction(embedding[2], Op.CNOT, control=embedding[0])])
         CX12 = POMDPAction("CX12", [Instruction(embedding[2], Op.CNOT, control=embedding[1])])
         return [CX02, CX12, P2, X0]
@@ -250,7 +251,7 @@ def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], e
         else:
             X0 = POMDPAction("X0", [Instruction(embedding[0], Op.X)])
         CX = POMDPAction("CX", [Instruction(embedding[2], Op.CNOT, control=embedding[0]), Instruction(embedding[2], Op.CNOT, control=embedding[1])])
-        P2 = POMDPAction("P2", [Instruction(embedding[2], Op.MEAS)])
+        P2 = POMDPAction("P2", [Instruction(embedding[2], Op.MEAS, real_target=2)])
         return [CX, P2, X0]
     elif experiment_id == BitflipExperimentID.IPMA3:
         if noise_model.basis_gates in [BasisGates.TYPE1]:
@@ -260,7 +261,7 @@ def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], e
             X0 = POMDPAction("X0", [Instruction(embedding[0], Op.X)])
             X2 = POMDPAction("X2", [Instruction(embedding[2], Op.X)])
         CX = POMDPAction("CX", [Instruction(embedding[2], Op.CNOT, control=embedding[0]), Instruction(embedding[2], Op.CNOT, control=embedding[1])])
-        P2 = POMDPAction("P2", [Instruction(embedding[2], Op.MEAS)])
+        P2 = POMDPAction("P2", [Instruction(embedding[2], Op.MEAS, real_target=2)])
         return [CX, P2, X0, X2]
     else:
         assert experiment_id == BitflipExperimentID.CXH

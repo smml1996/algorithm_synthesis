@@ -16,11 +16,11 @@
                         {
                             "action": "halt",
                             "children": [],
-                            "classical_state": 1,
+                            "classical_state": 4,
                             "depth": 0
                         }
                     ],
-                    "classical_state": 1,
+                    "classical_state": 4,
                     "depth": 1
                 }
             ],

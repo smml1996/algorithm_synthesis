@@ -218,15 +218,17 @@ def get_ibm_noise_model(hardware_spec: HardwareSpec, thermal_relaxation=True) ->
     return ibm_noise_model
 
 class Instruction:
+    real_target:int
     target: int
     control: int
     op: Op
     params: Any
-    def __init__(self, target: int, op: Op, control: Optional[int] = None, params: Any = None, name=None, symbols=None) -> None:
+    def __init__(self, target: int, op: Op, control: Optional[int] = None, params: Any = None, name=None, symbols=None, real_target=-1) -> None:
         assert isinstance(op, Op)
         assert isinstance(target, int)
         assert isinstance(control, int) or (control is None)
         self.target = target
+        self.real_target=real_target
         self.op = op
         if (not is_multiqubit_gate(op)) and (control is not None):
             raise Exception(f"controls are initialized in a non-multiqubit gate ({op} {control})")
@@ -300,7 +302,6 @@ class Instruction:
             return False
         if not isclose(matrix_values[2], 0, abs_tol=Precision.isclose_abstol):
             return False
-
         return False
         
         
