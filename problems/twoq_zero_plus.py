@@ -87,8 +87,9 @@ def get_experiments_actions(noise_model, embedding, experiment_id):
         ry1_action = POMDPAction("RY1", ry1_instruction)
         actions.append(ry1_action)
         
-        rycx01_action = POMDPAction("rycx01", ry1_instruction + [Instruction(embedding[1], Op.CNOT, control=embedding[0]), Instruction(4, Op.WRITE1)])
-        actions.append(rycx01_action)
+        if Instruction(embedding[1], Op.CNOT, control=embedding[0]) in noise_model.instructions_to_channel.keys():
+            rycx01_action = POMDPAction("rycx01", ry1_instruction + [Instruction(embedding[1], Op.CNOT, control=embedding[0]), Instruction(4, Op.WRITE1)])
+            actions.append(rycx01_action)
         
         hcx10_action = POMDPAction("hcx10", h1_instruction + [Instruction(embedding[0], Op.CNOT, control=embedding[1]), Instruction(4, Op.WRITE1)])
         actions.append(hcx10_action)
