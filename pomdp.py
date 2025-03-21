@@ -293,7 +293,7 @@ class POMDP:
         # computing target vertices
         target_vertices = []
         for v in self.states:
-            r = problem_instance.get_reward((v.quantum_state, v.classical_state))
+            r = problem_instance.get_reward(v)
             target_vertices.append(f"{v.id}:{r}")
         target_v_line = ",".join(target_vertices)
         f.write(f"REWARDS: {target_v_line}\n")
@@ -448,9 +448,8 @@ def build_pomdp(actions: List[POMDPAction],
 
     visited = set()
     while not q.is_empty():
-        
         current_v, current_horizon = q.pop()
-        # print(q.len(), current_horizon)
+
         if horizon != -1:
             if (current_horizon == horizon):
                 continue
@@ -466,14 +465,12 @@ def build_pomdp(actions: List[POMDPAction],
             if guard(current_v, embedding, action):
                 assert action.name not in graph[current_v].keys()
                 graph[current_v][action.name] = dict()
-
                 successors = action.get_successor_states(noise_model, current_v)
                 assert len(successors) > 0
                 for (succ, prob) in successors.items():
                     assert isinstance(succ, POMDPVertex)
                     
                     new_vertex = create_new_vertex(all_vertices, succ.quantum_state, succ.classical_state, succ.hidden_index)
-                    # assert new_vertex not in graph[current_v][action.name].keys()
                     if new_vertex not in graph[current_v][action.name].keys():
                         graph[current_v][action.name][new_vertex] = 0.0
                     graph[current_v][action.name][new_vertex] += prob

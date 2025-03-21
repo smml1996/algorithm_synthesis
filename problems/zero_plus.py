@@ -24,9 +24,6 @@ class ZeroPlusExperimentID(Enum):
     ONEQ = "oneq"
     ONEQDELTA = "oneqdelta"
     ONEQDELTAMANY = "oneqdeltamany"
-    TWOQ1 = "twoq1" # cx(1,2), H(2), T(2), TD(2), meas(2).
-    TWOQCH = "twoqch" # ch(1,2), meas(1), meas(2), x(2)
-    TWOQP = "twoqp"
     @property
     def exp_name(self):
         return "zeroplus"
@@ -52,14 +49,13 @@ class ZeroPlusInstance:
             assert len(self.embedding.keys()) == 3
             self.hidden_index = 1
             self.remove_qubits = [self.embedding[0]]
-        elif self.experiment_id in [ZeroPlusExperimentID.TWOQ1, ZeroPlusExperimentID.TWOQCH, ZeroPlusExperimentID.TWOQP]:
-            assert 2 in self.embedding.keys()
+        elif self.experiment_id in [ZeroPlusExperimentID.TWOQ]:
             assert len(self.embedding.keys()) == 4 # 2 + 2 qubit for hidden indices
             self.hidden_index = 2
             self.qubits_used.append(self.embedding[2])
             self.remove_qubits = [self.embedding[0],self.embedding[1]]
         else:
-            raise Exception(f"Setup correctly experiment {self.experiment_id}")
+            raise Exception(f"Setup not set for experiment {self.experiment_id}")
         self.get_initial_distribution()
         
 

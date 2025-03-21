@@ -1,0 +1,19 @@
+{
+    "name": "B7",
+    "experiment_id": "twoq",
+    "min_horizon": 3,
+    "max_horizon": 5,
+    "output_dir": "results/twoqzeroplus/twoq/B7",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_perth",
+        "fake_lagos",
+        "fake_nairobi",
+        "fake_casablanca",
+        "fake_oslo",
+        "fake_jakarta"
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
+}

@@ -1,0 +1,14 @@
+{
+    "name": "B1",
+    "experiment_id": "twoq",
+    "min_horizon": 3,
+    "max_horizon": 5,
+    "output_dir": "results/twoqzeroplus/twoq/B1",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_armonk"
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
+}

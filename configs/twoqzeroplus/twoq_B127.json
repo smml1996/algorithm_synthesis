@@ -1,0 +1,20 @@
+{
+    "name": "B127",
+    "experiment_id": "twoq",
+    "min_horizon": 3,
+    "max_horizon": 5,
+    "output_dir": "results/twoqzeroplus/twoq/B127",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_brisbane",
+        "fake_cusco",
+        "fake_kawasaki",
+        "fake_kyiv",
+        "fake_kyoto",
+        "fake_osaka",
+        "fake_washington"
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
+}
