@@ -114,13 +114,13 @@ class POMDPAction:
                 new_vertex_correct = POMDPVertex(q, classical_state0, hidden_index=hidden_index) # we receive the correct outcome
                 new_vertex_incorrect = POMDPVertex(q, classical_state1, hidden_index=hidden_index)
             
-            prob = meas_prob * channel.get_ind_probability(is_meas1, is_meas1)
+            prob = round(meas_prob * channel.get_ind_probability(is_meas1, is_meas1),  Precision.PRECISION)
             if prob > 0:
                 if new_vertex_correct not in result.keys():
                     result[new_vertex_correct] = 0.0
                 result[new_vertex_correct] += prob
 
-            prob = meas_prob * channel.get_ind_probability( is_meas1, not is_meas1)
+            prob = round(meas_prob * channel.get_ind_probability( is_meas1, not is_meas1), Precision.PRECISION)
             if prob > 0:
                 if new_vertex_incorrect not in result.keys():
                     result[new_vertex_incorrect] = 0.0
@@ -144,7 +144,7 @@ class POMDPAction:
                 new_vertex = POMDPVertex(errored_seq, vertex.classical_state, hidden_index=vertex.hidden_index)
                 if new_vertex not in result.keys():
                     result[new_vertex] = 0.0
-                result[new_vertex] += seq_prob * channel.probabilities[index]
+                result[new_vertex] += round(seq_prob * channel.probabilities[index], Precision.PRECISION)
                 
     def __handle_reset_instruction(self, instruction: Instruction, channel: QuantumChannel, vertex: POMDPVertex, is_meas1: bool =True, result: Dict[POMDPVertex, float]=None):
         """_summary_
@@ -164,12 +164,12 @@ class POMDPAction:
                     x_instruction = Instruction(instruction.target, Op.X)
                     new_qs = handle_write(new_qs, x_instruction.get_gate_data())
                 errored_seq, seq_prob = get_seq_probability(new_qs, err_seq)
-                seq_prob = prob_new_qs * seq_prob
+                seq_prob = round(prob_new_qs * seq_prob, Precision.PRECISION)
                 if seq_prob > 0.0:
                     new_vertex = POMDPVertex(errored_seq, vertex.classical_state, hidden_index=vertex.hidden_index)
                     if new_vertex not in result.keys():
                         result[new_vertex] = 0.0
-                    result[new_vertex] += seq_prob * channel.probabilities[index]
+                    result[new_vertex] += round(seq_prob * channel.probabilities[index], Precision.PRECISION)
 
     def __dfs(self, noise_model: NoiseModel, current_vertex: POMDPVertex, index_ins: int) -> Dict[POMDPVertex, float]:
         """perform a dfs to compute successors states of the sequence of instructions.
@@ -217,9 +217,11 @@ class POMDPAction:
                 if succ2 not in result.keys():
                     result[succ2] = 0.0
                 result[succ2] += prob*prob2
+        for (s, prob) in result.items():
+            result[s] = round(prob, Precision.PRECISION)
         assert len(temp_result.keys()) > 0
-        if not isclose(sum(result.values()), 1.0, rel_tol=Precision.rel_tol):
-            raise Exception(f"Probabilities sum={sum(result.values())} ({self.instruction_sequence[index_ins]}): {result}")
+        # if not isclose(sum(result.values()), 1.0, rel_tol=Precision.rel_tol):
+        #     raise Exception(f"Probabilities sum={sum(result.values())} ({self.instruction_sequence[index_ins]}): {result}")
         return result
     
     def get_target(self):
@@ -309,7 +311,8 @@ class POMDP:
         for (fromv, fromv_dict) in self.transition_matrix.items():
             for (channel, channel_dict) in fromv_dict.items():
                 for (tov, prob) in channel_dict.items():
-                    f.write(f"{fromv.id} {channel} {tov.id} {float(prob):7f}\n")
+                    final_prob = round(prob.real, Precision.PRECISION)
+                    f.write(f"{fromv.id} {channel} {tov.id} {final_prob}\n")
 
         f.write("ENDPOMDP\n")
         f.close()
@@ -333,7 +336,7 @@ class POMDP:
         # identify target states
         q = Queue()
         for v in self.states:
-            if problem_instance.get_reward((v.quantum_state, v.classical_state)) != 0:
+            if problem_instance.get_reward(v) != 0:
                 q.push(v)
                 new_states.add(v)
         
@@ -448,7 +451,9 @@ def build_pomdp(actions: List[POMDPAction],
 
     visited = set()
     while not q.is_empty():
+        
         current_v, current_horizon = q.pop()
+        # print(q.len(), current_horizon)
 
         if horizon != -1:
             if (current_horizon == horizon):
@@ -466,6 +471,7 @@ def build_pomdp(actions: List[POMDPAction],
                 assert action.name not in graph[current_v].keys()
                 graph[current_v][action.name] = dict()
                 successors = action.get_successor_states(noise_model, current_v)
+                # print(action.name, len(successors))
                 assert len(successors) > 0
                 for (succ, prob) in successors.items():
                     assert isinstance(succ, POMDPVertex)

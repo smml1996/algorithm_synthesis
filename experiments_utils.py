@@ -642,12 +642,13 @@ def generate_pomdp(experiment_id: Any, hardware_spec: HardwareSpec,
                 embedding: Dict[int, int], pomdp_write_path: str, get_experiments_actions, ProblemInstanceObj, horizon, guard=default_guard,
                 return_pomdp=False, 
                 WITH_THERMALIZATION=False,
-                optimize_graph=True):
+                optimize_graph=True,
+                set_hidden_index=False):
     noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_THERMALIZATION)
     problem_instance = ProblemInstanceObj(embedding, experiment_id)
     actions = get_experiments_actions(noise_model, embedding, experiment_id)
     start_time = time.time()
-    pomdp = build_pomdp(actions, noise_model, horizon, embedding, initial_distribution=problem_instance.initial_distribution, guard=guard, qubits_used=problem_instance.qubits_used)
+    pomdp = build_pomdp(actions, noise_model, horizon, embedding, initial_distribution=problem_instance.initial_distribution, guard=guard, qubits_used=problem_instance.qubits_used, set_hidden_index=set_hidden_index)
     if optimize_graph:
         pomdp.optimize_graph(problem_instance)
     end_time = time.time()
@@ -656,7 +657,7 @@ def generate_pomdp(experiment_id: Any, hardware_spec: HardwareSpec,
     pomdp.serialize(problem_instance, pomdp_write_path)
     return end_time-start_time
 
-def generate_pomdps(experiment_id, batch, get_experiments_actions, ProblemInstanceObj, guard=default_guard, WITH_THERMALIZATION=False, optimize_graph=True):
+def generate_pomdps(experiment_id, batch, get_experiments_actions, ProblemInstanceObj, guard=default_guard, WITH_THERMALIZATION=False, optimize_graph=True, set_hidden_index=False):
     config_path = get_config_path(experiment_id, batch)
     config = load_config_file(config_path, type(experiment_id))
     
@@ -679,7 +680,7 @@ def generate_pomdps(experiment_id, batch, get_experiments_actions, ProblemInstan
             
             for (index, m) in enumerate(embeddings):
                 print(backend, index, m)
-                time_taken = generate_pomdp(experiment_id, backend, m, f"{output_folder}/{backend.value}_{index}.txt", get_experiments_actions, ProblemInstanceObj, config["max_horizon"], guard=guard, WITH_THERMALIZATION=WITH_THERMALIZATION, optimize_graph=optimize_graph)
+                time_taken = generate_pomdp(experiment_id, backend, m, f"{output_folder}/{backend.value}_{index}.txt", get_experiments_actions, ProblemInstanceObj, config["max_horizon"], guard=guard, WITH_THERMALIZATION=WITH_THERMALIZATION, optimize_graph=optimize_graph, set_hidden_index=set_hidden_index)
                 if time_taken is not None:
                     times_file.write(f"{backend.name},{index},{time_taken}\n")
                 times_file.flush()

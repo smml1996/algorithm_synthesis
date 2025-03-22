@@ -5,15 +5,14 @@ import os, sys
 from typing import Dict, List
 sys.path.append(os.getcwd()+"/..")
 
-from utils import are_matrices_equal, Precision
+from utils import Precision
 from ibm_noise_models import HardwareSpec, Instruction, NoiseModel
 from qstates import QuantumState
-from qpu_utils import Op
+from qpu_utils import BasisGates, Op
 from cmemory import ClassicalState, cread
 from pomdp import POMDPAction, POMDPVertex
 import qmemory
 from experiments_utils import generate_configs, generate_embeddings, generate_pomdps, get_config_path, get_num_qubits_to_hardware, get_project_settings
-from zero_plus import get_pivot_qubits
 
 MAX_PRECISION = 5
 WITH_THERMALIZATION = False
@@ -61,9 +60,9 @@ class ZeroPlusInstance:
         self.initial_distribution.append(((plus, initial_cs), 0.5))
     
     def get_reward(self, vertex: POMDPVertex) -> float:     
-        return cread(vertex.classical_state, 0) == vertex.hidden_index
+        return int(cread(vertex.classical_state, 0) == vertex.hidden_index)
     
-def get_experiments_actions(noise_model, embedding, experiment_id):
+def get_experiments_actions(noise_model: NoiseModel, embedding, experiment_id):
     assert isinstance(noise_model, NoiseModel)
     assert isinstance(experiment_id, TwoQZeroPlusExperimentID)
     
@@ -91,8 +90,9 @@ def get_experiments_actions(noise_model, embedding, experiment_id):
             rycx01_action = POMDPAction("rycx01", ry1_instruction + [Instruction(embedding[1], Op.CNOT, control=embedding[0]), Instruction(4, Op.WRITE1)])
             actions.append(rycx01_action)
         
-        hcx10_action = POMDPAction("hcx10", h1_instruction + [Instruction(embedding[0], Op.CNOT, control=embedding[1]), Instruction(4, Op.WRITE1)])
-        actions.append(hcx10_action)
+        if Instruction(embedding[0], Op.CNOT, control=embedding[1]) in noise_model.instructions_to_channel.keys():
+            hcx10_action = POMDPAction("hcx10", h1_instruction + [Instruction(embedding[0], Op.CNOT, control=embedding[1]), Instruction(4, Op.WRITE1)])
+            actions.append(hcx10_action)
         
         hcu10_action = POMDPAction("hcu10", [Instruction(4, Op.WRITE1)] + h1_instruction + 
                         # control-ry gate
@@ -101,7 +101,7 @@ def get_experiments_actions(noise_model, embedding, experiment_id):
                         Instruction(embedding[0], Op.CNOT, control=embedding[1]).to_basis_gate_impl(noise_model.basis_gates)+
                         ry0_instruction
                         )
-        actions.append(hcu10_action)
+        # actions.append(hcu10_action)
         
         meas_action = POMDPAction("MEAS", [
             Instruction(embedding[0], Op.MEAS, real_target=0),
@@ -122,7 +122,6 @@ def get_hardware_scenarios(hardware_spec: HardwareSpec, experiment_id) -> List[D
     '''
     noise_model = NoiseModel(hardware_spec, thermal_relaxation=False)
     answer = []
-    pivot_qubits = get_pivot_qubits(noise_model)
     if experiment_id in [TwoQZeroPlusExperimentID.TWOQ]:
         most_noisy_coupler = noise_model.get_most_noisy_couplers()[0][0]
         embedding = dict()
@@ -159,29 +158,31 @@ def get_allowed_hardware():
     return allowed_harware
 
 if __name__ == "__main__":
+    # arg = sys.argv[1]
+    Precision.PRECISION = MAX_PRECISION
+    Precision.update_threshold()
     allowed_hardware = get_allowed_hardware()
     
     experiment_id = TwoQZeroPlusExperimentID.TWOQ
-    Precision.PRECISION = MAX_PRECISION
-    Precision.update_threshold()
+    
     settings = get_project_settings()
     project_path = settings["PROJECT_PATH"]
-    
-    # print("Generating configuration files...")
-    # generate_configs(experiment_id, min_horizon=3, max_horizon=5)
-    arg = sys.argv[1]
     batches = get_num_qubits_to_hardware(WITH_THERMALIZATION, allowed_hardware)
     
-    # print("generating embedding files...")
-    # for num_qubits in batches.keys():
-    #     config_path = get_config_path(experiment_id, num_qubits)
-    #     generate_embeddings(experiment_id, num_qubits, get_hardware_embeddings=get_hardware_scenarios)
+    print("Generating configuration files...")
+    generate_configs(experiment_id, min_horizon=3, max_horizon=5, allowed_hardware=allowed_hardware)
+    
+    print("generating embedding files...")
+    for num_qubits in batches.keys():
+        config_path = get_config_path(experiment_id, num_qubits)
+        generate_embeddings(experiment_id, num_qubits, get_hardware_embeddings=get_hardware_scenarios)
         
     # for num_qubits in batches.keys():
-    num_qubits = batches[arg]
+    # # num_qubits = arg
+    num_qubits = "B127"
     config_path = get_config_path(experiment_id, num_qubits)
-    generate_pomdps(experiment_id, num_qubits, get_experiments_actions, ZeroPlusInstance, guard=twoq_guard)
-    
+    generate_pomdps(experiment_id, num_qubits, get_experiments_actions, ZeroPlusInstance, guard=twoq_guard, set_hidden_index=True)
+
     
     
     

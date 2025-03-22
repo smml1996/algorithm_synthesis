@@ -65,13 +65,8 @@ class Op(Enum):
         return self.__str__()
     
 class BasisGates(Enum):
-    TYPE1 = set([Op.CNOT, Op.U1, Op.U2, Op.U3])
     TYPE2 = set([Op.CNOT, Op.MEAS, Op.RESET, Op.RZ, Op.SX, Op.X])
-    TYPE3 = set([Op.CNOT, Op.RESET, Op.RZ, Op.SX, Op.X])
     TYPE4 = set([Op.CZ, Op.MEAS, Op.RESET, Op.RZ, Op.SX, Op.X])
-    TYPE5 = set([Op.RZ, Op.SX, Op.X])
-    TYPE6 = set([Op.CNOT, Op.SX, Op.U1, Op.U2, Op.U3, Op.X])
-    TYPE7 = set([Op.CNOT, Op.RZ, Op.SX, Op.X])
     TYPE8 = set([Op.U1, Op.RESET, Op.U3, Op.MEAS, Op.U2, Op.CNOT])
     TYPE9 = set([Op.RESET, Op.MEAS, Op.RZ, Op.SX, Op.X])
     

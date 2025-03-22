@@ -239,7 +239,7 @@ class Instruction:
         self.control = control
         if params is not None:
             for pa in params:
-                assert isinstance(pa, float) or isinstance(pa, str)
+                assert isinstance(pa, float) or isinstance(pa, str) or isinstance(pa, int)
         self.params = params
         self.symbols = symbols
         if symbols is not None:
@@ -427,44 +427,19 @@ class Instruction:
         if (self.op in basis_gates.value) or (self.op == Op.MEAS):
             return [self]
         
-        if basis_gates in [BasisGates.TYPE1, BasisGates.TYPE6]:
-            if self.op == Op.H:
-                return [Instruction(self.target, Op.U2, params=[0.0, pi])]
-            if self.op == Op.Z:
-                return [Instruction(self.target, Op.U1, params=[pi])]
-            if self.op == Op.T:
-                return [Instruction(self.target, Op.U1, params=[pi/4])]
-            if self.op == Op.TD:
-                return [Instruction(self.target, Op.U1, params=[-pi/4])]
-            if self.op == Op.S:
-                return [Instruction(self.target, Op.U1, params=[pi/2])]
-            if self.op == Op.RX:
-                return [Instruction(self.target, Op.U3, params=[self.params[0], -pi/2, pi/2], symbols=self.symbols)]
+        if basis_gates in [BasisGates.TYPE2, BasisGates.TYPE4, BasisGates.TYPE10, BasisGates.TYPE9, BasisGates.TYPE11]:
+            sx = [Instruction(self.target, Op.SX)]
             if self.op == Op.RY:
-                return [Instruction(self.target, Op.U3, params=[self.params[0], 0.0, 0.0], symbols=self.symbols)]
-            if self.op == Op.RZ:
-                return [Instruction(self.target, Op.U1, params=[self.params[0]], symbols=self.symbols)]
-            if self.op == Op.X:
-                assert basis_gates != BasisGates.TYPE6
-                return [Instruction(self.target, Op.U3, params=[pi, 0.0, pi], symbols=self.symbols)]
-            if self.op == Op.CH:
-                H1 = Instruction(self.target, Op.H).to_basis_gate_impl(basis_gates=basis_gates)
-                CX = [Instruction(self.target, Op.CNOT, self.control)]
-                T1 = Instruction(self.target, Op.T).to_basis_gate_impl(basis_gates=basis_gates)
-                TD = Instruction(self.target, Op.TD).to_basis_gate_impl(basis_gates=basis_gates)
-                return H1 + CX + T1 + CX + TD + H1
-        else:
-            assert basis_gates in [BasisGates.TYPE2, BasisGates.TYPE3, BasisGates.TYPE7]
+                return [
+                    Instruction(self.target, Op.SX),
+                    Instruction(self.target, Op.RZ, params=[self.params[0] + pi], symbols=self.symbols),
+                    Instruction(self.target, Op.SX),
+                    Instruction(self.target, Op.RZ, params=[3*pi])
+                ]
             if self.op == Op.H:
                 return [Instruction(self.target, Op.RZ, params=[pi/2]),
                 Instruction(self.target, Op.SX),
                 Instruction(self.target, Op.RZ, params=[pi/2])]
-            if self.op == Op.CH:
-                H1 = Instruction(self.target, Op.H).to_basis_gate_impl(basis_gates=basis_gates)
-                CX = [Instruction(self.target, Op.CNOT, self.control)]
-                T1 = Instruction(self.target, Op.T).to_basis_gate_impl(basis_gates=basis_gates)
-                TD = Instruction(self.target, Op.TD).to_basis_gate_impl(basis_gates=basis_gates)
-                return H1 + CX + T1 + CX + TD + H1
             if self.op == Op.Z:
                 return [Instruction(self.target, Op.RZ, params=[pi])]
             if self.op == Op.U3:
@@ -481,9 +456,10 @@ class Instruction:
                     rz_symbols2 = [self.params[2]]
                     
                 rz_lambda = [Instruction(self.target, Op.RZ, params=[self.params[2]], symbols=rz_symbols2)]
-                ry_theta = Instruction(self.target, Op.RY, params=[self.params[0]], symbols=ry_symbols).to_basis_gate_impl(basis_gates)
-                rz_phi = [Instruction(self.target, Op.RZ, params=[self.params[1]], symbols=rz_symbols1)]
-                return rz_lambda + ry_theta + rz_phi
+                rz_theta = Instruction(self.target, Op.RZ, params=[self.params[0] + pi], symbols=ry_symbols).to_basis_gate_impl(basis_gates)
+                rz_phi = [Instruction(self.target, Op.RZ, params=[self.params[1] + 3*pi], symbols=rz_symbols1)]
+
+                return rz_lambda + sx + rz_theta + sx + rz_phi
             if self.op == Op.T:
                 return [Instruction(self.target, Op.RZ, params=[pi/4])]
             if self.op == Op.TD:
@@ -492,16 +468,19 @@ class Instruction:
                 return [Instruction(self.target, Op.RZ, params=[-pi/2])]
             if self.op == Op.SD:
                 return [Instruction(self.target, Op.RZ, params=[pi/2])]
-            else:
-                h_gate = Instruction(self.target, Op.H).to_basis_gate_impl(basis_gates)
-                rz = Instruction(self.target, Op.RZ, params=self.params, symbols=self.symbols).to_basis_gate_impl(basis_gates)
-                if self.op == Op.RX:
-                    return h_gate + rz + h_gate
-                if self.op == Op.RY:
-                    s_gate = Instruction(self.target, Op.S).to_basis_gate_impl(basis_gates)
-                    s_inverse = Instruction(self.target, Op.SD).to_basis_gate_impl(basis_gates)
-                    answer = s_gate + h_gate + rz + h_gate + s_inverse
-                    return answer
+            if self.op == Op.RX:
+                assert len(self.params) == 1
+                rz_pi2 = [Instruction(self.target, Op.RZ, params=[pi/2])]
+                rz_phi = [Instruction(self.target, Op.RZ, params=[self.params[0] + pi], symbols=self.symbols)]
+                rz_pi5pi2 = [Instruction(self.target, Op.RZ, params=[5*pi/2])]
+                return rz_pi2 + sx + rz_phi + sx + rz_pi5pi2
+        if basis_gates == BasisGates.TYPE8:
+            if self.op == Op.H:
+                return [Instruction(self.target, Op.U2, params=[0, pi])]
+            if self.op == Op.RY:
+                return [Instruction(self.target, Op.U3, params=[self.params[0], 0, 0], symbols=self.symbols)]
+            if self.op == Op.RX:
+                return [Instruction(self.target, Op.U3, params=[self.params[0], -pi/2, pi/2], symbols=self.symbols)]
                 
         raise Exception(f"Cannot translate {self.op} to basis gates {basis_gates}")
 
@@ -525,6 +504,7 @@ class QuantumChannel:
             assert len(self.errors) > 0
 
         if flatten:
+            assert False
             self.flatten()
 
         self.estimated_success_prob = self._get_success_probability()
