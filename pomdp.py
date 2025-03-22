@@ -311,8 +311,8 @@ class POMDP:
         for (fromv, fromv_dict) in self.transition_matrix.items():
             for (channel, channel_dict) in fromv_dict.items():
                 for (tov, prob) in channel_dict.items():
-                    final_prob = round(prob.real, Precision.PRECISION)
-                    f.write(f"{fromv.id} {channel} {tov.id} {final_prob}\n")
+                    final_prob = float(round(prob.real, Precision.PRECISION))
+                    f.write(f"{fromv.id} {channel} {tov.id} {final_prob:f}\n")
 
         f.write("ENDPOMDP\n")
         f.close()
