@@ -10,9 +10,9 @@
 using namespace std;
 
 class MyFloat {
-    static const int precision = 80;
-    static const int tolerance = 80;
     public:
+    static int precision;
+    static int tolerance;
     static void check_digit(const short &digit) {
         assert(digit > -1);
         assert(digit < 10);
@@ -472,6 +472,8 @@ class MyFloat {
         return !(*this > other) && !(*this == other);
     }
 };
+int MyFloat::precision = 80;
+int MyFloat::tolerance = 80;
 
 MyFloat max(MyFloat const &a, MyFloat const &b) {
     if(b > a) {
