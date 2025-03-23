@@ -108,7 +108,7 @@ int main(int argc, char **argv) {
                 for (int horizon = min_horizon; horizon < max_horizon+1; horizon++) {
                     MyFloat::precision = precision * (horizon + 1);
                     MyFloat::tolerance = precision * (horizon + 1);
-                    cerr << "Running experiment: " << hardware << embedding_index << " h="<< horizon << endl;
+                    cerr << "Running experiment: " << hardware << embedding_index << " h="<< horizon << " precision=" << MyFloat::precision << endl;
                     long time_before = time(nullptr);
                     auto result = get_bellman_value(pomdp, initial_belief, horizon, opt_technique);
                     long time_after = time(nullptr);
