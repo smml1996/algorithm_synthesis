@@ -142,6 +142,7 @@ def generate_configs(experiment_id: Enum, min_horizon, max_horizon, allowed_hard
             config = dict()
             config["name"] = batch_name
             config["experiment_id"] = f"{experiment_id.value}"
+            config["precision"] = Precision.PRECISION
             config["min_horizon"] = min_horizon
             config["max_horizon"] = max_horizon
             config["output_dir"] = get_output_path(experiment_id, batch_name)

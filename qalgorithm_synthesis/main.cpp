@@ -12,7 +12,7 @@ using json = nlohmann::json;
 
 using namespace  std;
 
-auto all_keys_required = {"name", "min_horizon", "max_horizon", "output_dir", "opt_technique", "verbose"};
+auto all_keys_required = {"name", "min_horizon", "max_horizon", "output_dir", "opt_technique", "verbose" , "precision"};
 
 /// @brief 
 /// @param argc 
@@ -45,6 +45,7 @@ int main(int argc, char **argv) {
         string experiment_id = config_json["experiment_id"];
         int min_horizon = config_json["min_horizon"];
         int max_horizon = config_json["max_horizon"];
+        int precision = config_json["precision"];
         string opt_technique = config_json["opt_technique"];
         filesystem::path project_path = get_project_path();
         filesystem::path output_dir = project_path / config_json["output_dir"];
@@ -105,6 +106,8 @@ int main(int argc, char **argv) {
 
                 Belief initial_belief = get_initial_belief(pomdp);
                 for (int horizon = min_horizon; horizon < max_horizon+1; horizon++) {
+                    MyFloat::precision = precision * (horizon + 1);
+                    MyFloat::tolerance = precision * (horizon + 1);
                     cerr << "Running experiment: " << hardware << embedding_index << " h="<< horizon << endl;
                     long time_before = time(nullptr);
                     auto result = get_bellman_value(pomdp, initial_belief, horizon, opt_technique);
