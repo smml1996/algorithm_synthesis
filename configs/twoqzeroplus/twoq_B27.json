@@ -1,6 +1,7 @@
 {
     "name": "B27",
     "experiment_id": "twoq",
+    "precision": 5,
     "min_horizon": 3,
     "max_horizon": 5,
     "output_dir": "results/twoqzeroplus/twoq/B27",
