@@ -238,8 +238,9 @@ class Instruction:
             raise Exception("target is in controls")
         self.control = control
         if params is not None:
-            for pa in params:
-                assert isinstance(pa, float) or isinstance(pa, str) or isinstance(pa, int)
+            if not isinstance(params, np.ndarray):
+                for pa in params:
+                    assert isinstance(pa, float) or isinstance(pa, str) or isinstance(pa, int)
         self.params = params
         self.symbols = symbols
         if symbols is not None:
@@ -485,7 +486,7 @@ class Instruction:
         raise Exception(f"Cannot translate {self.op} to basis gates {basis_gates}")
 
 class QuantumChannel:
-    def __init__(self, all_ins_sequences, all_probabilities, target_qubits, optimize=False, flatten=False) -> None:
+    def __init__(self, all_ins_sequences, all_probabilities, target_qubits, optimize=False, flatten=True) -> None:
         self.errors = [] # list of list of sequences of instructions/kraus operators
         self.probabilities = all_probabilities
         for seq in all_ins_sequences:
@@ -504,7 +505,6 @@ class QuantumChannel:
             assert len(self.errors) > 0
 
         if flatten:
-            assert False
             self.flatten()
 
         self.estimated_success_prob = self._get_success_probability()
@@ -535,7 +535,7 @@ class QuantumChannel:
     def flatten_sequence(self, err_seq):
         sequences = []
         for err in err_seq:
-            if isinstance(err, Instruction):
+            if isinstance(err, GateData):
                 if len(sequences) == 0:
                     sequences.append([err])
                 else:

@@ -171,17 +171,19 @@ def write1(quantum_state: QuantumState, gate_data: GateData, name="", is_inverse
 
         if should_perform_op:
             qubit = evaluate_op(op, qubit, name, params=gate_data.params, is_inverse=is_inverse)
-            a0, a1 = qubit.get_qubit_amplitudes()
-            a0 *= value
-            a1 *= value
-            basis0 = glue_qubit_in_basis(basis, address, 0)
-            basis1 = glue_qubit_in_basis(basis, address, 1)
-            result.add_amplitude(basis0, a0)
-            result.add_amplitude(basis1, a1)
-            at_least_one_perform_op = True
+            if qubit is not None:
+                a0, a1 = qubit.get_qubit_amplitudes()
+                a0 *= value
+                a1 *= value
+                basis0 = glue_qubit_in_basis(basis, address, 0)
+                basis1 = glue_qubit_in_basis(basis, address, 1)
+                result.add_amplitude(basis0, a0)
+                result.add_amplitude(basis1, a1)
+                at_least_one_perform_op = True
     if not at_least_one_perform_op:
         return None 
-    assert len(result.sparse_vector.keys()) > 0
+    if len(result.sparse_vector.keys()) == 0:
+        return None
     return result
     
 def are_controls_true(basis, controls: List[int]) -> bool:
