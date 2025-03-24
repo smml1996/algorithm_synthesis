@@ -1,0 +1,71 @@
+{
+    "action": "MEAS",
+    "children": [
+        {
+            "action": "MEAS",
+            "children": [
+                {
+                    "action": "halt",
+                    "children": [],
+                    "classical_state": 2,
+                    "depth": 0
+                },
+                {
+                    "action": "MEAS",
+                    "children": [
+                        {
+                            "action": "halt",
+                            "children": [],
+                            "classical_state": 2,
+                            "depth": 0
+                        },
+                        {
+                            "action": "halt",
+                            "children": [],
+                            "classical_state": 3,
+                            "depth": 0
+                        }
+                    ],
+                    "classical_state": 3,
+                    "depth": 1
+                }
+            ],
+            "classical_state": 2,
+            "depth": 2
+        },
+        {
+            "action": "MEAS",
+            "children": [
+                {
+                    "action": "MEAS",
+                    "children": [
+                        {
+                            "action": "halt",
+                            "children": [],
+                            "classical_state": 2,
+                            "depth": 0
+                        },
+                        {
+                            "action": "halt",
+                            "children": [],
+                            "classical_state": 3,
+                            "depth": 0
+                        }
+                    ],
+                    "classical_state": 2,
+                    "depth": 1
+                },
+                {
+                    "action": "halt",
+                    "children": [],
+                    "classical_state": 3,
+                    "depth": 0
+                }
+            ],
+            "classical_state": 3,
+            "depth": 2
+        }
+    ],
+    "classical_state": 0,
+    "depth": 3
+}
