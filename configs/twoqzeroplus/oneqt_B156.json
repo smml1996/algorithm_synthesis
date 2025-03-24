@@ -3,7 +3,7 @@
     "experiment_id": "oneqt",
     "precision": 8,
     "min_horizon": 2,
-    "max_horizon": 4,
+    "max_horizon": 3,
     "output_dir": "results/twoqzeroplus/oneqt/B156",
     "algorithms_file": "",
     "hardware": [
