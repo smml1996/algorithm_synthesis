@@ -1,38 +1,19 @@
 {
-    "action": "hcx10",
+    "action": "RY0",
     "children": [
         {
-            "action": "RY0",
+            "action": "rycx01",
             "children": [
                 {
-                    "action": "H1",
+                    "action": "RY1",
                     "children": [
                         {
                             "action": "MEAS",
                             "children": [
                                 {
-                                    "action": "ISPlus",
-                                    "children": [
-                                        {
-                                            "action": "halt",
-                                            "children": [],
-                                            "classical_state": 29,
-                                            "depth": 0
-                                        }
-                                    ],
+                                    "action": "halt",
+                                    "children": [],
                                     "classical_state": 20,
-                                    "depth": 1
-                                },
-                                {
-                                    "action": "halt",
-                                    "children": [],
-                                    "classical_state": 21,
-                                    "depth": 0
-                                },
-                                {
-                                    "action": "halt",
-                                    "children": [],
-                                    "classical_state": 22,
                                     "depth": 0
                                 },
                                 {
@@ -41,12 +22,24 @@
                                         {
                                             "action": "halt",
                                             "children": [],
-                                            "classical_state": 30,
+                                            "classical_state": 28,
                                             "depth": 0
                                         }
                                     ],
-                                    "classical_state": 23,
+                                    "classical_state": 21,
                                     "depth": 1
+                                },
+                                {
+                                    "action": "halt",
+                                    "children": [],
+                                    "classical_state": 22,
+                                    "depth": 0
+                                },
+                                {
+                                    "action": "halt",
+                                    "children": [],
+                                    "classical_state": 23,
+                                    "depth": 0
                                 }
                             ],
                             "classical_state": 16,
@@ -57,7 +50,7 @@
                     "depth": 3
                 }
             ],
-            "classical_state": 16,
+            "classical_state": 0,
             "depth": 4
         }
     ],

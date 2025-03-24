@@ -2,10 +2,10 @@
     "action": "hcx10",
     "children": [
         {
-            "action": "RY0",
+            "action": "H1",
             "children": [
                 {
-                    "action": "H1",
+                    "action": "H0",
                     "children": [
                         {
                             "action": "MEAS",

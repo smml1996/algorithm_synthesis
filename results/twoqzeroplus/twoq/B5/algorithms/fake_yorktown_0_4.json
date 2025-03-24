@@ -1,56 +1,49 @@
 {
-    "action": "hcx10",
+    "action": "RY1",
     "children": [
         {
-            "action": "H1",
+            "action": "RY0",
             "children": [
                 {
-                    "action": "MEAS",
+                    "action": "H1",
                     "children": [
                         {
-                            "action": "ISPlus",
+                            "action": "MEAS",
                             "children": [
                                 {
                                     "action": "halt",
                                     "children": [],
-                                    "classical_state": 29,
+                                    "classical_state": 4,
                                     "depth": 0
-                                }
-                            ],
-                            "classical_state": 20,
-                            "depth": 1
-                        },
-                        {
-                            "action": "halt",
-                            "children": [],
-                            "classical_state": 21,
-                            "depth": 0
-                        },
-                        {
-                            "action": "halt",
-                            "children": [],
-                            "classical_state": 22,
-                            "depth": 0
-                        },
-                        {
-                            "action": "IS0",
-                            "children": [
+                                },
                                 {
                                     "action": "halt",
                                     "children": [],
-                                    "classical_state": 30,
+                                    "classical_state": 5,
+                                    "depth": 0
+                                },
+                                {
+                                    "action": "halt",
+                                    "children": [],
+                                    "classical_state": 6,
+                                    "depth": 0
+                                },
+                                {
+                                    "action": "halt",
+                                    "children": [],
+                                    "classical_state": 7,
                                     "depth": 0
                                 }
                             ],
-                            "classical_state": 23,
+                            "classical_state": 0,
                             "depth": 1
                         }
                     ],
-                    "classical_state": 16,
+                    "classical_state": 0,
                     "depth": 2
                 }
             ],
-            "classical_state": 16,
+            "classical_state": 0,
             "depth": 3
         }
     ],

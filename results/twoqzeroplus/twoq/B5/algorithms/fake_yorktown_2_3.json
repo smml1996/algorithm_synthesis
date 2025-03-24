@@ -1,0 +1,52 @@
+{
+    "action": "rycx01",
+    "children": [
+        {
+            "action": "MEAS",
+            "children": [
+                {
+                    "action": "halt",
+                    "children": [],
+                    "classical_state": 20,
+                    "depth": 0
+                },
+                {
+                    "action": "IS0",
+                    "children": [
+                        {
+                            "action": "halt",
+                            "children": [],
+                            "classical_state": 28,
+                            "depth": 0
+                        }
+                    ],
+                    "classical_state": 21,
+                    "depth": 1
+                },
+                {
+                    "action": "ISPlus",
+                    "children": [
+                        {
+                            "action": "halt",
+                            "children": [],
+                            "classical_state": 31,
+                            "depth": 0
+                        }
+                    ],
+                    "classical_state": 22,
+                    "depth": 1
+                },
+                {
+                    "action": "halt",
+                    "children": [],
+                    "classical_state": 23,
+                    "depth": 0
+                }
+            ],
+            "classical_state": 16,
+            "depth": 2
+        }
+    ],
+    "classical_state": 0,
+    "depth": 3
+}

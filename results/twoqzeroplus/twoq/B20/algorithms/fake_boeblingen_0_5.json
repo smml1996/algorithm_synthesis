@@ -5,55 +5,41 @@
             "action": "H1",
             "children": [
                 {
-                    "action": "H1",
+                    "action": "MEAS",
                     "children": [
                         {
-                            "action": "H1",
-                            "children": [
-                                {
-                                    "action": "MEAS",
-                                    "children": [
-                                        {
-                                            "action": "halt",
-                                            "children": [],
-                                            "classical_state": 4,
-                                            "depth": 0
-                                        },
-                                        {
-                                            "action": "halt",
-                                            "children": [],
-                                            "classical_state": 5,
-                                            "depth": 0
-                                        },
-                                        {
-                                            "action": "halt",
-                                            "children": [],
-                                            "classical_state": 6,
-                                            "depth": 0
-                                        },
-                                        {
-                                            "action": "halt",
-                                            "children": [],
-                                            "classical_state": 7,
-                                            "depth": 0
-                                        }
-                                    ],
-                                    "classical_state": 0,
-                                    "depth": 1
-                                }
-                            ],
-                            "classical_state": 0,
-                            "depth": 2
+                            "action": "halt",
+                            "children": [],
+                            "classical_state": 4,
+                            "depth": 0
+                        },
+                        {
+                            "action": "halt",
+                            "children": [],
+                            "classical_state": 5,
+                            "depth": 0
+                        },
+                        {
+                            "action": "halt",
+                            "children": [],
+                            "classical_state": 6,
+                            "depth": 0
+                        },
+                        {
+                            "action": "halt",
+                            "children": [],
+                            "classical_state": 7,
+                            "depth": 0
                         }
                     ],
                     "classical_state": 0,
-                    "depth": 3
+                    "depth": 1
                 }
             ],
             "classical_state": 0,
-            "depth": 4
+            "depth": 2
         }
     ],
     "classical_state": 0,
-    "depth": 5
+    "depth": 3
 }

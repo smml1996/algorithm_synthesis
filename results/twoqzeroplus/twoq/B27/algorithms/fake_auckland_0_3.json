@@ -2,44 +2,37 @@
     "action": "RY0",
     "children": [
         {
-            "action": "H1",
+            "action": "MEAS",
             "children": [
                 {
-                    "action": "MEAS",
-                    "children": [
-                        {
-                            "action": "halt",
-                            "children": [],
-                            "classical_state": 4,
-                            "depth": 0
-                        },
-                        {
-                            "action": "halt",
-                            "children": [],
-                            "classical_state": 5,
-                            "depth": 0
-                        },
-                        {
-                            "action": "halt",
-                            "children": [],
-                            "classical_state": 6,
-                            "depth": 0
-                        },
-                        {
-                            "action": "halt",
-                            "children": [],
-                            "classical_state": 7,
-                            "depth": 0
-                        }
-                    ],
-                    "classical_state": 0,
-                    "depth": 1
+                    "action": "halt",
+                    "children": [],
+                    "classical_state": 4,
+                    "depth": 0
+                },
+                {
+                    "action": "halt",
+                    "children": [],
+                    "classical_state": 5,
+                    "depth": 0
+                },
+                {
+                    "action": "halt",
+                    "children": [],
+                    "classical_state": 6,
+                    "depth": 0
+                },
+                {
+                    "action": "halt",
+                    "children": [],
+                    "classical_state": 7,
+                    "depth": 0
                 }
             ],
             "classical_state": 0,
-            "depth": 2
+            "depth": 1
         }
     ],
     "classical_state": 0,
-    "depth": 3
+    "depth": 2
 }

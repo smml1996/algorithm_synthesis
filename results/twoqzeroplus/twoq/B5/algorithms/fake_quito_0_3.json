@@ -1,8 +1,8 @@
 {
-    "action": "RY0",
+    "action": "RY1",
     "children": [
         {
-            "action": "H1",
+            "action": "RY0",
             "children": [
                 {
                     "action": "MEAS",
