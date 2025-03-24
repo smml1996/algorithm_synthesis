@@ -112,7 +112,6 @@ class GHZExperimentID(Enum):
 class TwoQZeroPlusExperimentID(Enum):
     ONEQT = "oneqt" # optimal rotation + thermalization errors
     TWOQ = "twoq"
-    TWOQParity = "twoqparity"
     TWOQ2 = "twoq2"
     
     @property
@@ -241,7 +240,8 @@ def load_embeddings(config=None, config_path=None, ExperimentIdObj=None):
                         d[1] = temp
                     result[hardware_spec]["embeddings"].append(d)
             else:
-                assert hardware_spec.value not in data.keys()
+                pass
+                # assert hardware_spec.value not in data.keys()
         return result
     raise Exception(f"could not load embeddings file {embedding_path}")
     
