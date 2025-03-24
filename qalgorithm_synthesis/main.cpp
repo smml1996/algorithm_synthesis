@@ -46,6 +46,10 @@ int main(int argc, char **argv) {
         int min_horizon = config_json["min_horizon"];
         int max_horizon = config_json["max_horizon"];
         int precision = config_json["precision"];
+        
+        MyFloat::precision = precision * (max_horizon + 1);
+        MyFloat::tolerance = precision * (max_horizon + 1);
+
         string opt_technique = config_json["opt_technique"];
         filesystem::path project_path = get_project_path();
         filesystem::path output_dir = project_path / config_json["output_dir"];
@@ -94,6 +98,8 @@ int main(int argc, char **argv) {
         lambdas_file << "hardware,embedding,horizon,lambda,time\n";
         lambdas_file.flush();
 
+       
+
         for (auto& el : all_embeddings.items()) {
             if (el.key() == "count") continue;
 
@@ -106,8 +112,6 @@ int main(int argc, char **argv) {
 
                 Belief initial_belief = get_initial_belief(pomdp);
                 for (int horizon = min_horizon; horizon < max_horizon+1; horizon++) {
-                    MyFloat::precision = precision * (horizon + 1);
-                    MyFloat::tolerance = precision * (horizon + 1);
                     cerr << "Running experiment: " << hardware << embedding_index << " h="<< horizon << " precision=" << MyFloat::precision << endl;
                     long time_before = time(nullptr);
                     auto result = get_bellman_value(pomdp, initial_belief, horizon, opt_technique);
