@@ -7,6 +7,7 @@ import signal
 import time
 from typing import Any, Callable, Dict, List, Optional
 
+from numpy import pi
 from qiskit import ClassicalRegister, QuantumCircuit, QuantumRegister
 
 from algorithm import AlgorithmNode, dump_algorithms, execute_algorithm
@@ -107,6 +108,16 @@ class GHZExperimentID(Enum):
     @property
     def exp_name(self):
         return "ghz"
+    
+class TwoQZeroPlusExperimentID(Enum):
+    ONEQT = "oneqt" # optimal rotation + thermalization errors
+    TWOQ = "twoq"
+    TWOQParity = "twoqparity"
+    TWOQ2 = "twoq2"
+    
+    @property
+    def exp_name(self):
+        return "twoqzeroplus"
 
 ####### configs ##########
 def generate_configs(experiment_id: Enum, min_horizon, max_horizon, allowed_hardware=HardwareSpec, batches: Dict[str, List[HardwareSpec]]=None, opt_technique: str="max", reps=0, verbose=0):
@@ -470,6 +481,14 @@ def get_default_algorithm(noise_model, embedding, experiment_id, get_experiments
         node1.next_ins = node2
         node2.next_ins = node3    
         return node1
+    if isinstance(experiment_id, TwoQZeroPlusExperimentID):
+        if experiment_id == TwoQZeroPlusExperimentID.TWOQ:
+            node1 = AlgorithmNode("RY0", Instruction(embedding[0], Op.RY, params=[pi/4]).to_basis_gate_impl(noise_model.basis_gates), classical_state=0)
+            node2 = AlgorithmNode("meas", [Instruction(embedding[0], Op.MEAS, real_target=0)], 0)
+            node1.children = [node2]
+            return node1
+        else:
+            raise Exception("No default algorithm specified for", experiment_id)
     if isinstance(experiment_id, BitflipExperimentID):
         return get_default_flip_algorithm(noise_model, embedding, horizon, experiment_id, get_experiments_actions, target_qubit=target_qubit)
     return get_default_flip_algorithm(noise_model, embedding, horizon, experiment_id, get_experiments_actions, target_qubit=target_qubit)
@@ -505,9 +524,6 @@ def get_custom_guarantee(algorithm_node: AlgorithmNode, pomdp_path, config):
     algorithm_file.write(json.dumps(algorithm_node.serialize()))
     algorithm_file.close()
     pomdp_path = os.path.join(project_path, pomdp_path)
-    print(pomdp_path)
-    print(algorithm_path)
-    print("********")
     return get_markov_chain_results(project_settings, algorithm_path, pomdp_path)
 
 def get_simulated_guarantee(noise_model: NoiseModel, hardware_spec: HardwareSpec, embedding: Dict[int, int], experiment_id: Any, optimization_level=1, IBMInstanceObj=None, factor=1, get_coupling_map=None):
@@ -542,7 +558,7 @@ def get_guarantees(noise_model: NoiseModel, batch: int, hardware_spec: HardwareS
         default_guarantee = round(get_custom_guarantee(default_algorithm, pomdp_path, config),3)
     return my_guarantee, default_guarantee
 
-def generate_mc_guarantees_file(experiment_id, allowed_hardware: List[HardwareSpec], get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=False, optimization_level=0, IBMInstanceObj=None, file_posfix="", factor=1,get_coupling_map=None):
+def generate_mc_guarantees_file(experiment_id, allowed_hardware: List[HardwareSpec], get_hardware_embeddings, get_experiments_actions, WITH_THERMALIZATION=False, optimization_level=0, IBMInstanceObj=None, file_posfix="", factor=1, get_coupling_map=None):
     columns = [
         "hardware_spec",
         "embedding_index",
@@ -877,18 +893,27 @@ def generate_algs_vs_file(experiment_id, allowed_hardware, get_hardware_embeddin
     batches = get_num_qubits_to_hardware(with_thermalization, allowed_hardware=allowed_hardware)
     
     for (horizon, algorithms) in all_algorithms.items():
+        print(horizon, len(algorithms))
         for (alg_index, algorithm) in enumerate(algorithms):
+            algorithm_actions = algorithm.get_algorithm_actions()
             for (batch_name, hardware_specs) in batches.items():
                 config_path = get_config_path(experiment_id, batch_name)
                 config = load_config_file(config_path, type(experiment_id))
                 for hardware_spec in hardware_specs:
+                    noise_model = NoiseModel(hardware_spec, with_thermalization)
+                    
                     embeddings = get_hardware_embeddings(hardware_spec, experiment_id)
-                    for (embedding_index, _) in enumerate(embeddings):
-                        pomdp_path = get_pomdp_path(config, hardware_spec, embedding_index)
-                        acc = get_custom_guarantee(algorithm, pomdp_path, config)
-                        columns = [horizon, alg_index, hardware_spec.value, embedding_index, acc]
-                        columns = [str(x) for x in columns]
-                        outputfile.write(",".join(columns) + "\n")
+                    for (embedding_index, embedding) in enumerate(embeddings):
+                        actions = get_experiments_actions(noise_model, embedding, experiment_id)
+                        action_names = set([action.name for action in actions])
+                        # determine if its possible to run this algorithm in this hardware
+                        if algorithm_actions.issubset(action_names):
+                            pomdp_path = get_pomdp_path(config, hardware_spec, embedding_index)
+                            acc = get_custom_guarantee(algorithm, pomdp_path, config)
+                            columns = [horizon, alg_index, hardware_spec.value, embedding_index, acc]
+                            columns = [str(x) for x in columns]
+                            outputfile.write(",".join(columns) + "\n")
+                    outputfile.flush()
                         
     outputfile.close()
             

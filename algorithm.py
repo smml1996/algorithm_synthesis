@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Set
 
 from qiskit import QuantumCircuit
 from ibm_noise_models import Instruction, instruction_to_ibm
@@ -42,19 +42,32 @@ class AlgorithmNode:
             return True
         return False
     
-    def serialize(self):
+    def serialize(self, depth=0):
         if self.children is not None:
             children = []
             for child in self.children:
-                children.append(child.serialize())
+                children.append(child.serialize(depth=depth+1))
         else:
             children = "None"
 
         return {
             "action": self.action_name,
             "classical_state": self.classical_state,
-            "children": children
+            "children": children,
+            "depth": depth
         }
+    
+    def get_algorithm_actions(self) -> Set[str]:
+        if self.action_name != "halt":
+            result = set([self.action_name])
+        else:
+            result = set()
+        
+        for child in self.children:
+            temp = child.get_algorithm_actions()
+            for action in temp:
+                result.add(action)
+        return result
       
 def execute_algorithm(node: AlgorithmNode, qpu: QuantumCircuit, count_ins=0, cbits=None):    
     if node is not None:

@@ -1,31 +1,20 @@
 from copy import deepcopy
 from enum import Enum
 from math import pi
+import numpy as np
 import os, sys
 from typing import Dict, List, Tuple
 sys.path.append(os.getcwd()+"/..")
 
-from utils import Precision
+from utils import Precision, find_enum_object
 from ibm_noise_models import HardwareSpec, Instruction, NoiseModel
 from qstates import QuantumState
 from qpu_utils import BasisGates, Op
 from cmemory import ClassicalState, cread
 from pomdp import POMDPAction, POMDPVertex
 import qmemory
-from experiments_utils import generate_configs, generate_embeddings, generate_pomdps, get_config_path, get_num_qubits_to_hardware, get_project_settings
+from experiments_utils import TwoQZeroPlusExperimentID, check_files, generate_algs_vs_file, generate_configs, generate_diff_algorithms_file, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_config_path, get_num_qubits_to_hardware, get_project_settings
 from bitflip import get_pivot_qubits
-
-MAX_PRECISION = 5
-WITH_THERMALIZATION = False
-
-class TwoQZeroPlusExperimentID(Enum):
-    TWOQ = "twoq"
-    TWOQParity = "twoqparity"
-    TWOQ2 = "twoq2"
-    
-    @property
-    def exp_name(self):
-        return "twoqzeroplus"
     
 class ZeroPlusInstance:
     def __init__(self, embedding, experiment_id: TwoQZeroPlusExperimentID):
@@ -40,13 +29,18 @@ class ZeroPlusInstance:
         self.embedding = embedding
         self.experiment_id = experiment_id
         self.initial_distribution = None
-        self.qubits_used = [self.embedding[0], self.embedding[1]]
-        # check embedding
-        assert self.experiment_id in [TwoQZeroPlusExperimentID.TWOQ, TwoQZeroPlusExperimentID.TWOQ2]
-        assert len(self.embedding.keys()) == 2 # 2 + 2 qubit for hidden indices
+        if experiment_id in [TwoQZeroPlusExperimentID.TWOQ]:
+            self.qubits_used = [self.embedding[0], self.embedding[1]]
+            # check embedding
+            assert len(self.embedding.keys()) == 2 # 2 + 2 qubit for hidden indices
+        elif experiment_id in [TwoQZeroPlusExperimentID.ONEQT]:
+            self.qubits_used = [self.embedding[0]]
+            assert len(self.embedding.keys()) == 1
+        else:
+            raise Exception("missing setup for experiment", experiment_id)
         self.get_initial_distribution()
         
-    def get_initial_distribution(self):
+    def  get_initial_distribution(self):
         self.initial_distribution = []
         initial_cs = ClassicalState()
         
@@ -69,12 +63,35 @@ def get_experiments_actions(noise_model: NoiseModel, embedding, experiment_id):
     
     # some instructions
     h0_instruction = Instruction(embedding[0], Op.H).to_basis_gate_impl(noise_model.basis_gates)
-    h1_instruction = Instruction(embedding[1], Op.H).to_basis_gate_impl(noise_model.basis_gates)
     ry0_instruction = Instruction(embedding[0], Op.RY, params=[pi/4]).to_basis_gate_impl(noise_model.basis_gates)
-    ry1_instruction =  Instruction(embedding[1], Op.RY, params=[pi/4]).to_basis_gate_impl(noise_model.basis_gates)
+    
+    if len(embedding.keys()) > 1 :
+        h1_instruction = Instruction(embedding[1], Op.H).to_basis_gate_impl(noise_model.basis_gates)
+        ry1_instruction =  Instruction(embedding[1], Op.RY, params=[pi/4]).to_basis_gate_impl(noise_model.basis_gates)
     
     actions = []
-    if experiment_id == TwoQZeroPlusExperimentID.TWOQ:
+    if experiment_id == TwoQZeroPlusExperimentID.ONEQT:
+        ry0_action = POMDPAction("RY0", ry0_instruction)
+        actions.append(ry0_action)
+        
+        for i in [2, 5, 10]:
+            ry_instruction = Instruction(embedding[0], Op.RY, params=[np.radians(i)]).to_basis_gate_impl(noise_model.basis_gates)
+            actions.append(POMDPAction(f"RY{i}", ry_instruction))
+            
+            ry_instruction = Instruction(embedding[0], Op.RY, params=[np.radians(i)]).to_basis_gate_impl(noise_model.basis_gates)
+            actions.append(POMDPAction(f"RY-{i}", ry_instruction))
+        
+        meas_action = POMDPAction("MEAS", [
+            Instruction(embedding[0], Op.MEAS, real_target=0),
+            Instruction(1, Op.WRITE1)
+        ])
+        actions.append(meas_action)
+        
+        DETERMINE0 = POMDPAction("IS0", [Instruction(0, Op.WRITE0), Instruction(2, Op.WRITE1)])
+        DETERMINEPlus = POMDPAction("ISPlus", [Instruction(0, Op.WRITE1), Instruction(2, Op.WRITE1)])
+        actions.append(DETERMINE0)
+        actions.append(DETERMINEPlus)
+    elif experiment_id == TwoQZeroPlusExperimentID.TWOQ:
         assert len(embedding) == 2
         
         h0_action = POMDPAction("H0", h0_instruction)
@@ -159,36 +176,55 @@ def get_selected_couplers(noise_model: NoiseModel, target: int) -> List[Tuple[in
 def get_hardware_scenarios(hardware_spec: HardwareSpec, experiment_id) -> List[Dict[int, int]]:
     ''' returns hardware scenarios (embeddings) for a given hardware specification
     '''
-    assert experiment_id in [TwoQZeroPlusExperimentID.TWOQ]
     noise_model = NoiseModel(hardware_spec, thermal_relaxation=False)
     answer = []
     
-    selected_couplers = set()
-    # we consider the most noisy couplers
-    selected_couplers.add(noise_model.get_most_noisy_couplers()[0][0])
+    if experiment_id in [TwoQZeroPlusExperimentID.ONEQT]:
+        qubits = set()
+        # choose qubits according to measurement error
+        pivot_qubits = get_pivot_qubits(noise_model, only_most_noisy=False, with_indegree=False)
+        for q in pivot_qubits:
+            qubits.add(q)
         
-    # we consider the least noisy couplers
-    selected_couplers.add(noise_model.get_most_noisy_couplers()[-1][0])
-    
-    # choose qubits according to measurement error
-    pivot_qubits = get_pivot_qubits(noise_model, only_most_noisy=False)
-    for pivot in pivot_qubits:
-        couplers = get_selected_couplers(noise_model, pivot)
-        for coupler in couplers:
-            if (coupler[1], coupler[0]) not in selected_couplers:
-                selected_couplers.add(coupler)
-    
-    for coupler in selected_couplers:
-        d = {0: coupler[0], 1: coupler[1]}
-        assert not is_dictionary_in_list(answer, d)
-        answer.append(deepcopy(d))
+        instruction_ry = Instruction(0, Op.RY, params=[pi/4]).to_basis_gate_impl(noise_model.basis_gates)
         
-        if Instruction(coupler[0], Op.CNOT, control=coupler[1]) not in noise_model.instructions_to_channel.keys() or Instruction(coupler[1], Op.CNOT, control=coupler[0]) not in noise_model.instructions_to_channel.keys():
-            # if either of the directions does not exists, we consider the other possible embedding with this coupler
-            d = {0: coupler[1], 1: coupler[0]}
+        ops = [instruction.op for instruction in instruction_ry]
+        for op in ops:
+            most_noisy = noise_model.get_most_noisy_qubit(op, top=1)
+            if most_noisy[0][0] < 0.99:
+                qubits.add(most_noisy[0][1])
+
+        for qubit in qubits:
+            answer.append({0: qubit})
+        
+    elif experiment_id in [TwoQZeroPlusExperimentID.TWOQ]:
+        # choose qubits according to measurement error
+        pivot_qubits = get_pivot_qubits(noise_model, only_most_noisy=False)
+        selected_couplers = set()
+        # we consider the most noisy couplers
+        selected_couplers.add(noise_model.get_most_noisy_couplers()[0][0])
+            
+        # we consider the least noisy couplers
+        selected_couplers.add(noise_model.get_most_noisy_couplers()[-1][0])
+        
+        for pivot in pivot_qubits:
+            couplers = get_selected_couplers(noise_model, pivot)
+            for coupler in couplers:
+                if (coupler[1], coupler[0]) not in selected_couplers:
+                    selected_couplers.add(coupler)
+        
+        for coupler in selected_couplers:
+            d = {0: coupler[0], 1: coupler[1]}
             assert not is_dictionary_in_list(answer, d)
             answer.append(deepcopy(d))
-        
+            
+            if Instruction(coupler[0], Op.CNOT, control=coupler[1]) not in noise_model.instructions_to_channel.keys() or Instruction(coupler[1], Op.CNOT, control=coupler[0]) not in noise_model.instructions_to_channel.keys():
+                # if either of the directions does not exists, we consider the other possible embedding with this coupler
+                d = {0: coupler[1], 1: coupler[0]}
+                assert not is_dictionary_in_list(answer, d)
+                answer.append(deepcopy(d))
+    else:
+        raise Exception("no hardware scenarios specified for experiment", experiment_id)
     return answer
 
 def twoq_guard(vertex: POMDPVertex, _: Dict[int, int], action: POMDPAction) -> bool:
@@ -204,40 +240,118 @@ def twoq_guard(vertex: POMDPVertex, _: Dict[int, int], action: POMDPAction) -> b
     
     return True
 
-def get_allowed_hardware():
+def oneqt_guard(vertex: POMDPVertex, _: Dict[int, int], action: POMDPAction) -> bool:
+    classical_state = vertex.classical_state
+    
+    if cread(classical_state, 2) == 1:
+        return False
+    
+    if cread(classical_state, 1) == 1:
+        return action.name in ["MEAS", "IS0", "ISPlus"]
+    
+    return True
+    
+    
+
+def set_precision(experiment_id):
+    if experiment_id in [TwoQZeroPlusExperimentID.TWOQ]:
+        Precision.PRECISION = 5
+    elif experiment_id in [TwoQZeroPlusExperimentID.ONEQT]:
+        Precision.PRECISION = 8
+    else:
+        raise Exception("Could not set precision for", experiment_id)
+    Precision.update_threshold()
+        
+
+def get_allowed_hardware(experiment_id, with_thermalization):
     ''' We will only run experiments on quantum hardware that has CNOT gates in its basis gate set
     '''
-    allowed_harware = []
-    for hardware_spec in HardwareSpec:
-        noise_model = NoiseModel(hardware_spec, thermal_relaxation=WITH_THERMALIZATION)
-        if Op.CNOT in noise_model.basis_gates.value:
-            allowed_harware.append(hardware_spec)
+    if experiment_id == TwoQZeroPlusExperimentID.ONEQT:
+        return HardwareSpec
+    elif experiment_id in [TwoQZeroPlusExperimentID.TWOQ]:
+        allowed_harware = []
+        for hardware_spec in HardwareSpec:
+            noise_model = NoiseModel(hardware_spec, thermal_relaxation=with_thermalization)
+            if Op.CNOT in noise_model.basis_gates.value:
+                allowed_harware.append(hardware_spec)
     return allowed_harware
 
+def get_min_max_horizon(experiment_id) -> Tuple[int, int]:
+    if experiment_id == TwoQZeroPlusExperimentID.ONEQT:
+        return 2,3
+    elif experiment_id == TwoQZeroPlusExperimentID.TWOQ:
+        return 3,5
+    else:
+        raise Exception("could not retrieve min. and max. horizon for experiment", experiment_id)
+    
+def get_guard(experiment_id):
+    if experiment_id == TwoQZeroPlusExperimentID.ONEQT:
+        return oneqt_guard
+    elif experiment_id == TwoQZeroPlusExperimentID.TWOQ:
+        return twoq_guard
+    else:
+        raise Exception("could not retireve guard for experiment", experiment_id)
+
+def get_thermalization_setup(experiment_id) -> bool:
+    if experiment_id in [TwoQZeroPlusExperimentID.ONEQT]:
+        return True
+    elif experiment_id in [TwoQZeroPlusExperimentID.TWOQ]:
+        return False
+    else:
+        raise Exception("Could not get thermalization setup for experiment", experiment_id)
+
 if __name__ == "__main__":
-    # arg = sys.argv[1]
-    Precision.PRECISION = MAX_PRECISION
-    Precision.update_threshold()
-    allowed_hardware = get_allowed_hardware()
-    
-    experiment_id = TwoQZeroPlusExperimentID.TWOQ
-    
     settings = get_project_settings()
     project_path = settings["PROJECT_PATH"]
-    batches = get_num_qubits_to_hardware(WITH_THERMALIZATION, allowed_hardware)
     
-    # print("Generating configuration files...")
-    # generate_configs(experiment_id, min_horizon=3, max_horizon=5, allowed_hardware=allowed_hardware)
+    experiment_name = sys.argv[1]
+    process_name = sys.argv[2]
+    batch_name = None
+    if len(sys.argv) > 3:
+        batch_name = sys.argv[3]
     
-    # print("generating embedding files...")
-    # for num_qubits in batches.keys():
-    #     config_path = get_config_path(experiment_id, num_qubits)
-    #     generate_embeddings(experiment_id, num_qubits, get_hardware_embeddings=get_hardware_scenarios)
-        
-    for num_qubits in batches.keys():
-    # # num_qubits = arg
-        config_path = get_config_path(experiment_id, num_qubits)
-        generate_pomdps(experiment_id, num_qubits, get_experiments_actions, ZeroPlusInstance, guard=twoq_guard, set_hidden_index=True)
+    experiment_id = find_enum_object(experiment_name, TwoQZeroPlusExperimentID)
+    with_thermalization = get_thermalization_setup(experiment_id)
+    if experiment_id is None:
+        raise Exception("Experiment name:", experiment_name, " does not match any element of the enum")
+    
+    set_precision(experiment_id)
+    allowed_hardware = get_allowed_hardware(experiment_id, with_thermalization)
+    batches = get_num_qubits_to_hardware(with_thermalization, allowed_hardware)
+    
+    if process_name == "setup":
+        min_horizon, max_horizon = get_min_max_horizon(experiment_id)
+        # generate configuration files
+        print("Generating configuration files...")
+        generate_configs(experiment_id, min_horizon=min_horizon, max_horizon=max_horizon, allowed_hardware=allowed_hardware)
+    
+        print("generating embedding files...")
+        for num_qubits in batches.keys():
+            config_path = get_config_path(experiment_id, num_qubits)
+            generate_embeddings(experiment_id, num_qubits, get_hardware_embeddings=get_hardware_scenarios)
+    elif process_name == "gen_pomdps":
+        # generate POMDPS
+        if batch_name is None:
+            for num_qubits in batches.keys():
+                config_path = get_config_path(experiment_id, num_qubits)
+                generate_pomdps(experiment_id, num_qubits, get_experiments_actions, ZeroPlusInstance, guard=get_guard(experiment_id), set_hidden_index=True, WITH_THERMALIZATION=with_thermalization)
+        else:
+            config_path = get_config_path(experiment_id, batch_name)
+            generate_pomdps(experiment_id, batch_name, get_experiments_actions, ZeroPlusInstance, guard=get_guard(experiment_id), set_hidden_index=True, WITH_THERMALIZATION=with_thermalization)
+    elif process_name == "mc_guarantees":
+        # markov chain guarantees for each algorithm
+        generate_mc_guarantees_file(experiment_id, allowed_hardware, get_hardware_scenarios, get_experiments_actions, WITH_THERMALIZATION=with_thermalization)
+    elif process_name == "diff_algs_file":
+        generate_diff_algorithms_file(experiment_id, allowed_hardware, get_hardware_scenarios, get_experiments_actions, with_thermalization=with_thermalization)
+    elif process_name == "check_files":
+        # checks all algorithms for all hardware scenarios have been synthesized and we have all lambdas
+        check_files(experiment_id, allowed_hardware, with_thermalization=with_thermalization)
+    elif process_name == "diffs_algs_vs":
+        # compare performance of all all algorithms in the diffs file
+        generate_algs_vs_file(experiment_id, allowed_hardware, get_hardware_scenarios, get_experiments_actions, with_thermalization=with_thermalization)
+    else:
+        raise Exception("Invalid process name", process_name)
+    
 
     
     

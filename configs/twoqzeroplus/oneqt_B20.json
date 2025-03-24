@@ -2,8 +2,8 @@
     "name": "B20",
     "experiment_id": "oneqt",
     "precision": 8,
-    "min_horizon": 1,
-    "max_horizon": 3,
+    "min_horizon": 2,
+    "max_horizon": 4,
     "output_dir": "results/twoqzeroplus/oneqt/B20",
     "algorithms_file": "",
     "hardware": [

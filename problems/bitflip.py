@@ -85,8 +85,8 @@ class BitFlipInstance:
         self.initial_state.append((bell3, initial_cs))
 
 
-    def get_reward(self, hybrid_state) -> float:
-        qs , _ = hybrid_state
+    def get_reward(self, vertex) -> float:
+        qs = vertex.quantum_state
         assert isinstance(qs, QuantumState)
         
         current_rho = qs.multi_partial_trace(remove_indices=[self.embedding[2]])
@@ -103,13 +103,13 @@ class BitFlipInstance:
     
 
 # choosing embeddings
-def get_pivot_qubits(noise_model: NoiseModel, only_most_noisy=False):
+def get_pivot_qubits(noise_model: NoiseModel, only_most_noisy=False, with_indegree=True):
     result = set()
     noises = []
     if noise_model.hardware_spec == HardwareSpec.MELBOURNE:
         noise_model.num_qubits = 14
     for qubit in range(noise_model.num_qubits):
-        if noise_model.get_qubit_indegree(qubit) > 1:
+        if (noise_model.get_qubit_indegree(qubit) > 1) or (not with_indegree):
             noise_data = noise_model.instructions_to_channel[Instruction(qubit, Op.MEAS)]
             assert isinstance(noise_data, MeasChannel)
             success0 = noise_data.get_ind_probability(0,0)
@@ -236,7 +236,7 @@ class IBMBitFlipInstance:
 
 def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], experiment_id: BitflipExperimentID):
     if experiment_id == BitflipExperimentID.IPMA:
-        if noise_model.basis_gates in [BasisGates.TYPE1]:
+        if noise_model.basis_gates in [BasisGates.TYPE8]:
             X0 = POMDPAction("X0", [Instruction(embedding[0], Op.U3, params=[pi, 2*pi, pi])])
         else:
             X0 = POMDPAction("X0", [Instruction(embedding[0], Op.X)])
@@ -246,7 +246,7 @@ def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], e
         CX12 = POMDPAction("CX12", [Instruction(embedding[2], Op.CNOT, control=embedding[1])])
         return [CX02, CX12, P2, X0]
     elif experiment_id == BitflipExperimentID.IPMA2:
-        if noise_model.basis_gates in [BasisGates.TYPE1]:
+        if noise_model.basis_gates in [BasisGates.TYPE8]:
             X0 = POMDPAction("X0", [Instruction(embedding[0], Op.U3, params=[pi, 2*pi, pi])])
         else:
             X0 = POMDPAction("X0", [Instruction(embedding[0], Op.X)])
@@ -254,7 +254,7 @@ def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], e
         P2 = POMDPAction("P2", [Instruction(embedding[2], Op.MEAS, real_target=2)])
         return [CX, P2, X0]
     elif experiment_id == BitflipExperimentID.IPMA3:
-        if noise_model.basis_gates in [BasisGates.TYPE1]:
+        if noise_model.basis_gates in [BasisGates.TYPE8]:
             X0 = POMDPAction("X0", [Instruction(embedding[0], Op.U3, params=[pi, 2*pi, pi])])
             X2 = POMDPAction("X2", [Instruction(embedding[2], Op.U3, params=[pi, 2*pi, pi])])
         else:
@@ -265,7 +265,7 @@ def get_experiments_actions(noise_model: NoiseModel, embedding: Dict[int,int], e
         return [CX, P2, X0, X2]
     else:
         assert experiment_id == BitflipExperimentID.CXH
-        if noise_model.basis_gates in [BasisGates.TYPE1, BasisGates.TYPE6]:
+        if noise_model.basis_gates in [BasisGates.TYPE8]:
             H2 = POMDPAction("H2", [Instruction(embedding[2], Op.U2, params=[0.0, pi])])
             H1 = POMDPAction("H1", [Instruction(embedding[1], Op.U2, params=[0.0, pi])])
         else:

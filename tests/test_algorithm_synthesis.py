@@ -55,7 +55,7 @@ def simulation_test():
         actions_to_instructions[action.name] = action.instruction_sequence
     actions_to_instructions["halt"] = []
     algorithm = AlgorithmNode(serialized=json.load(open(algorithm_path)), actions_to_instructions=actions_to_instructions)
-    simulated_result = get_ibm_simulated_acc(algorithm, embedding, hardware_spec, IBMBitFlipInstance, init_states=[0,1,2,3])
+    # simulated_result = get_ibm_simulated_acc(algorithm, embedding, hardware_spec, IBMBitFlipInstance, init_states=[0,1,2,3])
     assert isclose(mk_result, simulated_result, rel_tol=1e-3)
     
     
@@ -65,6 +65,6 @@ if __name__ == "__main__":
     Precision.PRECISION = MAX_PRECISION
     Precision.update_threshold()
    
-    # test_bitflip_synthesis()
-    dump_algorithm_test()
+    test_bitflip_synthesis()
+    # dump_algorithm_test()
     # simulation_test()
