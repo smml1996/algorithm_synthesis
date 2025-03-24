@@ -1,0 +1,15 @@
+{
+    "name": "B1",
+    "experiment_id": "oneqt",
+    "precision": 8,
+    "min_horizon": 1,
+    "max_horizon": 3,
+    "output_dir": "results/twoqzeroplus/oneqt/B1",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_armonk"
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
+}
