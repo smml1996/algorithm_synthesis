@@ -127,28 +127,32 @@ def get_experiments_actions(noise_model: NoiseModel, embedding, experiment_id):
         actions.append(DETERMINE0)
         actions.append(DETERMINEPlus)
     elif experiment_id == TwoQZeroPlusExperimentID.TWOQ2:
+        actions.append(POMDPAction("RY0", ry0_instruction + [
+            Instruction(4, Op.WRITE1)
+        ]))
         
         count_cnot_directions = 0
         if Instruction(embedding[1], Op.CNOT, control=embedding[0]) in noise_model.instructions_to_channel.keys():
             count_cnot_directions = 1
-            rycx01_action = POMDPAction("rycx01", ry1_instruction + [Instruction(embedding[1], Op.CNOT, control=embedding[0]), ry1_instruction])
+            rycx01_action = POMDPAction("rycx01", ry1_instruction + [Instruction(embedding[1], Op.CNOT, control=embedding[0])] +  ry1_instruction + [Instruction(5, Op.WRITE1)])
             actions.append(rycx01_action)
         
         if Instruction(embedding[0], Op.CNOT, control=embedding[1]) in noise_model.instructions_to_channel.keys():
             count_cnot_directions += 1
-            hcx10_action = POMDPAction("hcx10", h1_instruction + [Instruction(embedding[0], Op.CNOT, control=embedding[1])] + h1_instruction)
+            hcx10_action = POMDPAction("hcx10", h1_instruction + [Instruction(embedding[0], Op.CNOT, control=embedding[1])] + h1_instruction + [Instruction(5, Op.WRITE1)])
             actions.append(hcx10_action)
             
-        if count_cnot_directions == 2:
-            swap_action = POMDPAction("swap", [
-                Instruction(embedding[0], Op.CNOT, control=embedding[1]),
-                Instruction(embedding[1], Op.CNOT, control=embedding[0]),
-                Instruction(embedding[0], Op.CNOT, control=embedding[1]),
-            ])
-            actions.append(swap_action)
+        # if count_cnot_directions == 2:
+        #     swap_action = POMDPAction("swap", [
+        #         Instruction(embedding[0], Op.CNOT, control=embedding[1]),
+        #         Instruction(embedding[1], Op.CNOT, control=embedding[0]),
+        #         Instruction(embedding[0], Op.CNOT, control=embedding[1]),
+        #         Instruction(5, Op.WRITE1)
+        #     ])
+        #     actions.append(swap_action)
         
-        meas0_action = POMDPAction("MEAS0", [Instruction(embedding[0], Op.MEAS, real_target=0),Instruction(2, Op.WRITE1)])
-        meas1_action = POMDPAction("MEAS1", [Instruction(embedding[1], Op.MEAS, real_target=1),Instruction(2, Op.WRITE1)])
+        meas0_action = POMDPAction("MEAS0", [Instruction(embedding[0], Op.MEAS, real_target=0),Instruction(2, Op.WRITE1), Instruction(6, Op.WRITE1), Instruction(5, Op.WRITE0)])
+        meas1_action = POMDPAction("MEAS1", [Instruction(embedding[1], Op.MEAS, real_target=1),Instruction(2, Op.WRITE1), Instruction(5, Op.WRITE0)])
         actions.append(meas0_action)
         actions.append(meas1_action)
         
@@ -259,9 +263,25 @@ def twoq2_guard(vertex: POMDPVertex, _: Dict[int, int], action: POMDPAction) -> 
         # we have already executed either Determine0 or DeterminePlus
         return False
     
+    if cread(classical_state, 6) == 1:
+        return action.name in ["IS0", "ISPlus", "MEAS0", "MEAS1"]
+    
     # allow to execute determine actions if at least one measurement has been performed
     if action.name in ["IS0", "ISPlus"]:
         return cread(classical_state, 2) == 1
+    
+    # if action.name == "MEAS0":
+    #     return cread(classical_state, 4) == 1 or cread(classical_state, 5) == 1 
+    
+    # if action.name == "MEAS1":
+    #     return cread(classical_state, 5) == 1
+    
+    if action.name in ["RY0"]:
+        return cread(classical_state, 4) == 0
+    
+    if action.name in ["rycx01", "hcx10"]:
+        return cread(classical_state, 5) == 0
+    return True
     
     
 
