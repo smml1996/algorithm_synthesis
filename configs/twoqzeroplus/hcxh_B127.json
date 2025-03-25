@@ -1,0 +1,15 @@
+{
+    "name": "B127",
+    "experiment_id": "hcxh",
+    "precision": 8,
+    "min_horizon": 2,
+    "max_horizon": 6,
+    "output_dir": "results/twoqzeroplus/hcxh/B127",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_washington"
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
+}
