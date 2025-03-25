@@ -1,0 +1,40 @@
+{
+    "action": "RY0",
+    "children": [
+        {
+            "action": "MEAS",
+            "children": [
+                {
+                    "action": "ISPlus",
+                    "children": [
+                        {
+                            "action": "halt",
+                            "children": [],
+                            "classical_state": 7,
+                            "depth": 0
+                        }
+                    ],
+                    "classical_state": 2,
+                    "depth": 1
+                },
+                {
+                    "action": "IS0",
+                    "children": [
+                        {
+                            "action": "halt",
+                            "children": [],
+                            "classical_state": 6,
+                            "depth": 0
+                        }
+                    ],
+                    "classical_state": 3,
+                    "depth": 1
+                }
+            ],
+            "classical_state": 0,
+            "depth": 2
+        }
+    ],
+    "classical_state": 0,
+    "depth": 3
+}
