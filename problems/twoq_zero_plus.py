@@ -134,12 +134,12 @@ def get_experiments_actions(noise_model: NoiseModel, embedding, experiment_id):
         count_cnot_directions = 0
         if Instruction(embedding[1], Op.CNOT, control=embedding[0]) in noise_model.instructions_to_channel.keys():
             count_cnot_directions = 1
-            rycx01_action = POMDPAction("rycx01", ry1_instruction + [Instruction(embedding[1], Op.CNOT, control=embedding[0])] +  ry1_instruction + [Instruction(5, Op.WRITE1)])
+            rycx01_action = POMDPAction("rycx01", [Instruction(5, Op.WRITE1), Instruction(7, Op.WRITE1)] + ry1_instruction + [Instruction(embedding[1], Op.CNOT, control=embedding[0])] +  ry1_instruction)
             actions.append(rycx01_action)
         
         if Instruction(embedding[0], Op.CNOT, control=embedding[1]) in noise_model.instructions_to_channel.keys():
             count_cnot_directions += 1
-            hcx10_action = POMDPAction("hcx10", h1_instruction + [Instruction(embedding[0], Op.CNOT, control=embedding[1])] + h1_instruction + [Instruction(5, Op.WRITE1)])
+            hcx10_action = POMDPAction("hcx10", [Instruction(5, Op.WRITE1), Instruction(7, Op.WRITE1)]+ h1_instruction + [Instruction(embedding[0], Op.CNOT, control=embedding[1])] + h1_instruction)
             actions.append(hcx10_action)
             
         # if count_cnot_directions == 2:
@@ -260,27 +260,35 @@ def twoq2_guard(vertex: POMDPVertex, _: Dict[int, int], action: POMDPAction) -> 
     classical_state = vertex.classical_state
     
     if cread(classical_state, 3) == 1:
-        # we have already executed either Determine0 or DeterminePlus
+        # we have already determine if state is |0> or |+>
         return False
     
-    if cread(classical_state, 6) == 1:
-        return action.name in ["IS0", "ISPlus", "MEAS0", "MEAS1"]
-    
-    # allow to execute determine actions if at least one measurement has been performed
-    if action.name in ["IS0", "ISPlus"]:
-        return cread(classical_state, 2) == 1
-    
-    # if action.name == "MEAS0":
-    #     return cread(classical_state, 4) == 1 or cread(classical_state, 5) == 1 
-    
-    # if action.name == "MEAS1":
-    #     return cread(classical_state, 5) == 1
-    
-    if action.name in ["RY0"]:
-        return cread(classical_state, 4) == 0
-    
-    if action.name in ["rycx01", "hcx10"]:
-        return cread(classical_state, 5) == 0
+    if action.name == "RY0":
+        if cread(classical_state, 4) == 1:
+            # we allow only 1 rotation gate
+            return False
+        
+        if cread(classical_state, 6) == 1:
+            # measurement in the first qubit has already happened, there is no more information at qubit 0 (rotation gate is useless now)
+            return False
+    elif action.name in ["rycx01", "hcx10"]:
+        if cread(classical_state, 5) == 1:
+            return False
+        
+        if cread(classical_state, 6) == 1:
+            # measurement to first qubit already performed (no info there)
+            return False
+    elif action.name == "MEAS0":
+        return True
+    elif action.name == "MEAS1":
+        if cread(classical_state, 7) == 0:
+            # at least 1 multiqubit gate has been performed
+            return False
+    elif action.name in ["IS0", "ISPlus"]:
+        if cread(classical_state, 2) == 0:
+            return False
+    else:
+        raise Exception("Invalid action", action.name)
     return True
     
     
