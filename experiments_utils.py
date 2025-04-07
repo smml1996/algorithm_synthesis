@@ -113,10 +113,20 @@ class TwoQZeroPlusExperimentID(Enum):
     ONEQT = "oneqt" # optimal rotation + thermalization errors
     TWOQ = "twoq"
     TWOQ2 = "twoq2"
+    HCXH = "hcxh"
+    HCXH2 = "hcxh2"
     
     @property
     def exp_name(self):
         return "twoqzeroplus"
+    
+class YExperimentID(Enum):
+    QISKITDECOMP = "qdecomp"
+    
+    @property
+    def exp_name(self):
+        return "yexp"
+    
 
 ####### configs ##########
 def generate_configs(experiment_id: Enum, min_horizon, max_horizon, allowed_hardware=HardwareSpec, batches: Dict[str, List[HardwareSpec]]=None, opt_technique: str="max", reps=0, verbose=0):

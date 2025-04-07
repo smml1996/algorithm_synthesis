@@ -1,0 +1,52 @@
+{
+    "action": "CX01",
+    "children": [
+        {
+            "action": "MEAS0",
+            "children": [
+                {
+                    "action": "halt",
+                    "children": [],
+                    "classical_state": 24,
+                    "depth": 0
+                },
+                {
+                    "action": "IS0",
+                    "children": [
+                        {
+                            "action": "halt",
+                            "children": [],
+                            "classical_state": 56,
+                            "depth": 0
+                        }
+                    ],
+                    "classical_state": 25,
+                    "depth": 1
+                },
+                {
+                    "action": "ISPlus",
+                    "children": [
+                        {
+                            "action": "halt",
+                            "children": [],
+                            "classical_state": 59,
+                            "depth": 0
+                        }
+                    ],
+                    "classical_state": 26,
+                    "depth": 1
+                },
+                {
+                    "action": "halt",
+                    "children": [],
+                    "classical_state": 27,
+                    "depth": 0
+                }
+            ],
+            "classical_state": 8,
+            "depth": 2
+        }
+    ],
+    "classical_state": 0,
+    "depth": 3
+}

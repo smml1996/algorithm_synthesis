@@ -1,0 +1,40 @@
+{
+    "action": "CX01",
+    "children": [
+        {
+            "action": "MEAS1",
+            "children": [
+                {
+                    "action": "X1",
+                    "children": [
+                        {
+                            "action": "halt",
+                            "children": [],
+                            "classical_state": 8,
+                            "depth": 0
+                        }
+                    ],
+                    "classical_state": 8,
+                    "depth": 1
+                },
+                {
+                    "action": "ISPlus",
+                    "children": [
+                        {
+                            "action": "halt",
+                            "children": [],
+                            "classical_state": 43,
+                            "depth": 0
+                        }
+                    ],
+                    "classical_state": 10,
+                    "depth": 1
+                }
+            ],
+            "classical_state": 8,
+            "depth": 2
+        }
+    ],
+    "classical_state": 0,
+    "depth": 3
+}

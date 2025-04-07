@@ -1,0 +1,106 @@
+{
+    "action": "RY0",
+    "children": [
+        {
+            "action": "CX01",
+            "children": [
+                {
+                    "action": "MEAS1",
+                    "children": [
+                        {
+                            "action": "MEAS1",
+                            "children": [
+                                {
+                                    "action": "halt",
+                                    "children": [],
+                                    "classical_state": 12,
+                                    "depth": 0
+                                },
+                                {
+                                    "action": "MEAS1",
+                                    "children": [
+                                        {
+                                            "action": "halt",
+                                            "children": [],
+                                            "classical_state": 12,
+                                            "depth": 0
+                                        },
+                                        {
+                                            "action": "ISPlus",
+                                            "children": [
+                                                {
+                                                    "action": "halt",
+                                                    "children": [],
+                                                    "classical_state": 47,
+                                                    "depth": 0
+                                                }
+                                            ],
+                                            "classical_state": 14,
+                                            "depth": 1
+                                        }
+                                    ],
+                                    "classical_state": 14,
+                                    "depth": 2
+                                }
+                            ],
+                            "classical_state": 12,
+                            "depth": 3
+                        },
+                        {
+                            "action": "MEAS1",
+                            "children": [
+                                {
+                                    "action": "MEAS1",
+                                    "children": [
+                                        {
+                                            "action": "halt",
+                                            "children": [],
+                                            "classical_state": 12,
+                                            "depth": 0
+                                        },
+                                        {
+                                            "action": "ISPlus",
+                                            "children": [
+                                                {
+                                                    "action": "halt",
+                                                    "children": [],
+                                                    "classical_state": 47,
+                                                    "depth": 0
+                                                }
+                                            ],
+                                            "classical_state": 14,
+                                            "depth": 1
+                                        }
+                                    ],
+                                    "classical_state": 12,
+                                    "depth": 2
+                                },
+                                {
+                                    "action": "ISPlus",
+                                    "children": [
+                                        {
+                                            "action": "halt",
+                                            "children": [],
+                                            "classical_state": 47,
+                                            "depth": 0
+                                        }
+                                    ],
+                                    "classical_state": 14,
+                                    "depth": 1
+                                }
+                            ],
+                            "classical_state": 14,
+                            "depth": 3
+                        }
+                    ],
+                    "classical_state": 12,
+                    "depth": 4
+                }
+            ],
+            "classical_state": 4,
+            "depth": 5
+        }
+    ],
+    "classical_state": 0,
+    "depth": 6
+}

@@ -1,0 +1,47 @@
+{
+    "action": "hcx10",
+    "children": [
+        {
+            "action": "RY0",
+            "children": [
+                {
+                    "action": "MEAS1",
+                    "children": [
+                        {
+                            "action": "ISPlus",
+                            "children": [
+                                {
+                                    "action": "halt",
+                                    "children": [],
+                                    "classical_state": 157,
+                                    "depth": 0
+                                }
+                            ],
+                            "classical_state": 148,
+                            "depth": 1
+                        },
+                        {
+                            "action": "rycx01",
+                            "children": [
+                                {
+                                    "action": "halt",
+                                    "children": [],
+                                    "classical_state": 182,
+                                    "depth": 0
+                                }
+                            ],
+                            "classical_state": 150,
+                            "depth": 1
+                        }
+                    ],
+                    "classical_state": 176,
+                    "depth": 2
+                }
+            ],
+            "classical_state": 160,
+            "depth": 3
+        }
+    ],
+    "classical_state": 0,
+    "depth": 4
+}

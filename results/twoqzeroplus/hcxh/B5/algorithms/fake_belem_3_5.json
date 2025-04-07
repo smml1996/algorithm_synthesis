@@ -15,6 +15,18 @@
                     "children": [],
                     "classical_state": 21,
                     "depth": 0
+                },
+                {
+                    "action": "halt",
+                    "children": [],
+                    "classical_state": 22,
+                    "depth": 0
+                },
+                {
+                    "action": "halt",
+                    "children": [],
+                    "classical_state": 23,
+                    "depth": 0
                 }
             ],
             "classical_state": 4,

@@ -1,0 +1,26 @@
+{
+    "action": "RY0",
+    "children": [
+        {
+            "action": "MEAS0",
+            "children": [
+                {
+                    "action": "halt",
+                    "children": [],
+                    "classical_state": 20,
+                    "depth": 0
+                },
+                {
+                    "action": "halt",
+                    "children": [],
+                    "classical_state": 21,
+                    "depth": 0
+                }
+            ],
+            "classical_state": 4,
+            "depth": 1
+        }
+    ],
+    "classical_state": 0,
+    "depth": 2
+}

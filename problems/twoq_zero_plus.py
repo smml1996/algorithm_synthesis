@@ -29,7 +29,7 @@ class ZeroPlusInstance:
         self.embedding = embedding
         self.experiment_id = experiment_id
         self.initial_distribution = None
-        if experiment_id in [TwoQZeroPlusExperimentID.TWOQ, TwoQZeroPlusExperimentID.TWOQ2]:
+        if experiment_id in [TwoQZeroPlusExperimentID.TWOQ, TwoQZeroPlusExperimentID.TWOQ2, TwoQZeroPlusExperimentID.HCXH,TwoQZeroPlusExperimentID.HCXH2]:
             self.qubits_used = [self.embedding[0], self.embedding[1]]
             # check embedding
             assert len(self.embedding.keys()) == 2 # 2 + 2 qubit for hidden indices
@@ -89,6 +89,43 @@ def get_experiments_actions(noise_model: NoiseModel, embedding, experiment_id):
         
         DETERMINE0 = POMDPAction("IS0", [Instruction(0, Op.WRITE0), Instruction(2, Op.WRITE1)])
         DETERMINEPlus = POMDPAction("ISPlus", [Instruction(0, Op.WRITE1), Instruction(2, Op.WRITE1)])
+        actions.append(DETERMINE0)
+        actions.append(DETERMINEPlus)
+    elif experiment_id in [TwoQZeroPlusExperimentID.HCXH, TwoQZeroPlusExperimentID.HCXH2]:
+        actions.append(POMDPAction("RY0", ry0_instruction + [
+            Instruction(2, Op.WRITE1)
+        ]))
+        
+        h1_action = POMDPAction("H1", h1_instruction)
+        actions.append(h1_action)
+        x1_action = POMDPAction("X1", Instruction(embedding[1], Op.X).to_basis_gate_impl(noise_model.basis_gates))
+        actions.append(x1_action)
+        
+        if Instruction(embedding[1], Op.CNOT, control=embedding[0]) in noise_model.instructions_to_channel.keys():
+            cx01_action = POMDPAction("CX01", [Instruction(3, Op.WRITE1), 
+                                               Instruction(embedding[1], Op.CNOT, control=embedding[0])])
+            actions.append(cx01_action)
+        
+        if Instruction(embedding[0], Op.CNOT, control=embedding[1]) in noise_model.instructions_to_channel.keys():
+            cx10_action = POMDPAction("CX10", [Instruction(3, Op.WRITE1), Instruction(embedding[0], Op.CNOT, control=embedding[1])])
+            actions.append(cx10_action)
+        
+        if experiment_id == TwoQZeroPlusExperimentID.HCXH:
+            meas0_action = POMDPAction("MEAS0", [Instruction(embedding[0], Op.MEAS, real_target=0),
+                                                Instruction(embedding[1], Op.MEAS, real_target=1),
+                                                Instruction(4, Op.WRITE1)])
+            actions.append(meas0_action)
+        else:
+            assert experiment_id == TwoQZeroPlusExperimentID.HCXH2
+            meas0_action = POMDPAction("MEAS0", [Instruction(embedding[0], Op.MEAS, real_target=0),
+                                                Instruction(4, Op.WRITE1)])
+            meas1_action = POMDPAction("MEAS1", [Instruction(embedding[1], Op.MEAS, real_target=1)])
+            actions.append(meas0_action)
+            actions.append(meas1_action)
+        
+        DETERMINE0 = POMDPAction("IS0", [Instruction(0, Op.WRITE0), Instruction(5, Op.WRITE1)])
+        DETERMINEPlus = POMDPAction("ISPlus", [Instruction(0, Op.WRITE1), Instruction(5, Op.WRITE1)])
+        
         actions.append(DETERMINE0)
         actions.append(DETERMINEPlus)
     elif experiment_id == TwoQZeroPlusExperimentID.TWOQ:
@@ -212,7 +249,7 @@ def get_hardware_scenarios(hardware_spec: HardwareSpec, experiment_id) -> List[D
         for qubit in qubits:
             answer.append({0: qubit})
         
-    elif experiment_id in [TwoQZeroPlusExperimentID.TWOQ, TwoQZeroPlusExperimentID.TWOQ2]:
+    elif experiment_id in [TwoQZeroPlusExperimentID.TWOQ, TwoQZeroPlusExperimentID.TWOQ2, TwoQZeroPlusExperimentID.HCXH,TwoQZeroPlusExperimentID.HCXH2]:
         # choose qubits according to measurement error
         pivot_qubits = get_pivot_qubits(noise_model, only_most_noisy=False)
         selected_couplers = set()
@@ -242,6 +279,21 @@ def get_hardware_scenarios(hardware_spec: HardwareSpec, experiment_id) -> List[D
         raise Exception("no hardware scenarios specified for experiment", experiment_id)
     return answer
 
+def hcxh_guard(vertex: POMDPVertex, _: Dict[int, int], action: POMDPAction) -> bool:
+    classical_state = vertex.classical_state
+    if cread(classical_state, 5) == 1:
+        return False
+    
+    if cread(classical_state, 4) == 1:
+        return action.name in ["IS0", "ISPlus"]
+    
+    if cread(classical_state, 2) == 1:
+        return action.name not in ["RY0"]
+    
+    if cread(classical_state, 3) == 1:
+        return action.name not in ["CX10", "CX01"]    
+    return True
+        
 def twoq_guard(vertex: POMDPVertex, _: Dict[int, int], action: POMDPAction) -> bool:
     classical_state = vertex.classical_state
     if cread(classical_state, 3) == 1:
@@ -308,9 +360,9 @@ def oneqt_guard(vertex: POMDPVertex, _: Dict[int, int], action: POMDPAction) -> 
     
 
 def set_precision(experiment_id):
-    if experiment_id in [TwoQZeroPlusExperimentID.TWOQ]:
+    if experiment_id in [TwoQZeroPlusExperimentID.TWOQ,TwoQZeroPlusExperimentID.HCXH2]:
         Precision.PRECISION = 5
-    elif experiment_id in [TwoQZeroPlusExperimentID.ONEQT, TwoQZeroPlusExperimentID.TWOQ2]:
+    elif experiment_id in [TwoQZeroPlusExperimentID.ONEQT, TwoQZeroPlusExperimentID.TWOQ2, TwoQZeroPlusExperimentID.HCXH]:
         Precision.PRECISION = 8
     else:
         raise Exception("Could not set precision for", experiment_id)
@@ -322,7 +374,7 @@ def get_allowed_hardware(experiment_id, with_thermalization):
     '''
     if experiment_id == TwoQZeroPlusExperimentID.ONEQT:
         return HardwareSpec
-    elif experiment_id in [TwoQZeroPlusExperimentID.TWOQ, TwoQZeroPlusExperimentID.TWOQ2]:
+    elif experiment_id in [TwoQZeroPlusExperimentID.TWOQ, TwoQZeroPlusExperimentID.TWOQ2, TwoQZeroPlusExperimentID.HCXH,TwoQZeroPlusExperimentID.HCXH2]:
         allowed_harware = []
         for hardware_spec in HardwareSpec:
             noise_model = NoiseModel(hardware_spec, thermal_relaxation=with_thermalization)
@@ -337,6 +389,8 @@ def get_min_max_horizon(experiment_id) -> Tuple[int, int]:
         return 3, 5
     elif experiment_id == TwoQZeroPlusExperimentID.TWOQ2:
         return 2, 5
+    elif experiment_id in [TwoQZeroPlusExperimentID.HCXH,TwoQZeroPlusExperimentID.HCXH2]:
+        return 2, 6
     else:
         raise Exception("could not retrieve min. and max. horizon for experiment", experiment_id)
     
@@ -347,13 +401,15 @@ def get_guard(experiment_id):
         return twoq_guard
     elif experiment_id == TwoQZeroPlusExperimentID.TWOQ2:
         return twoq2_guard
+    elif experiment_id in [TwoQZeroPlusExperimentID.HCXH,TwoQZeroPlusExperimentID.HCXH2]:
+        return hcxh_guard
     else:
         raise Exception("could not retireve guard for experiment", experiment_id)
 
 def get_thermalization_setup(experiment_id) -> bool:
     if experiment_id in [TwoQZeroPlusExperimentID.ONEQT]:
         return True
-    elif experiment_id in [TwoQZeroPlusExperimentID.TWOQ, TwoQZeroPlusExperimentID.TWOQ2]:
+    elif experiment_id in [TwoQZeroPlusExperimentID.TWOQ, TwoQZeroPlusExperimentID.TWOQ2, TwoQZeroPlusExperimentID.HCXH,TwoQZeroPlusExperimentID.HCXH2]:
         return False
     else:
         raise Exception("Could not get thermalization setup for experiment", experiment_id)

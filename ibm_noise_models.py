@@ -482,11 +482,13 @@ class Instruction:
                 return [Instruction(self.target, Op.U3, params=[self.params[0], 0, 0], symbols=self.symbols)]
             if self.op == Op.RX:
                 return [Instruction(self.target, Op.U3, params=[self.params[0], -pi/2, pi/2], symbols=self.symbols)]
+            if self.op == Op.X:
+                return [Instruction(self.target, Op.U3, params=[pi, 0, pi])]
                 
         raise Exception(f"Cannot translate {self.op} to basis gates {basis_gates}")
 
 class QuantumChannel:
-    def __init__(self, all_ins_sequences, all_probabilities, target_qubits, optimize=False, flatten=True) -> None:
+    def __init__(self, all_ins_sequences, all_probabilities, target_qubits, optimize=False, flatten=False) -> None:
         self.errors = [] # list of list of sequences of instructions/kraus operators
         self.probabilities = all_probabilities
         for seq in all_ins_sequences:

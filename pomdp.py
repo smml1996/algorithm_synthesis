@@ -453,7 +453,7 @@ def build_pomdp(actions: List[POMDPAction],
     while not q.is_empty():
         
         current_v, current_horizon = q.pop()
-        print(q.len(), current_horizon)
+        # print(q.len(), current_horizon)
 
         if horizon != -1:
             if (current_horizon == horizon):

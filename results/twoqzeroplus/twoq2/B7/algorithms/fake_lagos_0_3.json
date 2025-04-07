@@ -1,0 +1,33 @@
+{
+    "action": "hcx10",
+    "children": [
+        {
+            "action": "MEAS1",
+            "children": [
+                {
+                    "action": "ISPlus",
+                    "children": [
+                        {
+                            "action": "halt",
+                            "children": [],
+                            "classical_state": 141,
+                            "depth": 0
+                        }
+                    ],
+                    "classical_state": 132,
+                    "depth": 1
+                },
+                {
+                    "action": "halt",
+                    "children": [],
+                    "classical_state": 134,
+                    "depth": 0
+                }
+            ],
+            "classical_state": 160,
+            "depth": 2
+        }
+    ],
+    "classical_state": 0,
+    "depth": 3
+}
