@@ -178,15 +178,6 @@ def get_experiments_actions(noise_model: NoiseModel, embedding, experiment_id):
             count_cnot_directions += 1
             hcx10_action = POMDPAction("hcx10", [Instruction(5, Op.WRITE1), Instruction(7, Op.WRITE1)]+ h1_instruction + [Instruction(embedding[0], Op.CNOT, control=embedding[1])] + h1_instruction)
             actions.append(hcx10_action)
-            
-        # if count_cnot_directions == 2:
-        #     swap_action = POMDPAction("swap", [
-        #         Instruction(embedding[0], Op.CNOT, control=embedding[1]),
-        #         Instruction(embedding[1], Op.CNOT, control=embedding[0]),
-        #         Instruction(embedding[0], Op.CNOT, control=embedding[1]),
-        #         Instruction(5, Op.WRITE1)
-        #     ])
-        #     actions.append(swap_action)
         
         meas0_action = POMDPAction("MEAS0", [Instruction(embedding[0], Op.MEAS, real_target=0),Instruction(2, Op.WRITE1), Instruction(6, Op.WRITE1), Instruction(5, Op.WRITE0)])
         meas1_action = POMDPAction("MEAS1", [Instruction(embedding[1], Op.MEAS, real_target=1),Instruction(2, Op.WRITE1), Instruction(5, Op.WRITE0)])
