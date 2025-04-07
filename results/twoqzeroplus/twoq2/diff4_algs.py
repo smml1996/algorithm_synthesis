@@ -43,30 +43,15 @@ def algorithm0(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
 def algorithm1(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
 	'''fake_yorktown-2'''
 	instruction_to_ibm(qc, basis_gates, hcx10)
-	instruction_to_ibm(qc, basis_gates, RY0)
 	instruction_to_ibm(qc, basis_gates, MEAS1)
 	with qc.if_test((cbits, 148)):
 		instruction_to_ibm(qc, basis_gates, ISPlus)
 		instruction_to_ibm(qc, basis_gates, halt)
 	with qc.if_test((cbits, 150)):
-		instruction_to_ibm(qc, basis_gates, rycx01)
 		instruction_to_ibm(qc, basis_gates, halt)
 
-
-def algorithm2(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
-	'''fake_rochester-0'''
-	instruction_to_ibm(qc, basis_gates, hcx10)
-	instruction_to_ibm(qc, basis_gates, MEAS1)
-	with qc.if_test((cbits, 132)):
-		instruction_to_ibm(qc, basis_gates, ISPlus)
-		instruction_to_ibm(qc, basis_gates, halt)
-	with qc.if_test((cbits, 134)):
-		instruction_to_ibm(qc, basis_gates, RY0)
-		instruction_to_ibm(qc, basis_gates, rycx01)
-		instruction_to_ibm(qc, basis_gates, halt)
 
 
 algorithms = []
 algorithms.append(algorithm0)
 algorithms.append(algorithm1)
-algorithms.append(algorithm2)
