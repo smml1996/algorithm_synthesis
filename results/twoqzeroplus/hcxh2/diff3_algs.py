@@ -26,88 +26,17 @@ def algorithm0(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
 		instruction_to_ibm(qc, basis_gates, halt)
 
 
-def algorithm1(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
-	'''fake_algiers-5,fake_hanoi-0,fake_hanoi-4,fake_hanoi-5,fake_cairo-0,fake_cairo-1,fake_cairo-3,fake_cairo-6,fake_cairo-7,fake_cairo-8,fake_cairo-10,fake_mumbai-2,fake_kolkata-0,fake_kolkata-1,fake_kolkata-2,fake_auckland-3,fake_auckland-4,fake_geneva-0,fake_geneva-1,fake_geneva-2,fake_geneva-3,fake_montreal-5,fake_paris-0,fake_paris-1,fake_sydney-0,fake_sydney-1,fake_sydney-3,fake_sydney-4,fake_valencia-2,fake_valencia-3,fake_athens-0,fake_belem-0,fake_belem-1,fake_belem-2,fake_belem-3,fake_lima-0,fake_lima-1,fake_london-0,fake_london-1,fake_london-2,fake_manila-2,fake_rome-0,fake_rome-1,fake_rome-2,fake_vigo-1,fake_vigo-3,fake_yorktown-0,fake_johannesburg-2,fake_johannesburg-4,fake_almaden-3,fake_almaden-4,fake_boeblingen-1,fake_perth-1,fake_perth-3,fake_lagos-1,fake_lagos-2,fake_nairobi-1,fake_nairobi-2,fake_oslo-2,fake_jakarta-1,fake_jakarta-3,fake_brooklyn-0,fake_brooklyn-2,fake_brooklyn-4,fake_manhattan-4,fake_manhattan-5,fake_guadalupe-2,fake_rochester-1,fake_rochester-4,fake_rochester-5'''
-	instruction_to_ibm(qc, basis_gates, X1)
-	instruction_to_ibm(qc, basis_gates, RY0)
-	instruction_to_ibm(qc, basis_gates, MEAS0)
-	with qc.if_test((cbits, 20)):
-		instruction_to_ibm(qc, basis_gates, halt)
-	with qc.if_test((cbits, 21)):
-		instruction_to_ibm(qc, basis_gates, halt)
-
-
-def algorithm2(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
-	'''fake_burlington-0,fake_burlington-1,fake_burlington-2,fake_burlington-3,fake_essex-1,fake_johannesburg-1,fake_johannesburg-3,fake_johannesburg-5,fake_almaden-0,fake_almaden-1,fake_almaden-2,fake_singapore-0,fake_singapore-5,fake_cambridge-0,fake_cambridge-1,fake_cambridge-2,fake_rochester-3'''
-	instruction_to_ibm(qc, basis_gates, H1)
-	instruction_to_ibm(qc, basis_gates, RY0)
-	instruction_to_ibm(qc, basis_gates, MEAS0)
-	with qc.if_test((cbits, 20)):
-		instruction_to_ibm(qc, basis_gates, halt)
-	with qc.if_test((cbits, 21)):
-		instruction_to_ibm(qc, basis_gates, halt)
-
-
 def algorithm3(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
 	'''fake_yorktown-2'''
 	instruction_to_ibm(qc, basis_gates, CX01)
 	instruction_to_ibm(qc, basis_gates, MEAS1)
 	with qc.if_test((cbits, 8)):
-		instruction_to_ibm(qc, basis_gates, X1)
 		instruction_to_ibm(qc, basis_gates, halt)
 	with qc.if_test((cbits, 10)):
 		instruction_to_ibm(qc, basis_gates, ISPlus)
 		instruction_to_ibm(qc, basis_gates, halt)
-
-
-def algorithm4(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
-	'''fake_lagos-0'''
-	instruction_to_ibm(qc, basis_gates, CX01)
-	instruction_to_ibm(qc, basis_gates, MEAS1)
-	with qc.if_test((cbits, 8)):
-		instruction_to_ibm(qc, basis_gates, RY0)
-		instruction_to_ibm(qc, basis_gates, halt)
-	with qc.if_test((cbits, 10)):
-		instruction_to_ibm(qc, basis_gates, ISPlus)
-		instruction_to_ibm(qc, basis_gates, halt)
-
-
-def algorithm5(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
-	'''fake_rochester-0'''
-	instruction_to_ibm(qc, basis_gates, CX01)
-	instruction_to_ibm(qc, basis_gates, MEAS1)
-	with qc.if_test((cbits, 8)):
-		instruction_to_ibm(qc, basis_gates, H1)
-		instruction_to_ibm(qc, basis_gates, halt)
-	with qc.if_test((cbits, 10)):
-		instruction_to_ibm(qc, basis_gates, ISPlus)
-		instruction_to_ibm(qc, basis_gates, halt)
-
-
-def algorithm6(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
-	'''fake_rochester-2'''
-	instruction_to_ibm(qc, basis_gates, MEAS1)
-	with qc.if_test((cbits, 0)):
-		instruction_to_ibm(qc, basis_gates, RY0)
-		instruction_to_ibm(qc, basis_gates, MEAS0)
-		with qc.if_test((cbits, 20)):
-			instruction_to_ibm(qc, basis_gates, halt)
-		with qc.if_test((cbits, 21)):
-			instruction_to_ibm(qc, basis_gates, halt)
-	with qc.if_test((cbits, 2)):
-		instruction_to_ibm(qc, basis_gates, RY0)
-		instruction_to_ibm(qc, basis_gates, MEAS0)
-		with qc.if_test((cbits, 22)):
-			instruction_to_ibm(qc, basis_gates, halt)
-		with qc.if_test((cbits, 23)):
-			instruction_to_ibm(qc, basis_gates, halt)
 
 
 algorithms = []
 algorithms.append(algorithm0)
-algorithms.append(algorithm1)
-algorithms.append(algorithm2)
 algorithms.append(algorithm3)
-algorithms.append(algorithm4)
-algorithms.append(algorithm5)
-algorithms.append(algorithm6)
