@@ -41,7 +41,7 @@ def algorithm0(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
 
 
 def algorithm1(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
-	'''fake_yorktown-2'''
+	'''fake_yorktown-2,fake_rochester-0'''
 	instruction_to_ibm(qc, basis_gates, hcx10)
 	instruction_to_ibm(qc, basis_gates, MEAS1)
 	with qc.if_test((cbits, 148)):

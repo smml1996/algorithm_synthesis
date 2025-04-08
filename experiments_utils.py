@@ -115,6 +115,7 @@ class TwoQZeroPlusExperimentID(Enum):
     TWOQ2 = "twoq2"
     HCXH = "hcxh"
     HCXH2 = "hcxh2"
+    ENTSWAP = "entswap"
     
     @property
     def exp_name(self):
@@ -187,6 +188,14 @@ def get_allowed_hardware(experiment_id, with_thermalization=False):
             if noise_model.num_qubits >= 14:
                 ipma2_allowed_hardware.append(hardware)
         return ipma2_allowed_hardware
+    elif type(experiment_id) == TwoQZeroPlusExperimentID:
+        assert experiment_id in [TwoQZeroPlusExperimentID.HCXH, TwoQZeroPlusExperimentID.HCXH2, TwoQZeroPlusExperimentID.TWOQ, TwoQZeroPlusExperimentID.TWOQ2]
+        allowed_harware = []
+        for hardware_spec in HardwareSpec:
+            noise_model = NoiseModel(hardware_spec, thermal_relaxation=with_thermalization)
+            if Op.CNOT in noise_model.basis_gates.value:
+                allowed_harware.append(hardware_spec)
+        return allowed_harware
     else:
         raise Exception(f"Configure allowed hardware for {experiment_id}")
     

@@ -13,7 +13,7 @@ from qpu_utils import BasisGates, Op
 from cmemory import ClassicalState, cread
 from pomdp import POMDPAction, POMDPVertex
 import qmemory
-from experiments_utils import TwoQZeroPlusExperimentID, check_files, generate_algs_vs_file, generate_configs, generate_diff_algorithms_file, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_config_path, get_num_qubits_to_hardware, get_project_settings
+from experiments_utils import TwoQZeroPlusExperimentID, check_files, generate_algs_vs_file, generate_configs, generate_diff_algorithms_file, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_allowed_hardware, get_config_path, get_num_qubits_to_hardware, get_project_settings
 from bitflip import get_pivot_qubits
     
 class ZeroPlusInstance:
@@ -29,7 +29,7 @@ class ZeroPlusInstance:
         self.embedding = embedding
         self.experiment_id = experiment_id
         self.initial_distribution = None
-        if experiment_id in [TwoQZeroPlusExperimentID.TWOQ, TwoQZeroPlusExperimentID.TWOQ2, TwoQZeroPlusExperimentID.HCXH,TwoQZeroPlusExperimentID.HCXH2]:
+        if experiment_id in [TwoQZeroPlusExperimentID.TWOQ, TwoQZeroPlusExperimentID.TWOQ2, TwoQZeroPlusExperimentID.HCXH,TwoQZeroPlusExperimentID.HCXH2, TwoQZeroPlusExperimentID.ENTSWAP]:
             self.qubits_used = [self.embedding[0], self.embedding[1]]
             # check embedding
             assert len(self.embedding.keys()) == 2 # 2 + 2 qubit for hidden indices
@@ -186,6 +186,55 @@ def get_experiments_actions(noise_model: NoiseModel, embedding, experiment_id):
         
         DETERMINE0 = POMDPAction("IS0", [Instruction(0, Op.WRITE0), Instruction(3, Op.WRITE1)])
         DETERMINEPlus = POMDPAction("ISPlus", [Instruction(0, Op.WRITE1), Instruction(3, Op.WRITE1)])
+        actions.append(DETERMINE0)
+        actions.append(DETERMINEPlus)
+    elif experiment_id == TwoQZeroPlusExperimentID.ENTSWAP:
+        assert Instruction(embedding[1], Op.CNOT, control=embedding[0]) in noise_model.instructions_to_channel.keys()
+        
+        #     0       1         2         3      4           5
+        # | meas0 | meas1 | guess_made | RY0? | RY1? | multiqubit_gate
+        
+        actions.append(POMDPAction("RY0", ry0_instruction + [
+            Instruction(3, Op.WRITE1)
+        ]))
+        
+        actions.append(POMDPAction("RY1", ry1_instruction + [
+            Instruction(4, Op.WRITE1)
+        ]))
+    
+        cx01_action = POMDPAction("CX01", [
+            Instruction(embedding[1], Op.CNOT, control=embedding[0]),
+            Instruction(5, Op.WRITE1)
+            ])
+        actions.append(cx01_action)
+        
+        if Instruction(embedding[0], Op.CNOT, control=embedding[1]) in noise_model.instructions_to_channel.keys():
+            swap1_action = POMDPAction("SWAP10", [
+                Instruction(embedding[0], Op.CNOT, control=embedding[1]),
+                Instruction(embedding[1], Op.CNOT, control=embedding[0]),
+                Instruction(embedding[0], Op.CNOT, control=embedding[1]),
+                Instruction(5, Op.WRITE1)
+                ])
+            actions.append(swap1_action)
+            
+            swap2_action = POMDPAction("SWAP01", [
+                Instruction(embedding[1], Op.CNOT, control=embedding[0]),
+                Instruction(embedding[0], Op.CNOT, control=embedding[1]),
+                Instruction(embedding[1], Op.CNOT, control=embedding[0]),
+                Instruction(5, Op.WRITE1)])
+            actions.append(swap2_action)
+        
+        meas0_action = POMDPAction("MEAS0", [Instruction(embedding[0], Op.MEAS, real_target=0)])
+        meas1_action = POMDPAction("MEAS1", [Instruction(embedding[1], Op.MEAS, real_target=1)])
+        actions.append(meas0_action)
+        actions.append(meas1_action)
+        
+        DETERMINE0 = POMDPAction("IS0", [Instruction(0, Op.WRITE0), # c[0] == 0 we think is state |0>
+                                         Instruction(2, Op.WRITE1) # if c[2] == 1 means we have already tried to make a guess
+                                         ])
+        DETERMINEPlus = POMDPAction("ISPlus", [Instruction(0, Op.WRITE1), # c[0] == 1 we think is state |+>
+                                               Instruction(2, Op.WRITE1)] # if c[2] == 1 means we have already tried to make a guess
+                                    )
         actions.append(DETERMINE0)
         actions.append(DETERMINEPlus)
     return actions
@@ -358,20 +407,6 @@ def set_precision(experiment_id):
     else:
         raise Exception("Could not set precision for", experiment_id)
     Precision.update_threshold()
-        
-
-def get_allowed_hardware(experiment_id, with_thermalization):
-    ''' We will only run experiments on quantum hardware that has CNOT gates in its basis gate set
-    '''
-    if experiment_id == TwoQZeroPlusExperimentID.ONEQT:
-        return HardwareSpec
-    elif experiment_id in [TwoQZeroPlusExperimentID.TWOQ, TwoQZeroPlusExperimentID.TWOQ2, TwoQZeroPlusExperimentID.HCXH,TwoQZeroPlusExperimentID.HCXH2]:
-        allowed_harware = []
-        for hardware_spec in HardwareSpec:
-            noise_model = NoiseModel(hardware_spec, thermal_relaxation=with_thermalization)
-            if Op.CNOT in noise_model.basis_gates.value:
-                allowed_harware.append(hardware_spec)
-    return allowed_harware
 
 def get_min_max_horizon(experiment_id) -> Tuple[int, int]:
     if experiment_id == TwoQZeroPlusExperimentID.ONEQT:
