@@ -12,7 +12,7 @@ using json = nlohmann::json;
 
 using namespace  std;
 
-auto all_keys_required = {"name", "min_horizon", "max_horizon", "output_dir", "opt_technique", "verbose" , "precision"};
+auto all_keys_required = {"name", "min_horizon", "max_horizon", "output_dir", "opt_technique", "verbose" , "precision", "reps"};
 
 /// @brief 
 /// @param argc 
@@ -46,9 +46,12 @@ int main(int argc, char **argv) {
         int min_horizon = config_json["min_horizon"];
         int max_horizon = config_json["max_horizon"];
         int precision = config_json["precision"];
+        string str_threshold = config_json["reps"];
+        
         
         MyFloat::precision = precision * (max_horizon + 1);
         MyFloat::tolerance = precision * (max_horizon + 1);
+        MyFloat threshold = MyFloat(str_threshold);
 
         string opt_technique = config_json["opt_technique"];
         filesystem::path project_path = get_project_path();
@@ -114,7 +117,7 @@ int main(int argc, char **argv) {
                 for (int horizon = min_horizon; horizon < max_horizon+1; horizon++) {
                     cerr << "Running experiment: " << hardware << embedding_index << " h="<< horizon << " precision=" << MyFloat::precision << endl;
                     long time_before = time(nullptr);
-                    auto result = get_bellman_value(pomdp, initial_belief, horizon, opt_technique);
+                    auto result = get_bellman_value(pomdp, initial_belief, horizon, opt_technique, threshold);
                     long time_after = time(nullptr);
                     auto lambda = result.second;
                     cout << lambda << endl;
@@ -135,7 +138,8 @@ int main(int argc, char **argv) {
 
         auto pomdp = parse_pomdp_file(pomdp_path);
         Belief initial_belief = get_initial_belief(pomdp);
-        auto result = get_bellman_value(pomdp, initial_belief, horizon, "max");
+        // TODO: set threshold properly in the line below
+        auto result = get_bellman_value(pomdp, initial_belief, horizon, "max", MyFloat());
         write_algorithm_file(result.first, algorithm_path);
         cout << result.second << endl;
     } else if (arg1.compare("exact") == 0){
@@ -148,7 +152,9 @@ int main(int argc, char **argv) {
         Algorithm* algorithm = new Algorithm(algorithms_data);
         auto pomdp = parse_pomdp_file(pomdp_path);
         Belief initial_belief = get_initial_belief(pomdp);
-        auto acc = get_algorithm_acc(pomdp, algorithm, initial_belief);
+        string opt_technique = "max"; // TODO: set these values properly
+        MyFloat threshold = MyFloat();
+        auto acc = get_algorithm_acc(pomdp, algorithm, initial_belief, opt_technique, threshold);
         cout << acc << endl;
 
     } else {

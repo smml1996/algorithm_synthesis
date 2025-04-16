@@ -1,0 +1,20 @@
+{
+    "name": "B7",
+    "experiment_id": "entswap",
+    "precision": 8,
+    "min_horizon": 2,
+    "max_horizon": 5,
+    "output_dir": "results/twoqzeroplus/entswap/B7",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_perth",
+        "fake_lagos",
+        "fake_nairobi",
+        "fake_casablanca",
+        "fake_oslo",
+        "fake_jakarta"
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
+}

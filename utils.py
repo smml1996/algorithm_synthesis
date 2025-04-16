@@ -111,7 +111,7 @@ def get_kraus_matrix_probability(matrix: List[List[float]], a0: complex, a1: com
         a0 (complex): amplitude of |0>
         a1 (complex): amplitude of |1>
     """
-
+    assert isclose(a0*np.conjugate(a0) + a1*np.conjugate(a1), 1.0, rel_tol=Precision.rel_tol)
     assert len(matrix) == 2
 
     for l in matrix:
@@ -123,7 +123,10 @@ def get_kraus_matrix_probability(matrix: List[List[float]], a0: complex, a1: com
     new_a0 = a*a0 + b*a1
     new_a1 = c*a0 + d*a1
     prob = new_a0*np.conjugate(new_a0) + new_a1*np.conjugate(new_a1)
-    assert prob <= 1.0
+    if (prob > 1.0):
+        assert isclose(prob, 1.0, rel_tol=Precision.rel_tol)
+        prob = 1.0
+
     if return_new_ampl:
         return prob, new_a0, new_a1
     return prob

@@ -1,0 +1,15 @@
+{
+    "name": "B28",
+    "experiment_id": "main99",
+    "precision": 8,
+    "min_horizon": 2,
+    "max_horizon": 6,
+    "output_dir": "results/ygate/main99/B28",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_cambridge"
+    ],
+    "opt_technique": "target",
+    "verbose": 0,
+    "reps": 0.99
+}

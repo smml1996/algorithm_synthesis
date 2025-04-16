@@ -1,0 +1,15 @@
+{
+    "name": "B1",
+    "experiment_id": "main_therm9999",
+    "precision": 8,
+    "min_horizon": 2,
+    "max_horizon": 6,
+    "output_dir": "results/ygate/main_therm9999/B1",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_armonk"
+    ],
+    "opt_technique": "target",
+    "verbose": 0,
+    "reps": 0.9999
+}

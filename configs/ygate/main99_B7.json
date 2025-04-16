@@ -1,0 +1,20 @@
+{
+    "name": "B7",
+    "experiment_id": "main99",
+    "precision": 8,
+    "min_horizon": 2,
+    "max_horizon": 6,
+    "output_dir": "results/ygate/main99/B7",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_perth",
+        "fake_lagos",
+        "fake_nairobi",
+        "fake_casablanca",
+        "fake_oslo",
+        "fake_jakarta"
+    ],
+    "opt_technique": "target",
+    "verbose": 0,
+    "reps": 0.99
+}

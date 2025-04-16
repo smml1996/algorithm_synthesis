@@ -121,12 +121,18 @@ class TwoQZeroPlusExperimentID(Enum):
     def exp_name(self):
         return "twoqzeroplus"
     
-class YExperimentID(Enum):
-    QISKITDECOMP = "qdecomp"
+class YGateExperimentId(Enum):
+    MAIN99 = "main99"
+    MAIN999 = "main999"
+    MAIN9999 = "main9999"
+    MAIN_THERM99 = "main_therm99"
+    MAIN_THERM999 = "main_therm999"
+    MAIN_THERM9999 = "main_therm9999"
     
     @property
     def exp_name(self):
-        return "yexp"
+        return "ygate"
+
     
 
 ####### configs ##########
@@ -179,7 +185,7 @@ def generate_configs(experiment_id: Enum, min_horizon, max_horizon, allowed_hard
             f.close()
 
 def get_allowed_hardware(experiment_id, with_thermalization=False):
-    if experiment_id in [BitflipExperimentID.IPMA, BitflipExperimentID.CXH, GHZExperimentID.EMBED, BitflipExperimentID.IPMA2, ResetExperimentID.main]:
+    if experiment_id in [BitflipExperimentID.IPMA, BitflipExperimentID.CXH, GHZExperimentID.EMBED, BitflipExperimentID.IPMA2, ResetExperimentID.main] or isinstance(experiment_id, YGateExperimentId):
         return HardwareSpec
     elif experiment_id in [GHZExperimentID.EXP1, PhaseflipExperimentID.IPMA]:
         ipma2_allowed_hardware = []
@@ -189,7 +195,7 @@ def get_allowed_hardware(experiment_id, with_thermalization=False):
                 ipma2_allowed_hardware.append(hardware)
         return ipma2_allowed_hardware
     elif type(experiment_id) == TwoQZeroPlusExperimentID:
-        assert experiment_id in [TwoQZeroPlusExperimentID.HCXH, TwoQZeroPlusExperimentID.HCXH2, TwoQZeroPlusExperimentID.TWOQ, TwoQZeroPlusExperimentID.TWOQ2]
+        assert experiment_id in [TwoQZeroPlusExperimentID.HCXH, TwoQZeroPlusExperimentID.HCXH2, TwoQZeroPlusExperimentID.TWOQ, TwoQZeroPlusExperimentID.TWOQ2, TwoQZeroPlusExperimentID.ENTSWAP]
         allowed_harware = []
         for hardware_spec in HardwareSpec:
             noise_model = NoiseModel(hardware_spec, thermal_relaxation=with_thermalization)

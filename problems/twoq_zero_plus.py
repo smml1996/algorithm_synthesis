@@ -198,9 +198,9 @@ def get_experiments_actions(noise_model: NoiseModel, embedding, experiment_id):
             Instruction(3, Op.WRITE1)
         ]))
         
-        actions.append(POMDPAction("RY1", ry1_instruction + [
-            Instruction(4, Op.WRITE1)
-        ]))
+        # actions.append(POMDPAction("RY1", ry1_instruction + [
+        #     Instruction(4, Op.WRITE1)
+        # ]))
     
         cx01_action = POMDPAction("CX01", [
             Instruction(embedding[1], Op.CNOT, control=embedding[0]),
@@ -289,7 +289,7 @@ def get_hardware_scenarios(hardware_spec: HardwareSpec, experiment_id) -> List[D
         for qubit in qubits:
             answer.append({0: qubit})
         
-    elif experiment_id in [TwoQZeroPlusExperimentID.TWOQ, TwoQZeroPlusExperimentID.TWOQ2, TwoQZeroPlusExperimentID.HCXH,TwoQZeroPlusExperimentID.HCXH2]:
+    elif experiment_id in [TwoQZeroPlusExperimentID.TWOQ, TwoQZeroPlusExperimentID.TWOQ2, TwoQZeroPlusExperimentID.HCXH,TwoQZeroPlusExperimentID.HCXH2, TwoQZeroPlusExperimentID.ENTSWAP]:
         # choose qubits according to measurement error
         pivot_qubits = get_pivot_qubits(noise_model, only_most_noisy=False)
         selected_couplers = set()
@@ -318,6 +318,18 @@ def get_hardware_scenarios(hardware_spec: HardwareSpec, experiment_id) -> List[D
     else:
         raise Exception("no hardware scenarios specified for experiment", experiment_id)
     return answer
+
+def entswap_guard(vertex: POMDPVertex, _: Dict[int, int], action: POMDPAction) -> bool:
+    classical_state = vertex.classical_state
+    if cread(classical_state, 2):
+        return False
+    
+    if action.name == "RY0":
+        # at most 1 RY0
+        return cread(classical_state, 3) == 0
+    elif action.name in ["CX01", "SWAP10", "SWAP01"]:
+        return cread(classical_state, 5) == 0
+    return True
 
 def hcxh_guard(vertex: POMDPVertex, _: Dict[int, int], action: POMDPAction) -> bool:
     classical_state = vertex.classical_state
@@ -402,7 +414,7 @@ def oneqt_guard(vertex: POMDPVertex, _: Dict[int, int], action: POMDPAction) -> 
 def set_precision(experiment_id):
     if experiment_id in [TwoQZeroPlusExperimentID.TWOQ,TwoQZeroPlusExperimentID.HCXH2]:
         Precision.PRECISION = 5
-    elif experiment_id in [TwoQZeroPlusExperimentID.ONEQT, TwoQZeroPlusExperimentID.TWOQ2, TwoQZeroPlusExperimentID.HCXH]:
+    elif experiment_id in [TwoQZeroPlusExperimentID.ONEQT, TwoQZeroPlusExperimentID.TWOQ2, TwoQZeroPlusExperimentID.HCXH, TwoQZeroPlusExperimentID.ENTSWAP]:
         Precision.PRECISION = 8
     else:
         raise Exception("Could not set precision for", experiment_id)
@@ -415,8 +427,8 @@ def get_min_max_horizon(experiment_id) -> Tuple[int, int]:
         return 3, 5
     elif experiment_id == TwoQZeroPlusExperimentID.TWOQ2:
         return 2, 5
-    elif experiment_id in [TwoQZeroPlusExperimentID.HCXH,TwoQZeroPlusExperimentID.HCXH2]:
-        return 2, 6
+    elif experiment_id in [TwoQZeroPlusExperimentID.HCXH,TwoQZeroPlusExperimentID.HCXH2,TwoQZeroPlusExperimentID.ENTSWAP]:
+        return 2, 5
     else:
         raise Exception("could not retrieve min. and max. horizon for experiment", experiment_id)
     
@@ -429,13 +441,15 @@ def get_guard(experiment_id):
         return twoq2_guard
     elif experiment_id in [TwoQZeroPlusExperimentID.HCXH,TwoQZeroPlusExperimentID.HCXH2]:
         return hcxh_guard
+    elif experiment_id == TwoQZeroPlusExperimentID.ENTSWAP:
+        return entswap_guard
     else:
         raise Exception("could not retireve guard for experiment", experiment_id)
 
 def get_thermalization_setup(experiment_id) -> bool:
     if experiment_id in [TwoQZeroPlusExperimentID.ONEQT]:
         return True
-    elif experiment_id in [TwoQZeroPlusExperimentID.TWOQ, TwoQZeroPlusExperimentID.TWOQ2, TwoQZeroPlusExperimentID.HCXH,TwoQZeroPlusExperimentID.HCXH2]:
+    elif experiment_id in [TwoQZeroPlusExperimentID.TWOQ, TwoQZeroPlusExperimentID.TWOQ2, TwoQZeroPlusExperimentID.HCXH,TwoQZeroPlusExperimentID.HCXH2, TwoQZeroPlusExperimentID.ENTSWAP]:
         return False
     else:
         raise Exception("Could not get thermalization setup for experiment", experiment_id)

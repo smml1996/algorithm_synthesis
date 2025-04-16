@@ -1,0 +1,25 @@
+{
+    "name": "B27",
+    "experiment_id": "main999",
+    "precision": 8,
+    "min_horizon": 2,
+    "max_horizon": 6,
+    "output_dir": "results/ygate/main999/B27",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_algiers",
+        "fake_hanoi",
+        "fake_cairo",
+        "fake_mumbai",
+        "fake_kolkata",
+        "fake_auckland",
+        "fake_geneva",
+        "fake_montreal",
+        "fake_paris",
+        "fake_sydney",
+        "fake_toronto"
+    ],
+    "opt_technique": "target",
+    "verbose": 0,
+    "reps": 0.999
+}

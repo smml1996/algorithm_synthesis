@@ -54,7 +54,7 @@ public:
         this->probs[v] = this->get(v) + val;
     }
 
-    [[nodiscard]] MyFloat get_belief_reward(const unordered_map<int, MyFloat> &rewards) const {
+    [[nodiscard]] MyFloat get_belief_reward(const unordered_map<int, MyFloat> &rewards, const string &opt_technique, const MyFloat &threshold) const {
         // returns expected reward
         MyFloat val;
 
@@ -62,8 +62,15 @@ public:
             MyFloat r = rewards.find(prob.first)->second;
             val = val + (r * prob.second);
         }
-
-        return val;
+        if (opt_technique == "target") {
+            if (val == threshold or val > threshold) {
+                return MyFloat("1");
+            } else{
+                return MyFloat();
+            }
+        } else {
+            return val;
+        }
     }
 
     void check() {

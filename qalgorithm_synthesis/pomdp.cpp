@@ -173,8 +173,8 @@ POMDP parse_pomdp_file (const string& fname) {
 
 // TODO: change POMDP to const
 
-pair<Algorithm*, MyFloat> get_bellman_value(POMDP &pomdp, Belief &current_belief, const int &horizon, const string &opt_technique) {
-    MyFloat curr_belief_val = current_belief.get_belief_reward(pomdp.rewards);
+pair<Algorithm*, MyFloat> get_bellman_value(POMDP &pomdp, Belief &current_belief, const int &horizon, const string &opt_technique, const MyFloat &threshold) {
+    MyFloat curr_belief_val = current_belief.get_belief_reward(pomdp.rewards, opt_technique, threshold);
     int current_classical_state = -1;
     for(auto & prob : current_belief.probs) {
         if (current_classical_state == -1) {
@@ -219,7 +219,7 @@ pair<Algorithm*, MyFloat> get_bellman_value(POMDP &pomdp, Belief &current_belief
 
             int max_depth = 0;
             for(auto & obs_to_next_belief : obs_to_next_beliefs) {
-                auto temp = get_bellman_value(pomdp, obs_to_next_belief.second, horizon-1, opt_technique);
+                auto temp = get_bellman_value(pomdp, obs_to_next_belief.second, horizon-1, opt_technique, threshold);
                 new_alg_node->children.push_back(temp.first);
                 max_depth = max(temp.first->depth, max_depth);
                 bellman_val = bellman_val + temp.second;
@@ -232,7 +232,7 @@ pair<Algorithm*, MyFloat> get_bellman_value(POMDP &pomdp, Belief &current_belief
 
     MyFloat max_val; // this is initialized as zero
     for(auto & bellman_value : bellman_values) {
-        if (opt_technique == "max") {
+        if (opt_technique == "max" or opt_technique == "target") {
             max_val = max(max_val, bellman_value.second);
         } else {
             assert(opt_technique == "min");
@@ -273,8 +273,8 @@ Belief get_initial_belief(POMDP &pomdp) {
     return initial_belief;
 }
 
-MyFloat get_algorithm_acc(POMDP &pomdp, Algorithm*& algorithm, Belief &current_belief) {
-    MyFloat curr_belief_val = current_belief.get_belief_reward(pomdp.rewards);
+MyFloat get_algorithm_acc(POMDP &pomdp, Algorithm*& algorithm, Belief &current_belief, const string &opt_technique, const MyFloat &threshold) {
+    MyFloat curr_belief_val = current_belief.get_belief_reward(pomdp.rewards, opt_technique, threshold);
 
     if (algorithm == nullptr) {
         return curr_belief_val;
@@ -308,7 +308,7 @@ MyFloat get_algorithm_acc(POMDP &pomdp, Algorithm*& algorithm, Belief &current_b
         
         for (int i = 0; i < algorithm->children.size(); i++) {
             assert(obs_to_next_beliefs.find(algorithm->children[i]->classical_state) != obs_to_next_beliefs.end());
-            bellman_val = bellman_val + get_algorithm_acc(pomdp, algorithm->children[i], obs_to_next_beliefs[algorithm->children[i]->classical_state]);
+            bellman_val = bellman_val + get_algorithm_acc(pomdp, algorithm->children[i], obs_to_next_beliefs[algorithm->children[i]->classical_state], opt_technique, threshold);
         }
         return bellman_val;
     } else {

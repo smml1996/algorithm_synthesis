@@ -478,6 +478,10 @@ class Instruction:
         if basis_gates == BasisGates.TYPE8:
             if self.op == Op.H:
                 return [Instruction(self.target, Op.U2, params=[0, pi])]
+            if self.op == Op.S:
+                return [Instruction(self.target, Op.U1, params=[-pi/2])]
+            if self.op == Op.Z:
+                return [Instruction(self.target, Op.U1, params=[pi])]
             if self.op == Op.RY:
                 return [Instruction(self.target, Op.U3, params=[self.params[0], 0, 0], symbols=self.symbols)]
             if self.op == Op.RX:
@@ -822,7 +826,7 @@ class NoiseModel:
             probabilities = error['probabilities']
             if error['type'] == "qerror":    
                 error_instructions = error['instructions']
-                self.instructions_to_channel[target_instruction] = QuantumChannel(error_instructions, probabilities, target_qubits)
+                self.instructions_to_channel[target_instruction] = QuantumChannel(error_instructions, probabilities, target_qubits, flatten=thermal_relaxation)
             else:
                 assert error['type'] == "roerror"
                 self.instructions_to_channel[target_instruction] = MeasChannel(probabilities)

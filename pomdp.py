@@ -453,7 +453,6 @@ def build_pomdp(actions: List[POMDPAction],
     while not q.is_empty():
         
         current_v, current_horizon = q.pop()
-        # print(q.len(), current_horizon)
 
         if horizon != -1:
             if (current_horizon == horizon):
@@ -471,7 +470,6 @@ def build_pomdp(actions: List[POMDPAction],
                 assert action.name not in graph[current_v].keys()
                 graph[current_v][action.name] = dict()
                 successors = action.get_successor_states(noise_model, current_v)
-                # print(action.name, len(successors))
                 assert len(successors) > 0
                 for (succ, prob) in successors.items():
                     assert isinstance(succ, POMDPVertex)

@@ -1,0 +1,15 @@
+{
+    "name": "B33",
+    "experiment_id": "main99",
+    "precision": 8,
+    "min_horizon": 2,
+    "max_horizon": 6,
+    "output_dir": "results/ygate/main99/B33",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_prague"
+    ],
+    "opt_technique": "target",
+    "verbose": 0,
+    "reps": 0.99
+}

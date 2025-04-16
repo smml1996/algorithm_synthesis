@@ -69,32 +69,16 @@ def algorithm2(qc: QuantumCircuit, basis_gates, cbits: ClassicalRegister):
 				instruction_to_ibm(qc, basis_gates, halt)
 			with qc.if_test((cbits, 14)):
 				instruction_to_ibm(qc, basis_gates, MEAS0)
-				with qc.if_test((cbits, 30)):
-					instruction_to_ibm(qc, basis_gates, halt)
-				with qc.if_test((cbits, 31)):
-					instruction_to_ibm(qc, basis_gates, halt)
 		with qc.if_test((cbits, 14)):
 			instruction_to_ibm(qc, basis_gates, MEAS0)
-			with qc.if_test((cbits, 30)):
-				instruction_to_ibm(qc, basis_gates, halt)
-			with qc.if_test((cbits, 31)):
-				instruction_to_ibm(qc, basis_gates, halt)
 	with qc.if_test((cbits, 14)):
 		instruction_to_ibm(qc, basis_gates, MEAS1)
 		with qc.if_test((cbits, 12)):
 			instruction_to_ibm(qc, basis_gates, MEAS0)
-			with qc.if_test((cbits, 28)):
-				instruction_to_ibm(qc, basis_gates, halt)
-			with qc.if_test((cbits, 29)):
-				instruction_to_ibm(qc, basis_gates, halt)
 		with qc.if_test((cbits, 14)):
 			instruction_to_ibm(qc, basis_gates, MEAS1)
 			with qc.if_test((cbits, 12)):
 				instruction_to_ibm(qc, basis_gates, MEAS0)
-				with qc.if_test((cbits, 28)):
-					instruction_to_ibm(qc, basis_gates, halt)
-				with qc.if_test((cbits, 29)):
-					instruction_to_ibm(qc, basis_gates, halt)
 			with qc.if_test((cbits, 14)):
 				instruction_to_ibm(qc, basis_gates, ISPlus)
 				instruction_to_ibm(qc, basis_gates, halt)

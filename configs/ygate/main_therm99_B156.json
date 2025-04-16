@@ -1,0 +1,16 @@
+{
+    "name": "B156",
+    "experiment_id": "main_therm99",
+    "precision": 8,
+    "min_horizon": 2,
+    "max_horizon": 6,
+    "output_dir": "results/ygate/main_therm99/B156",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_fez",
+        "fake_makarresh"
+    ],
+    "opt_technique": "target",
+    "verbose": 0,
+    "reps": 0.99
+}

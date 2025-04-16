@@ -1,0 +1,16 @@
+{
+    "name": "B65",
+    "experiment_id": "main9999",
+    "precision": 8,
+    "min_horizon": 2,
+    "max_horizon": 6,
+    "output_dir": "results/ygate/main9999/B65",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_brooklyn",
+        "fake_manhattan"
+    ],
+    "opt_technique": "target",
+    "verbose": 0,
+    "reps": 0.9999
+}

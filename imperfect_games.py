@@ -137,7 +137,7 @@ class KnwObs:
 
 class KnwVertex:
     observable: KnwObs
-    def __init__(self, observable_vertices: List[POMDPVertex], vertex: POMDPVertex):
+    def __init__(self, observable_vertices: List[POMDPVertex], vertex: POMDPVertex, probability: float):
         self.observable = KnwObs(observable_vertices)
         self.vertex = vertex
         
