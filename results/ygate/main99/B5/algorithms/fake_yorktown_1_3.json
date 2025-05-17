@@ -1,0 +1,20 @@
+{
+    "action": "X",
+    "children": [
+        {
+            "action": "RZ3PI",
+            "children": [
+                {
+                    "action": "halt",
+                    "children": [],
+                    "classical_state": 0,
+                    "depth": 0
+                }
+            ],
+            "classical_state": 0,
+            "depth": 1
+        }
+    ],
+    "classical_state": 0,
+    "depth": 2
+}

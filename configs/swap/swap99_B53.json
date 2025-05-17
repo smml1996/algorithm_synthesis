@@ -1,0 +1,15 @@
+{
+    "name": "B53",
+    "experiment_id": "swap99",
+    "precision": 8,
+    "min_horizon": 1,
+    "max_horizon": 3,
+    "output_dir": "results/swap/swap99/B53",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_rochester"
+    ],
+    "opt_technique": "target",
+    "verbose": 0,
+    "reps": 0.99
+}

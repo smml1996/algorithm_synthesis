@@ -282,12 +282,11 @@ def handle_write(quantum_state: QuantumState, gate_data: GateData, is_inverse=Fa
     assert len(quantum_state.sparse_vector.keys()) > 0
     if is_multiqubit_gate(op):
         if op == Op.SWAP:
-            index1 = gate_data.target
-            assert len(gate_data.controls) == 1
+            index1 = gate_data.address
             index2 = gate_data.control
             
-            cx_gate1 = GateData(Op.CNOT, index2, controls=index1)
-            cx_gate2 = GateData(Op.CNOT, index1, controls=index2)
+            cx_gate1 = GateData(Op.CNOT, index2, control=index1)
+            cx_gate2 = GateData(Op.CNOT, index1, control=index2)
             result = handle_write(quantum_state, cx_gate1, normalize=False)
             result = handle_write(result, cx_gate2, normalize=False)
             result = handle_write(result, cx_gate1, normalize=False)
@@ -395,3 +394,22 @@ def get_probabilities(quantum_state: QuantumState, address: int, seq):
         quantum_state = handle_write(quantum_state, s, is_inverse=False)
 
     return get_qs_probabiltiies(quantum_state, address)
+
+def get_linear_op_state(gates: List[GateData], embedding: Dict[int, int], dimension) -> QuantumState:
+    assert dimension > 1
+    assert len(embedding.keys()) == dimension * 2
+    answer = QuantumState(0, qubits_used=embedding.values())
+    for i in range(0, dimension):
+        assert i in embedding.keys()
+        H = Instruction(embedding[i], Op.H).get_gate_data()
+        answer = handle_write(answer, H)
+    
+    for i in range(0, dimension):
+        CX = Instruction(embedding[dimension+i], Op.CNOT, embedding[i]).get_gate_data()
+        answer = handle_write(answer, CX)
+
+    for gate in gates:
+        answer = handle_write(answer, gate)
+    
+    return answer
+        

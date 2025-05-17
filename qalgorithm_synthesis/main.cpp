@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
         int min_horizon = config_json["min_horizon"];
         int max_horizon = config_json["max_horizon"];
         int precision = config_json["precision"];
-        string str_threshold = config_json["reps"];
+        string str_threshold = to_string(config_json["reps"]);
         
         
         MyFloat::precision = precision * (max_horizon + 1);

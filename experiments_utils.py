@@ -132,8 +132,16 @@ class YGateExperimentId(Enum):
     @property
     def exp_name(self):
         return "ygate"
-
     
+class SwapExperimentId(Enum):
+    SWAP90 = "swap90"
+    SWAP95 = "swap95"
+    SWAP98 = "swap98"
+    SWAP99 = "swap99"
+    
+    @property
+    def exp_name(self):
+        return "swap"
 
 ####### configs ##########
 def generate_configs(experiment_id: Enum, min_horizon, max_horizon, allowed_hardware=HardwareSpec, batches: Dict[str, List[HardwareSpec]]=None, opt_technique: str="max", reps=0, verbose=0):
@@ -194,8 +202,8 @@ def get_allowed_hardware(experiment_id, with_thermalization=False):
             if noise_model.num_qubits >= 14:
                 ipma2_allowed_hardware.append(hardware)
         return ipma2_allowed_hardware
-    elif type(experiment_id) == TwoQZeroPlusExperimentID:
-        assert experiment_id in [TwoQZeroPlusExperimentID.HCXH, TwoQZeroPlusExperimentID.HCXH2, TwoQZeroPlusExperimentID.TWOQ, TwoQZeroPlusExperimentID.TWOQ2, TwoQZeroPlusExperimentID.ENTSWAP]
+    elif type(experiment_id) == TwoQZeroPlusExperimentID or type(experiment_id) == SwapExperimentId:
+        assert experiment_id in [TwoQZeroPlusExperimentID.HCXH, TwoQZeroPlusExperimentID.HCXH2, TwoQZeroPlusExperimentID.TWOQ, TwoQZeroPlusExperimentID.TWOQ2, TwoQZeroPlusExperimentID.ENTSWAP, SwapExperimentId.SWAP90, SwapExperimentId.SWAP95, SwapExperimentId.SWAP98, SwapExperimentId.SWAP99]
         allowed_harware = []
         for hardware_spec in HardwareSpec:
             noise_model = NoiseModel(hardware_spec, thermal_relaxation=with_thermalization)
@@ -517,6 +525,24 @@ def get_default_algorithm(noise_model, embedding, experiment_id, get_experiments
     if isinstance(experiment_id, BitflipExperimentID):
         return get_default_flip_algorithm(noise_model, embedding, horizon, experiment_id, get_experiments_actions, target_qubit=target_qubit)
     return get_default_flip_algorithm(noise_model, embedding, horizon, experiment_id, get_experiments_actions, target_qubit=target_qubit)
+
+def actions_sequence_to_algorithm_node(sequence: List[POMDPAction]) -> AlgorithmNode:
+    head = None
+    current_node = None
+    for action in sequence:
+        assert isinstance(action, POMDPAction)
+        next_node = AlgorithmNode(action.name, instruction_sequence=[], classical_state=0) # TODO: fix classical state, and instruction sequence
+        
+        if head is None:
+            assert current_node is None
+            head = next_node
+        else:
+            assert len(current_node.children) == 0
+            assert current_node is not None
+            current_node.children.append(next_node)
+        current_node = next_node
+    
+    return head
 
 ###### guarantees #####
 def get_embedding_guarantee(batch, hardware_spec, embedding_index, horizon, experiment_id):

@@ -1,0 +1,15 @@
+{
+    "name": "B15",
+    "experiment_id": "swap98",
+    "precision": 8,
+    "min_horizon": 1,
+    "max_horizon": 3,
+    "output_dir": "results/swap/swap98/B15",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_melbourne"
+    ],
+    "opt_technique": "target",
+    "verbose": 0,
+    "reps": 0.98
+}

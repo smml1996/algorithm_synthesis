@@ -7,11 +7,11 @@ sys.path.append(os.getcwd()+"/..")
 from utils import Precision, find_enum_object
 from pomdp import POMDPAction, POMDPVertex, default_guard
 from qpu_utils import BasisGates, Op
-from ibm_noise_models import HardwareSpec, Instruction, NoiseModel
+from ibm_noise_models import HardwareSpec, Instruction, NoiseModel, load_config_file
 import qmemory
 from qstates import QuantumState
 from cmemory import ClassicalState
-from experiments_utils import YGateExperimentId, check_files, generate_algs_vs_file, generate_configs, generate_diff_algorithms_file, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_allowed_hardware, get_config_path, get_num_qubits_to_hardware, get_project_settings
+from experiments_utils import YGateExperimentId, actions_sequence_to_algorithm_node, check_files, generate_algs_vs_file, generate_configs, generate_diff_algorithms_file, generate_embeddings, generate_mc_guarantees_file, generate_pomdps, get_allowed_hardware, get_config_path, get_custom_guarantee, get_num_qubits_to_hardware, get_pomdp_path, get_project_settings
 
 class YGateInstance:
     def __init__(self, embedding, experiment_id: YGateExperimentId):
@@ -163,6 +163,68 @@ def get_target_precision(experiment_id: YGateExperimentId) -> float:
     if experiment_id in [YGateExperimentId.MAIN9999, YGateExperimentId.MAIN_THERM9999]:
         return 0.9999
     
+def check_specific_algorithms_accuracy(batches): 
+    action_sequences = [[
+        [Instruction(1, Op.Y)],
+        [Instruction(1, Op.U3, params=[np.pi, np.pi/2, np.pi/2])],
+        [
+            Instruction(1, Op.H), 
+            Instruction(1, Op.S), 
+            Instruction(1, Op.S),
+            Instruction(1, Op.H),
+            Instruction(1, Op.S), 
+            Instruction(1, Op.S)
+        ],
+        [
+            Instruction(1, Op.S), 
+            Instruction(1, Op.S),
+            Instruction(1, Op.H), 
+            Instruction(1, Op.S), 
+            Instruction(1, Op.S),
+            Instruction(1, Op.H),
+        ],
+        [
+            Instruction(1, Op.Z),
+            Instruction(1, Op.X)
+        ],
+        [Instruction(1, Op.RY, params=[np.pi])]
+    ]]
+    
+    specific_algorithms = [actions_sequence_to_algorithm_node(x) for x in action_sequences]
+    
+    # start testing
+    file = open("y_gate_specific_algs.csv", "w")
+    columns = [
+        "experiment_id",
+        "hardware_spec",
+        "embedding_index",
+        "algorithm",
+        "guarantee"
+    ]
+    file.write(",".join(columns) + "\n")
+    
+    for experiment_id in YGateExperimentId:
+        for (num_qubits, hardware_specs) in batches.keys():
+            config_path = get_config_path(experiment_id, num_qubits)
+            config = load_config_file(config_path, type(experiment_id))
+            for hardware_spec in hardware_specs:
+                embeddings = get_hardware_scenarios(hardware_spec, experiment_id)
+                for (embedding_index, embedding) in enumerate(embeddings):
+                    pomdp_path = get_pomdp_path(config, hardware_spec, embedding_index)
+                    for (algorithm_index, algorithm_node) in enumerate(specific_algorithms):
+                        guarantee = get_custom_guarantee(algorithm_node, pomdp_path, config)
+                        columns = [
+                            experiment_id.value,
+                            hardware_spec.value,
+                            str(embedding_index),
+                            str(algorithm_index),
+                            str(guarantee)
+                        ]
+                        file.write(",".join(columns) + "\n")
+                        
+    file.close()
+            
+    
 if __name__ == "__main__":
     settings = get_project_settings()
     project_path = settings["PROJECT_PATH"]
@@ -190,7 +252,6 @@ if __name__ == "__main__":
     
         print("generating embedding files...")
         for num_qubits in batches.keys():
-            config_path = get_config_path(experiment_id, num_qubits)
             generate_embeddings(experiment_id, num_qubits, get_hardware_embeddings=get_hardware_scenarios)
     elif process_name == "gen_pomdps":
         # generate POMDPS
@@ -212,6 +273,8 @@ if __name__ == "__main__":
     elif process_name == "diffs_algs_vs":
         # compare performance of all all algorithms in the diffs file
         generate_algs_vs_file(experiment_id, allowed_hardware, get_hardware_scenarios, get_experiments_actions, with_thermalization=with_thermalization)
+    elif process_name == "check_specific_algs":
+        check_specific_algorithms_accuracy(batches)
     else:
         raise Exception("Invalid process name", process_name)
         

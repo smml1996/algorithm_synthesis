@@ -178,6 +178,8 @@ class GateData: # this was previously called GateData
     params: Optional[List[float]]
 
     def __init__(self, label, address, control=None, params=None) -> None:
+        if control is not None:
+            assert isinstance(control, int)
         self.label = label
         self.address = address
         self.control = control
