@@ -1,6 +1,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <set>
 #include <unordered_set>
 #include <sstream>
 #include <fstream>
@@ -8,6 +9,7 @@
 #include <map>
 #include "fp.cpp"
 #include "json.hpp"
+#include "ortools/linear_solver/linear_solver.h"
 
 // for convenience
 using json = nlohmann::json;
@@ -26,8 +28,6 @@ void split_str(string const &str, const char delim, vector<string> &out) {
 }
 
 class Belief {
-
-
     MyFloat get_sum(){
         MyFloat result;
 
@@ -86,11 +86,15 @@ public:
     vector<Algorithm*> children;
     int classical_state;
     int depth;
+    bool is_measurement;
+    unordered_map<int, double> children_probs;
 
     Algorithm(string action, int classical_state, int depth=-1){
         this->action = std::move(action);
         this->classical_state = classical_state;
         this->depth = depth;
+        this->is_measurement = action.rfind("MEAS", 0) == 0;
+        this->children_probs = unordered_map<int, double>();
     }
 
     Algorithm(json data){
@@ -105,6 +109,32 @@ public:
                 
             }
         }
+    }
+
+    vector<int> get_modified_bits() {
+        vector<int> result;
+        if (this->is_measurement) {
+            vector<string> elements;
+            split_str(this->action, '-', elements);
+
+            for (int i = 1; i < elements.size(); i++) {
+                int bit = stoi(elements[i]);
+                result.push_back(bit);
+            }
+        }
+        result;
+    } 
+
+    set<int> get_successor_classical_states(const int &current_classical_state) {
+        set<int> result;
+        vector<int> bits_to_modify = this->get_modified_bits();
+
+        for (auto bit_index : bits_to_modify) {
+            int new_classical_state = current_classical_state ^ (1 << bit_index);
+            result.insert(new_classical_state);
+        }
+
+        result;
     }
 
     json serialize() const {
@@ -123,9 +153,53 @@ public:
         result["classical_state"] = this->classical_state;
         result["children"] = children;
         result["depth"] = depth;
+        result["children_probs"] = this->children_probs;
         return result;
     }
+
+      
+
+    bool exist_child_with_cstate(const int &cstate) {
+        for (auto child : this->children) {
+            if(child->classical_state == cstate) {
+                return true;
+            }
+        }
+        return false;
+    }
 };
+
+Algorithm * deep_copy_algorithm(Algorithm *algorithm)  {
+    string action = algorithm->action;
+    int classical_state = algorithm-> classical_state;
+    int depth = algorithm->depth;
+
+    Algorithm * algorithm_copy = new Algorithm(action, classical_state, depth);
+
+    for (auto child : algorithm->children) {
+        algorithm_copy->children.push_back(deep_copy_algorithm(child));
+    }
+
+    return algorithm_copy;
+}
+
+void get_algorithm_end_nodes(Algorithm *algorithm, vector<Algorithm *> &end_nodes) {
+    if (algorithm->children.size() == 0) {
+        end_nodes.push_back(algorithm);
+        return;
+    }
+
+   if (algorithm->is_measurement) {
+        if (algorithm->children.size() < algorithm->get_successor_classical_states(algorithm->classical_state).size()) {
+            end_nodes.push_back(algorithm);
+        }
+   }
+    
+
+    for (auto child : algorithm->children) {
+        get_algorithm_end_nodes(child, end_nodes);
+    }
+}
 
 
 void write_algorithm_file(Algorithm *algorithm, const string &output_path) {
@@ -140,4 +214,63 @@ string get_project_path() {
     return "..";
 }
 
+vector<double> solve_lp_maximin(const unordered_map<int, unordered_map<int, double>> &maximin_matrix, const int &n_algorithms, const int &n_initial_states) {
+
+    operations_research::MPSolver solver("max_v", operations_research::MPSolver::GLOP_LINEAR_PROGRAMMING);
+
+    // Variables: x_i >= 0
+    std::vector<operations_research::MPVariable*> x(n_algorithms);
+    for (int i = 0; i < n_algorithms; ++i) {
+        x[i] = solver.MakeNumVar(0.0, 1.0, "x_" + std::to_string(i));
+    }
+
+    // Variable: v
+    operations_research::MPVariable* v = solver.MakeNumVar(0.0, 1.0, "v");
+
+    // Constraint: sum_i x_i = 1
+    operations_research::MPConstraint* prob_sum = solver.MakeRowConstraint(1.0, 1.0);
+    for (int i = 0; i < n_algorithms; ++i) {
+        prob_sum->SetCoefficient(x[i], 1.0);
+    }
+
+    // Constraints: sum_i x_i * M_ij >= v  for all j
+    for (int j = 0; j < n_initial_states; ++j) {
+        operations_research::MPConstraint* c = solver.MakeRowConstraint(0.0, solver.infinity());
+        for (int i = 0; i < n_algorithms; ++i) {
+            auto temp = *maximin_matrix.find(i);
+            c->SetCoefficient(x[i], (*(temp.second.find(j))).second);
+        }
+        c->SetCoefficient(v, -1.0); // sum_i(...) - v >= 0  → sum_i(...) >= v
+    }
+
+    // Objective: maximize v
+    operations_research::MPObjective* objective = solver.MutableObjective();
+    objective->SetCoefficient(v, 1.0);
+    objective->SetMaximization();
+
+    // Solve
+    auto result = solver.Solve();
+    vector<double> mixed_algorithm;
+    if (result == operations_research::MPSolver::OPTIMAL) {
+        for (int i = 0; i < n_algorithms; ++i) {
+            mixed_algorithm.push_back(x[i]->solution_value());
+        }
+    }
+
+    return mixed_algorithm;
+}
+
+Algorithm *get_mixed_algorithm(const vector<double> &x, const unordered_map<int, Algorithm *> &mapping_index_algorithm) {
+    Algorithm * new_head = new Algorithm("RANDOM", 0);
+
+    for(int i = 0; i < x.size(); i++) {
+        if(x[i] > 0) {
+            new_head->children.push_back(mapping_index_algorithm.find(i)->second);
+            assert(new_head->children_probs.find(i) == new_head->children_probs.end());
+            new_head->children_probs.insert({i, x[i]});
+        }
+    }
+
+    return new_head;
+}
 

@@ -10,6 +10,7 @@ __pycache__/
 _deps/
 qalgorithm_synthesis/qalgorithm_synthesis
 qalgorithm_synthesis/CTestTestfile.cmake
+qalgorithm_synthesis/ortools
 
 *.sh
 # C extensions

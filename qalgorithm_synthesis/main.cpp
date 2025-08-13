@@ -157,6 +157,24 @@ int main(int argc, char **argv) {
         auto acc = get_algorithm_acc(pomdp, algorithm, initial_belief, opt_technique, threshold);
         cout << acc << endl;
 
+    } else if(arg1.compare("maxmini")) {
+        // path, horizon, output_path
+        filesystem::path pomdp_path = argv[2];
+        int horizon = stoi(argv[3]);
+        filesystem::path algorithm_path = argv[4];
+
+        auto pomdp = parse_pomdp_file(pomdp_path);
+        vector<int> initial_states = get_initial_states(pomdp);
+
+        // Compute matrix that says whether a pure strategy reaches the target state given an initial state 
+        unordered_map<int, unordered_map<int, double>> maximin_matrix;
+        unordered_map<int, Algorithm *> mapping_index_algorithm;
+        get_matrix_maximin(pomdp, initial_states, nullptr, maximin_matrix, horizon, mapping_index_algorithm);
+
+        vector<double> x = solve_lp_maximin(maximin_matrix, maximin_matrix.size(), initial_states.size());
+
+        Algorithm * mixed_algorithm = get_mixed_algorithm(x, mapping_index_algorithm);
+        write_algorithm_file(mixed_algorithm, algorithm_path);
     } else {
         cerr << "nothing matches" << endl;
     }

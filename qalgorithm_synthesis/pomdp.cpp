@@ -3,15 +3,26 @@
 //
 #include <unordered_map>
 #include <unordered_set>
+#include <map>
 #include <iostream>
 #include <string>
 #include "utils.cpp"
 #include <fstream>
 #include <cassert>
 
+
 using namespace  std;
 
 static auto HALT_ACTION = "halt";
+
+struct Condition {
+    int state;
+    string relation;
+    MyFloat prob;
+
+    Condition(int state, std::string relation, MyFloat prob)
+        : state(state), relation(std::move(relation)), prob(prob) {}
+};
 
 
 class POMDP {
@@ -20,8 +31,10 @@ public:
     unordered_map< int , unordered_map< string, map< int, MyFloat > > > probabilities;
     int initial_state{};
     unordered_set<string> actions{};
+    map<int, string> map_actions{};
     unordered_map<int, int> gamma{};
     unordered_map<int, MyFloat> rewards{}; // maps a vertex to its reward
+    vector<Condition> terminal_belief_conditions{};
 
     void insert_probability(const int &from,const string &action, const int &to, const MyFloat &prob) {
         this->probabilities[from][action][to] = prob;
@@ -64,6 +77,20 @@ public:
         } else {
             return false;
         }
+    }
+
+    double satisfies_condition(Belief &current_belief) {
+        for (auto condition : terminal_belief_conditions) {
+            MyFloat state_value = current_belief.get(condition.state);
+            if (condition.relation.compare(">=")) {
+                if ((state_value > condition.prob) || (state_value == condition.prob)) {
+                    return 1.00;
+                }
+            } else {
+                assert(false); // other relations must be implemented
+            }
+        }
+        return 0.00;
     }
 };
 
@@ -150,6 +177,7 @@ POMDP parse_pomdp_file (const string& fname) {
         assert(elements.size() == 1);
         string action = elements[0];
         pomdp.safe_insert_action(action);
+        pomdp.map_actions[pomdp.map_actions.size()] = action;
         getline(f, line);
     }
 
@@ -167,6 +195,23 @@ POMDP parse_pomdp_file (const string& fname) {
         pomdp.safe_insert(fromv, channel, tov, prob);
         getline(f,line);
     }
+
+    // conditions for target belief
+    assert(line == "BEGINCONDITIONS");
+    getline(f,line);
+    while(line != "ENDCONDITIONS") {
+        vector<string> elements;
+        split_str(line, ' ', elements);
+        assert(elements.size() == 3);
+        int state = stoi(elements[0]);
+        string relation = elements[1];
+        MyFloat prob(elements[2]);
+
+        pomdp.terminal_belief_conditions.emplace_back(state, relation, prob);
+        getline(f,line);
+    }
+
+    // target_vertices
     return pomdp;
 }
 
@@ -273,6 +318,19 @@ Belief get_initial_belief(POMDP &pomdp) {
     return initial_belief;
 }
 
+vector<int> get_initial_states(POMDP &pomdp) {
+    vector<int> answer;
+
+    if (pomdp.probabilities[pomdp.initial_state].find("INIT_") !=  pomdp.probabilities[pomdp.initial_state].end()) {
+        for(auto it : pomdp.probabilities[pomdp.initial_state]["INIT_"]) {
+            answer.push_back(it.first);
+        }
+    } else {
+        answer.push_back(pomdp.initial_state);
+    }
+    return answer;
+}
+
 MyFloat get_algorithm_acc(POMDP &pomdp, Algorithm*& algorithm, Belief &current_belief, const string &opt_technique, const MyFloat &threshold) {
     MyFloat curr_belief_val = current_belief.get_belief_reward(pomdp.rewards, opt_technique, threshold);
 
@@ -314,5 +372,148 @@ MyFloat get_algorithm_acc(POMDP &pomdp, Algorithm*& algorithm, Belief &current_b
     } else {
         return curr_belief_val;
     }
+}
+
+
+// maximin code
+
+double does_strategy_satisfies_conditions(POMDP &pomdp, const Algorithm *algorithm, Belief current_belief) {
+    double curr_belief_val = pomdp.satisfies_condition(current_belief);
+
+    if (algorithm == nullptr) {
+        return curr_belief_val;
+    }
+    string action = algorithm->action;
+    if (action == HALT_ACTION) {
+        return curr_belief_val;
+    }
+
+    // build next_beliefs, separate them by different observables
+    map<int, Belief> obs_to_next_beliefs;
+
+    MyFloat zero;
+    for(auto & prob : current_belief.probs) {
+        int current_v = prob.first;
+        if(prob.second > zero) {
+            for (auto &it_next_v: pomdp.probabilities[current_v][action]) {
+                if (it_next_v.second > zero) {
+                    obs_to_next_beliefs[pomdp.gamma[it_next_v.first]].add_val(it_next_v.first,
+                                                                              prob.second * it_next_v.second);
+                }else {
+                    assert(it_next_v.second == zero);
+                }
+            }
+        }
+    }
+
+    assert(algorithm->children.size() == obs_to_next_beliefs.size());
+
+    if (!obs_to_next_beliefs.empty()) {
+        for (int i = 0; i < algorithm->children.size(); i++) {
+            assert(obs_to_next_beliefs.find(algorithm->children[i]->classical_state) != obs_to_next_beliefs.end());
+            if (does_strategy_satisfies_conditions(pomdp, algorithm->children[i], obs_to_next_beliefs[algorithm->children[i]->classical_state]) == 0) {
+                return 0.00;
+            }
+        }
+        return 1.00;
+    } else {
+        return curr_belief_val;
+    }
+}
+
+void set_minimax_values(POMDP &pomdp, 
+    Algorithm* algorithm, 
+    const vector<int> &initial_states,
+    unordered_map<int, unordered_map<int, double>> &minimax_matrix,
+    unordered_map<int, Algorithm*> &mapping_index_algorithm) {
+
+    int current_alg_index = minimax_matrix.size();
+    mapping_index_algorithm[current_alg_index] = deep_copy_algorithm(algorithm);
+    
+    // the current algorithm index should not exist
+    assert(minimax_matrix.find(current_alg_index) == minimax_matrix.end());
+    minimax_matrix[current_alg_index] = unordered_map<int, double>();
+
+    for (int index = 0; index < initial_states.size(); index++) {
+        assert(minimax_matrix[current_alg_index].find(index) == minimax_matrix[current_alg_index].end());
+
+        Belief initial_belief;
+        initial_belief.set_val(initial_states[index], MyFloat("1"));
+
+        minimax_matrix[current_alg_index][index] = does_strategy_satisfies_conditions(pomdp, algorithm, initial_belief);
+    }
+}
+
+int get_next_classical_state_to_try(Algorithm *algorithm) {
+    set<int> succ_cstates = algorithm->get_successor_classical_states(algorithm->classical_state);
+
+    if (algorithm->children.size() > 0) {
+        int max_ = algorithm->children[0]->classical_state;
+        for (auto child : algorithm->children) {
+            max_ = max(max_, child->classical_state);
+        }
+        auto it = succ_cstates.upper_bound(max_);
+        if (it == succ_cstates.end()) {
+            return -1;
+        }
+        return *it;
+    } else {
+        auto it = succ_cstates.begin();
+        if (it == succ_cstates.end()) {
+            return -1;
+        }
+        return *it;
+    }
+    
+}
+
+void get_matrix_maximin(POMDP &pomdp, 
+    const vector<int> &initial_states, 
+    Algorithm *current_algorithm, 
+    unordered_map<int, unordered_map<int, double>> &minimax_matrix,
+    const int &max_horizon,
+    unordered_map<int, Algorithm*> &mapping_index_algorithm) {
+        set_minimax_values(pomdp, current_algorithm, initial_states, minimax_matrix, mapping_index_algorithm);
+
+        vector<Algorithm *> end_nodes;
+        if (current_algorithm != nullptr)
+            get_algorithm_end_nodes(current_algorithm, end_nodes);
+
+        if (end_nodes.size() == 0) {
+            if (max_horizon >= 1) {
+                for (auto action : pomdp.actions) {
+                    Algorithm * new_node = new Algorithm(action, 0, 1); // assumes initial classical state is 0
+                    get_matrix_maximin(pomdp, initial_states, new_node, minimax_matrix, max_horizon, mapping_index_algorithm);
+                    delete new_node;
+                }
+            }
+            
+        } else {
+            for (auto end_node : end_nodes) {
+                if (end_node->depth < max_horizon) {
+                    for (string action : pomdp.actions) {
+                        if (end_node->is_measurement){
+                            int next_classical_state = get_next_classical_state_to_try(end_node);
+                            if (next_classical_state > -1) {
+                                Algorithm * new_node = new Algorithm(action, next_classical_state, end_node->depth + 1);
+                                end_node->children.push_back(new_node);
+                                get_matrix_maximin(pomdp, initial_states, current_algorithm, minimax_matrix, max_horizon, mapping_index_algorithm);
+                                end_node->children.pop_back();
+                                delete new_node;
+                            }
+                            
+                        } else {
+                            assert(end_node->children.size() == 0);
+                            Algorithm * new_node = new Algorithm(action, end_node->classical_state, end_node->depth + 1);
+                            
+                            end_node->children.push_back(new_node);
+                            get_matrix_maximin(pomdp, initial_states, current_algorithm, minimax_matrix, max_horizon, mapping_index_algorithm);
+                            end_node->children.pop_back();
+                            delete new_node;
+                        }
+                    }
+                }
+            }   
+        }
 }
 
