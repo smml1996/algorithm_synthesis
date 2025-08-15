@@ -315,6 +315,12 @@ class POMDP:
                     f.write(f"{fromv.id} {channel} {tov.id} {final_prob:f}\n")
 
         f.write("ENDPOMDP\n")
+        f.write("BEGINCONDITIONS\n")
+        for vertex in self.states:
+            condition = problem_instance.get_condition(vertex)
+            if condition is not None:
+                f.write(f"{condition}\n")
+        f.write("ENDCONDITIONS\n")
         f.close()
         
     def get_reversed_digraph(self):

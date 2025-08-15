@@ -80,15 +80,14 @@ public:
     }
 
     double satisfies_condition(Belief &current_belief) {
+        MyFloat accum = MyFloat("0");
         for (auto condition : terminal_belief_conditions) {
             MyFloat state_value = current_belief.get(condition.state);
-            if (condition.relation.compare(">=")) {
-                if ((state_value > condition.prob) || (state_value == condition.prob)) {
-                    return 1.00;
-                }
-            } else {
-                assert(false); // other relations must be implemented
-            }
+            accum =  accum + state_value;
+        }
+
+        if (accum > MyFloat("0.6")) {
+            return 1.0;
         }
         return 0.00;
     }
@@ -197,6 +196,7 @@ POMDP parse_pomdp_file (const string& fname) {
     }
 
     // conditions for target belief
+    getline(f,line);
     assert(line == "BEGINCONDITIONS");
     getline(f,line);
     while(line != "ENDCONDITIONS") {
@@ -210,7 +210,7 @@ POMDP parse_pomdp_file (const string& fname) {
         pomdp.terminal_belief_conditions.emplace_back(state, relation, prob);
         getline(f,line);
     }
-
+    cout << "loading POMDP file done" << endl;
     // target_vertices
     return pomdp;
 }
@@ -376,17 +376,15 @@ MyFloat get_algorithm_acc(POMDP &pomdp, Algorithm*& algorithm, Belief &current_b
 
 
 // maximin code
-
-double does_strategy_satisfies_conditions(POMDP &pomdp, const Algorithm *algorithm, Belief current_belief) {
-    double curr_belief_val = pomdp.satisfies_condition(current_belief);
-
+Belief get_final_belief(POMDP &pomdp, const Algorithm *algorithm, Belief current_belief) {
     if (algorithm == nullptr) {
-        return curr_belief_val;
+        return current_belief;
     }
     string action = algorithm->action;
     if (action == HALT_ACTION) {
-        return curr_belief_val;
+        return current_belief;
     }
+
 
     // build next_beliefs, separate them by different observables
     map<int, Belief> obs_to_next_beliefs;
@@ -406,26 +404,63 @@ double does_strategy_satisfies_conditions(POMDP &pomdp, const Algorithm *algorit
         }
     }
 
-    assert(algorithm->children.size() == obs_to_next_beliefs.size());
-
+    Belief result_belief;
     if (!obs_to_next_beliefs.empty()) {
-        for (int i = 0; i < algorithm->children.size(); i++) {
-            assert(obs_to_next_beliefs.find(algorithm->children[i]->classical_state) != obs_to_next_beliefs.end());
-            if (does_strategy_satisfies_conditions(pomdp, algorithm->children[i], obs_to_next_beliefs[algorithm->children[i]->classical_state]) == 0) {
-                return 0.00;
+        if (algorithm->children.size() == 0) {
+            for (auto element : obs_to_next_beliefs) {
+                for (auto it : element.second.probs) {
+                    result_belief.add_val(it.first, it.second);
+                }
+            }
+        } else {
+            for (int i = 0; i < algorithm->children.size(); i++) {
+                if (obs_to_next_beliefs.find(algorithm->children[i]->classical_state) != obs_to_next_beliefs.end()){
+                    auto temp_belief = get_final_belief(pomdp, algorithm->children[i], obs_to_next_beliefs[algorithm->children[i]->classical_state]);
+                    for (auto it : temp_belief.probs) {
+                        result_belief.add_val(it.first, it.second);
+                    }
+                }
             }
         }
-        return 1.00;
+
+        return result_belief;
     } else {
-        return curr_belief_val;
+        return current_belief;
     }
+
+
+
+
 }
+double does_strategy_satisfies_conditions(POMDP &pomdp, const Algorithm *algorithm, Belief current_belief) {
+    auto final_belief = get_final_belief(pomdp, algorithm, current_belief);
+
+    return pomdp.satisfies_condition(final_belief);
+}
+
+Algorithm* algorithm_exists(unordered_map<int, Algorithm*> &mapping_index_algorithm, Algorithm *algorithm) {
+    for (auto it : mapping_index_algorithm) {
+        if (are_algorithms_equal(it.second, algorithm)) {
+            return it.second;
+        }
+    }
+
+    return nullptr;
+}
+
 
 void set_minimax_values(POMDP &pomdp, 
     Algorithm* algorithm, 
     const vector<int> &initial_states,
     unordered_map<int, unordered_map<int, double>> &minimax_matrix,
     unordered_map<int, Algorithm*> &mapping_index_algorithm) {
+    
+    // Algorithm *old_algorithm = algorithm_exists(mapping_index_algorithm, algorithm);
+    // if(old_algorithm != nullptr) {
+    //     write_algorithm_file(old_algorithm, "temp_old.json");
+    //     write_algorithm_file(algorithm, "temp_new.json");
+    //     assert(false);
+    // }
 
     int current_alg_index = minimax_matrix.size();
     mapping_index_algorithm[current_alg_index] = deep_copy_algorithm(algorithm);
@@ -442,27 +477,35 @@ void set_minimax_values(POMDP &pomdp,
 
         minimax_matrix[current_alg_index][index] = does_strategy_satisfies_conditions(pomdp, algorithm, initial_belief);
     }
+    // write_algorithm_file(algorithm, "alg_" +to_string(current_alg_index) + ".json");
 }
 
 int get_next_classical_state_to_try(Algorithm *algorithm) {
-    set<int> succ_cstates = algorithm->get_successor_classical_states(algorithm->classical_state);
-
-    if (algorithm->children.size() > 0) {
-        int max_ = algorithm->children[0]->classical_state;
-        for (auto child : algorithm->children) {
-            max_ = max(max_, child->classical_state);
-        }
-        auto it = succ_cstates.upper_bound(max_);
-        if (it == succ_cstates.end()) {
-            return -1;
-        }
-        return *it;
+    set<int> succ_cstates;
+    algorithm->get_successor_classical_states(algorithm->classical_state, succ_cstates);
+    assert(succ_cstates.size() == 2);
+    if (algorithm->children.size() == 1) {
+        return 1;
+        // int max_ = algorithm->children[0]->classical_state;
+        // for (auto child : algorithm->children) {
+        //     max_ = max(max_, child->classical_state);
+        // }
+        // auto it = succ_cstates.upper_bound(max_);
+        // if (it == succ_cstates.end()) {
+        //     return -1;
+        // }
+        // return *it;
+    }else if(algorithm->children.size() == 2){
+        return -1;
     } else {
-        auto it = succ_cstates.begin();
-        if (it == succ_cstates.end()) {
-            return -1;
-        }
-        return *it;
+        assert (algorithm->children.size() == 0);
+        return 0;
+        // auto it = succ_cstates.begin();
+        // if (it == succ_cstates.end()) {
+        //     return -1;
+        // }
+        // assert(*it == 0);
+        // return *it;
     }
     
 }
@@ -473,39 +516,64 @@ void get_matrix_maximin(POMDP &pomdp,
     unordered_map<int, unordered_map<int, double>> &minimax_matrix,
     const int &max_horizon,
     unordered_map<int, Algorithm*> &mapping_index_algorithm) {
+        if(algorithm_exists(mapping_index_algorithm, current_algorithm) != nullptr) {
+            return;
+        }
         set_minimax_values(pomdp, current_algorithm, initial_states, minimax_matrix, mapping_index_algorithm);
 
         vector<Algorithm *> end_nodes;
         if (current_algorithm != nullptr)
             get_algorithm_end_nodes(current_algorithm, end_nodes);
 
-        if (end_nodes.size() == 0) {
-            if (max_horizon >= 1) {
-                for (auto action : pomdp.actions) {
-                    Algorithm * new_node = new Algorithm(action, 0, 1); // assumes initial classical state is 0
-                    get_matrix_maximin(pomdp, initial_states, new_node, minimax_matrix, max_horizon, mapping_index_algorithm);
-                    delete new_node;
-                }
+        if (current_algorithm == nullptr) {
+            
+            for (auto action : pomdp.actions) {
+                Algorithm * new_node = new Algorithm(action, 0, 1); // assumes initial classical state is 0
+                get_matrix_maximin(pomdp, initial_states, new_node, minimax_matrix, max_horizon, mapping_index_algorithm);
+                delete new_node;
             }
+            
             
         } else {
             for (auto end_node : end_nodes) {
                 if (end_node->depth < max_horizon) {
                     for (string action : pomdp.actions) {
-                        if (end_node->is_measurement){
-                            int next_classical_state = get_next_classical_state_to_try(end_node);
-                            if (next_classical_state > -1) {
-                                Algorithm * new_node = new Algorithm(action, next_classical_state, end_node->depth + 1);
+                        if (end_node->instruction_type == InstructionType::MEAS){
+                            int next_cstate = 0;
+                            if (end_node->children.size() == 0) {
+                                Algorithm * new_node = new Algorithm(action, next_cstate, end_node->depth + 1);
                                 end_node->children.push_back(new_node);
                                 get_matrix_maximin(pomdp, initial_states, current_algorithm, minimax_matrix, max_horizon, mapping_index_algorithm);
                                 end_node->children.pop_back();
                                 delete new_node;
+
+                                next_cstate = 1;
+                                new_node = new Algorithm(action, next_cstate, end_node->depth + 1);
+                                end_node->children.push_back(new_node);
+                                get_matrix_maximin(pomdp, initial_states, current_algorithm, minimax_matrix, max_horizon, mapping_index_algorithm);
+                                end_node->children.pop_back();
+                                delete new_node;
+
+                            } else {
+                                assert(end_node->children.size() == 1);
+
+                                if (end_node->children[0]->classical_state == 0) {
+                                    next_cstate = 1;
+                                    Algorithm * new_node = new Algorithm(action, next_cstate, end_node->depth + 1);
+                                    end_node->children.push_back(new_node);
+                                    get_matrix_maximin(pomdp, initial_states, current_algorithm, minimax_matrix, max_horizon, mapping_index_algorithm);
+                                    end_node->children.pop_back();
+                                    delete new_node;
+                                }
                             }
+
                             
+
                         } else {
                             assert(end_node->children.size() == 0);
-                            Algorithm * new_node = new Algorithm(action, end_node->classical_state, end_node->depth + 1);
-                            
+                            int next_classical_state = get_succ_classical_state(end_node);
+                            Algorithm * new_node = new Algorithm(action, next_classical_state, end_node->depth + 1);
+                            assert(!end_node->exist_child_with_cstate(next_classical_state));
                             end_node->children.push_back(new_node);
                             get_matrix_maximin(pomdp, initial_states, current_algorithm, minimax_matrix, max_horizon, mapping_index_algorithm);
                             end_node->children.pop_back();
@@ -515,5 +583,31 @@ void get_matrix_maximin(POMDP &pomdp,
                 }
             }   
         }
+}
+
+
+void enumerate_algorithms(POMDP &pomdp, unordered_map<int, vector<Algorithm *>> &depth_to_algorithms, int depth) {
+    // depth_to_algorithms: at depth it stores all algorithms of depth at most depth
+    assert(depth >= 0);
+    if (depth_to_algorithms.find(depth) != depth_to_algorithms.end()) {
+        return;
+    }
+
+    depth_to_algorithms[depth] = vector<Algorithm*>();
+    if(depth == 0) {
+        depth_to_algorithms[depth].push_back(nullptr); // algorithm that does nothing
+        return;
+    }
+    enumerate_algorithms(pomdp, depth_to_algorithms, depth-1);
+
+    for (auto alg : depth_to_algorithms[depth-1]) {
+        depth_to_algorithms[depth].push_back(alg); // push all algorithms of  d < depth
+    }
+    
+    for(string action : pomdp.actions) {
+        
+    }
+
+
 }
 

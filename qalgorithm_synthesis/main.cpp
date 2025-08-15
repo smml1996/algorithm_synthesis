@@ -157,24 +157,90 @@ int main(int argc, char **argv) {
         auto acc = get_algorithm_acc(pomdp, algorithm, initial_belief, opt_technique, threshold);
         cout << acc << endl;
 
-    } else if(arg1.compare("maxmini")) {
-        // path, horizon, output_path
-        filesystem::path pomdp_path = argv[2];
-        int horizon = stoi(argv[3]);
-        filesystem::path algorithm_path = argv[4];
+    } else if(arg1.compare("maxmini") == 0) {
+        cerr << "opening config file: " << argv[2] << endl; 
 
-        auto pomdp = parse_pomdp_file(pomdp_path);
-        vector<int> initial_states = get_initial_states(pomdp);
+        std::ifstream f(argv[2]); // parse configuration file
+        json config_json = json::parse(f);
+        f.close();
 
-        // Compute matrix that says whether a pure strategy reaches the target state given an initial state 
-        unordered_map<int, unordered_map<int, double>> maximin_matrix;
-        unordered_map<int, Algorithm *> mapping_index_algorithm;
-        get_matrix_maximin(pomdp, initial_states, nullptr, maximin_matrix, horizon, mapping_index_algorithm);
+        string experiment_name = config_json["name"];
+        string experiment_id = config_json["experiment_id"];
+        int horizon = config_json["max_horizon"];
+        int precision = config_json["precision"];
+        string str_threshold = to_string(config_json["reps"]);
+        
+        MyFloat::precision = precision * (horizon + 1);
+        MyFloat::tolerance = precision * (horizon + 1);
+        MyFloat threshold = MyFloat(str_threshold);
 
-        vector<double> x = solve_lp_maximin(maximin_matrix, maximin_matrix.size(), initial_states.size());
+        filesystem::path project_path = get_project_path();
+        filesystem::path output_dir = project_path / config_json["output_dir"];
+        filesystem::path embeddings_file_ = "embeddings.json";
+        filesystem::path embeddings_path  = output_dir / embeddings_file_;
+        
+        filesystem::path pomdps_path = output_dir / "pomdps/";
+        // check embedding file exists
+        if (!std::filesystem::exists(embeddings_path)) {
+            throw std::runtime_error("Embedding files does not exist: " + embeddings_path.string());
+        } 
 
-        Algorithm * mixed_algorithm = get_mixed_algorithm(x, mapping_index_algorithm);
-        write_algorithm_file(mixed_algorithm, algorithm_path);
+        // open embeddings file
+        std::ifstream embeddings_file(embeddings_path);
+        json all_embeddings = json::parse(embeddings_file);
+        embeddings_file.close();
+
+        // checking output dir exists (or create)
+        if (!std::filesystem::exists(output_dir)) {
+            std::cerr << "Output dir does not exists. Creating directory..." << std::endl;
+            if (std::filesystem::create_directory(output_dir)) {
+                std::cerr << "Directory created successfully." << std::endl;
+            } else {
+                std::cerr << "Failed to create directory or it already exists.\n" << std::endl;
+            }
+        } else {
+            cerr << "output directory exists" << endl;
+        }
+  
+        filesystem::path algorithms_path = output_dir / "algorithms";
+        // create directory where algorithms should be stored (if it does not already exists)
+        if (!std::filesystem::exists(algorithms_path)) {
+            std::cerr << "algorithms dir does not exists. Creating directory..." << std::endl;
+            if (std::filesystem::create_directory(algorithms_path)) {
+                std::cerr << "algorithms directory created successfully." << std::endl;
+            } else {
+                std::cerr << "Failed to create algorithms directory or it already exists.\n" << std::endl;
+            }
+        } else {
+            cerr << "algorithms directory exists" << endl;
+        }
+
+        for (auto& el : all_embeddings.items()) {
+            if (el.key() == "count") continue;
+
+            string hardware = el.key();
+            int count = el.value()["count"];
+
+            for (int embedding_index = 0; embedding_index < count; embedding_index ++) {
+                cout << hardware << " " << embedding_index << endl;
+                filesystem::path instance_pomdp_path = pomdps_path / (hardware+"_"+ to_string(embedding_index) + ".txt");
+                auto pomdp = parse_pomdp_file(instance_pomdp_path);
+                vector<int> initial_states = get_initial_states(pomdp);
+                cout << "num initial states: " << initial_states.size() << endl;
+
+                // Compute matrix that says whether a pure strategy reaches the target state given an initial state 
+                unordered_map<int, unordered_map<int, double>> maximin_matrix;
+                unordered_map<int, Algorithm *> mapping_index_algorithm;
+                get_matrix_maximin(pomdp, initial_states, nullptr, maximin_matrix, horizon, mapping_index_algorithm);
+
+                vector<double> x = solve_lp_maximin(maximin_matrix, maximin_matrix.size(), initial_states.size());
+
+                Algorithm * mixed_algorithm = get_mixed_algorithm(x, mapping_index_algorithm);
+                filesystem::path instance_algo_path = algorithms_path / (hardware+"_"+ to_string(embedding_index)+"_"+ to_string(horizon)+".json");
+                write_algorithm_file(mixed_algorithm, instance_algo_path);
+            }
+            break;
+        }
     } else {
         cerr << "nothing matches" << endl;
     }

@@ -57,6 +57,8 @@ class ZeroPlusInstance:
     def get_reward(self, vertex: POMDPVertex) -> float:     
         return int(cread(vertex.classical_state, 0) == vertex.hidden_index)
     
+    
+    
 def get_experiments_actions(noise_model: NoiseModel, embedding, experiment_id):
     assert isinstance(noise_model, NoiseModel)
     assert isinstance(experiment_id, TwoQZeroPlusExperimentID)

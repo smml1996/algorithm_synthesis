@@ -1,0 +1,15 @@
+{
+    "name": "B15",
+    "experiment_id": "toy",
+    "precision": 5,
+    "min_horizon": 1,
+    "max_horizon": 3,
+    "output_dir": "results/mixed/toy/B15",
+    "algorithms_file": "",
+    "hardware": [
+        "fake_melbourne"
+    ],
+    "opt_technique": "max",
+    "verbose": 0,
+    "reps": 0
+}

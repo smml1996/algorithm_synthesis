@@ -6,6 +6,13 @@ project(qalgorithm_synthesis)
 set(CMAKE_CXX_STANDARD 17)
 include(FetchContent)
 
+add_compile_definitions(OR_PROTO_DLL=)
+# Tell CMake where to find OR-Tools
+set(ORTOOLS_ROOT "/Users/stefaniemuroyalei/Documents/ortools")  # or wherever you extracted it
+
+include_directories(${ORTOOLS_ROOT}/include)
+link_directories(${ORTOOLS_ROOT}/lib)
+
 # Add the source directory where src files are
 include_directories(${PROJECT_SOURCE_DIR})
 
@@ -32,5 +39,5 @@ include(GoogleTest)
 gtest_discover_tests(fp_test)
 
 add_executable(qalgorithm_synthesis main.cpp)
-
+target_link_libraries(qalgorithm_synthesis ortools)
 

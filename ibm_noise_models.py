@@ -39,7 +39,7 @@ class HardwareSpec(Enum):
     KOLKATA = "fake_kolkata"
     PRAGUE = "fake_prague"
     ALMADEN = "fake_almaden"
-    ARMONK = "fake_armonk"
+    # ARMONK = "fake_armonk"
     ATHENS = "fake_athens"
     AUCKLAND = "fake_auckland"
     BELEM = "fake_belem"
@@ -142,8 +142,8 @@ def get_ibm_noise_model(hardware_spec: HardwareSpec, thermal_relaxation=True) ->
         backend = FakePrague()
     elif backend_ == HardwareSpec.ALMADEN:
         backend = FakeAlmadenV2()
-    elif backend_ == HardwareSpec.ARMONK:
-        backend = FakeArmonkV2()
+    # elif backend_ == HardwareSpec.ARMONK:
+        # backend = FakeArmonkV2()
     elif backend_ == HardwareSpec.ATHENS:
         backend = FakeAthensV2()
     elif backend_ == HardwareSpec.AUCKLAND:

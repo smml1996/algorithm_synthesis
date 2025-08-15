@@ -3,12 +3,13 @@ from typing import List, Set
 from qiskit import QuantumCircuit
 from ibm_noise_models import Instruction, instruction_to_ibm
 from pomdp import POMDPAction
+from random import random
 
 
 class AlgorithmNode:
     instructions: Instruction
 
-    def __init__(self, action_name: str=None, instruction_sequence=None, classical_state=None,children=None, serialized=None, actions_to_instructions=None, noiseless=False) -> None:
+    def __init__(self, action_name: str=None, instruction_sequence=None, classical_state=None,children=None, serialized=None, actions_to_instructions=None, noiseless=False, children_probs=dict()) -> None:
         self.noiseless = noiseless
         if serialized is None:
             assert action_name is not None
@@ -19,6 +20,7 @@ class AlgorithmNode:
             self.action_name = action_name
             self.children = children
             self.classical_state = classical_state
+            self.children_probs = children_probs
         else:
             assert action_name is None
             assert instruction_sequence is None
@@ -27,6 +29,7 @@ class AlgorithmNode:
             self.instruction_sequence = actions_to_instructions[self.action_name]
             self.classical_state = serialized["classical_state"]
             self.children = []
+            self.children_probs = serialized["children_probs"]
             for child in serialized["children"]:
                 self.children.append(AlgorithmNode(serialized=child, actions_to_instructions=actions_to_instructions))
 
@@ -71,13 +74,26 @@ class AlgorithmNode:
       
 def execute_algorithm(node: AlgorithmNode, qpu: QuantumCircuit, count_ins=0, cbits=None):    
     if node is not None:
-        instruction_to_ibm(qpu, node.instruction_sequence, noiseless=node.noiseless)
-        for child in node.children:
-            if len(node.children) > 1:
-                with qpu.if_test((cbits, child.classical_state)):
+        if len(node.children_probs.keys()) > 0:
+            elements = []
+            probs = []
+            
+            assert(len(node.children) == len(node.children_probs))
+            
+            for (element, prob) in node.children_probs.items():
+                elements.append(element)
+                probs.append(prob)
+                
+            next_node_index = random.choices(elements, weights=probs, k=1)[0]
+            execute_algorithm(node.children[next_node_index], qpu, count_ins, cbits=cbits)
+        else:
+            instruction_to_ibm(qpu, node.instruction_sequence, noiseless=node.noiseless)
+            for child in node.children:
+                if len(node.children) > 1:
+                    with qpu.if_test((cbits, child.classical_state)):
+                        execute_algorithm(child, qpu, count_ins+1, cbits=cbits)
+                else:
                     execute_algorithm(child, qpu, count_ins+1, cbits=cbits)
-            else:
-                execute_algorithm(child, qpu, count_ins+1, cbits=cbits)
     
 def get_algorithm(current_node, tabs="\t"):
     if current_node is None:

@@ -1,0 +1,41 @@
+{
+    "action": "RANDOM",
+    "children": [
+        "None",
+        {
+            "action": "WRITE0-0",
+            "children": [
+                {
+                    "action": "WRITE0-0",
+                    "children": [
+                        {
+                            "action": "WRITE1-0",
+                            "children": [],
+                            "children_probs": [],
+                            "classical_state": 0,
+                            "depth": 3
+                        }
+                    ],
+                    "children_probs": [],
+                    "classical_state": 0,
+                    "depth": 2
+                }
+            ],
+            "children_probs": [],
+            "classical_state": 0,
+            "depth": 1
+        }
+    ],
+    "children_probs": [
+        [
+            1,
+            0.5
+        ],
+        [
+            0,
+            0.5
+        ]
+    ],
+    "classical_state": 0,
+    "depth": -1
+}
